@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" font-family="system-ui, sans-serif" font-size="13">
+<title>Shell and playground, tunable white</title>
+<rect width="1440" height="900" fill="#0b0b0c"/>
+<rect x="0" y="0" width="1440" height="48" rx="0" fill="#131315" stroke="#2a2a2f"/>
+<text x="20" y="30" fill="#e8e8ea" font-size="16" text-anchor="start" font-weight="600">Enlighten</text>
+<rect x="200" y="10" width="92" height="28" rx="3" fill="#1b1b1e" stroke="#8fb4d9"/>
+<text x="246" y="29" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">Simulator</text>
+<rect x="292" y="10" width="92" height="28" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<text x="338" y="29" fill="#9a9aa0" font-size="12" text-anchor="middle" font-weight="400">Hardware</text>
+<rect x="384" y="10" width="92" height="28" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<text x="430" y="29" fill="#9a9aa0" font-size="12" text-anchor="middle" font-weight="400">Both</text>
+<text x="500" y="29" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Server: not running</text>
+<rect x="690" y="10" width="250" height="28" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="702" y="29" fill="#e8e8ea" font-size="12" text-anchor="start" font-weight="400">Ceiling 40%  arc 220</text>
+<text x="928" y="29" fill="#9a9aa0" font-size="11" text-anchor="end" font-weight="400">2/2 verified</text>
+<text x="960" y="29" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Bus 3%</text>
+<rect x="1016" y="20" width="100" height="8" rx="2" fill="#1b1b1e" stroke="#2a2a2f"/>
+<rect x="1016" y="20" width="6" height="8" rx="2" fill="#8fb4d9" stroke="#8fb4d9"/>
+<text x="1150" y="29" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Unlocks: none</text>
+<rect x="1320" y="8" width="104" height="32" rx="4" fill="#d9534f" stroke="#d9534f"/>
+<text x="1372" y="29" fill="#ffffff" font-size="13" text-anchor="middle" font-weight="600">Panic</text>
+<rect x="0" y="48" width="180" height="852" rx="0" fill="#131315" stroke="#2a2a2f"/>
+<rect x="8" y="64" width="164" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="24" y="84" fill="#e8e8ea" font-size="13" text-anchor="start" font-weight="400">Playground</text>
+<text x="24" y="120" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Looks</text>
+<text x="24" y="156" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Sequences</text>
+<text x="24" y="192" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Effects</text>
+<text x="24" y="228" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Visualiser</text>
+<text x="24" y="264" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Switches</text>
+<text x="24" y="300" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Devices</text>
+<text x="24" y="336" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Bus monitor</text>
+<text x="24" y="372" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Settings</text>
+<rect x="1120" y="48" width="320" height="632" rx="0" fill="#131315" stroke="#2a2a2f"/>
+<text x="1140" y="80" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Inspector</text>
+<rect x="180" y="680" width="1260" height="220" rx="0" fill="#09090a" stroke="#2a2a2f"/>
+<text x="196" y="702" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Console</text>
+<text x="1420" y="702" fill="#9a9aa0" font-size="11" text-anchor="end" font-weight="400">Ctrl-` to hide   help keys</text>
+<text x="204" y="84" fill="#e8e8ea" font-size="18" text-anchor="start" font-weight="600">Playground</text>
+<rect x="204" y="100" width="220" height="44" rx="4" fill="#1b1b1e" stroke="#8fb4d9"/>
+<text x="216" y="119" fill="#e8e8ea" font-size="13" text-anchor="start" font-weight="600">0  Tunable white</text>
+<text x="216" y="136" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">DA5-L C2, verified</text>
+<rect x="436" y="100" width="220" height="44" rx="4" fill="#131315" stroke="#2a2a2f"/>
+<text x="448" y="119" fill="#e8e8ea" font-size="13" text-anchor="start" font-weight="600">1  RGB + CCT</text>
+<text x="448" y="136" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">DA5-L C5, verified</text>
+<rect x="760" y="108" width="150" height="28" rx="4" fill="#131315" stroke="#2a2a2f"/>
+<text x="772" y="127" fill="#e8e8ea" font-size="12" text-anchor="start" font-weight="400">Live</text>
+<text x="840" y="127" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Commit</text>
+<rect x="204" y="160" width="896" height="300" rx="4" fill="#131315" stroke="#2a2a2f"/>
+<text x="228" y="200" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Level</text>
+<text x="828" y="200" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">10.1%   arc 170</text>
+<line x1="228" y1="210" x2="828" y2="210" stroke="#2a2a2f" stroke-width="4"/>
+<line x1="228" y1="210" x2="600.0" y2="210" stroke="#8fb4d9" stroke-width="4"/>
+<circle cx="600.0" cy="210" r="7" fill="#e8e8ea"/>
+<line x1="426.0" y1="202" x2="426.0" y2="218" stroke="#9a9aa0" stroke-width="2"/>
+<text x="426.0" y="232" fill="#9a9aa0" font-size="10" text-anchor="middle" font-weight="400">minimum 1%</text>
+<text x="840" y="215" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">ceiling 40%</text>
+<text x="228" y="280" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Colour temperature</text>
+<text x="828" y="280" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">3000 K   333 mirek</text>
+<line x1="228" y1="290" x2="828" y2="290" stroke="#2a2a2f" stroke-width="4"/>
+<line x1="228" y1="290" x2="408.0" y2="290" stroke="#8fb4d9" stroke-width="4"/>
+<circle cx="408.0" cy="290" r="7" fill="#e8e8ea"/>
+<text x="228" y="350" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Fade</text>
+<rect x="228" y="360" width="300" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="240" y="380" fill="#e8e8ea" font-size="12" text-anchor="start" font-weight="400">2.0 s  (standard fade time 4)</text>
+<text x="540" y="380" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">The driver uses its standard fade. Extended fade is off.</text>
+<rect x="228" y="410" width="84" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="270" y="430" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">Off</text>
+<rect x="320" y="410" width="84" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="362" y="430" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">On</text>
+<rect x="412" y="410" width="84" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="454" y="430" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">Dim down</text>
+<rect x="504" y="410" width="84" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="546" y="430" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">Dim up</text>
+<rect x="596" y="410" width="84" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="638" y="430" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">−1</text>
+<rect x="688" y="410" width="84" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="730" y="430" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">+1</text>
+<rect x="204" y="476" width="896" height="180" rx="4" fill="#131315" stroke="#2a2a2f"/>
+<text x="228" y="504" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Bench preview (simulator)</text>
+<rect x="228" y="524" width="848" height="14" rx="2" fill="#b9a27a" stroke="#b9a27a"/>
+<text x="228" y="558" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">Tape A  10.1%  3000 K</text>
+<rect x="228" y="584" width="848" height="14" rx="2" fill="#151517" stroke="#2a2a2f"/>
+<text x="228" y="618" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">Tape B  off</text>
+<text x="1140" y="112" fill="#e8e8ea" font-size="14" text-anchor="start" font-weight="600">Address 0</text>
+<text x="1140" y="144" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Actual level</text>
+<text x="1420" y="144" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">170</text>
+<text x="1140" y="168" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">MAX LEVEL</text>
+<text x="1420" y="168" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">220  matches ceiling</text>
+<text x="1140" y="192" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">MIN LEVEL</text>
+<text x="1420" y="192" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">85</text>
+<text x="1140" y="216" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Physical minimum</text>
+<text x="1420" y="216" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">85</text>
+<text x="1140" y="240" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Power on</text>
+<text x="1420" y="240" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">0 (off)  not yet confirmed</text>
+<text x="1140" y="264" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">System failure</text>
+<text x="1420" y="264" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">255 (no change)</text>
+<text x="1140" y="288" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Fade time / rate</text>
+<text x="1420" y="288" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">4 / 7</text>
+<text x="1140" y="312" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Colour type</text>
+<text x="1420" y="312" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">Tc</text>
+<text x="1140" y="336" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Status</text>
+<text x="1420" y="336" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">lamp on</text>
+<rect x="1140" y="370" width="140" height="28" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="1210" y="389" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">Re-apply profile</text>
+<text x="196" y="730" fill="#e8e8ea" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">% level 0 10% fade 2s</text>
+<text x="196" y="750" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">  set-fade-time 4, dapc 170 (10.1%)</text>
+<text x="196" y="770" fill="#e8e8ea" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">% query 0 level</text>
+<text x="196" y="790" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">  actual level 170 (10.1%) [0xAA]</text>
+<text x="196" y="810" fill="#e8e8ea" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">% _</text>
+</svg>
