@@ -7,6 +7,9 @@ test('placeholder page loads with no CSP violation, console error or page error'
   const problems: string[] = [];
 
   page.on('console', (msg) => {
+    // Chromium on Linux doesn't know the 'bluetooth' Permissions-Policy feature. The header
+    // still names it for platforms that do, so this one warning is allowed.
+    if (/Unrecognized feature: 'bluetooth'/.test(msg.text())) return;
     if (msg.type() === 'error' || msg.type() === 'warning') {
       problems.push(`console ${msg.type()}: ${msg.text()}`);
     }
