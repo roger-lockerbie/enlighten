@@ -68,10 +68,10 @@ export class Simulator {
   }
 
   /** A frame as the transport sends it: twice, `SEND_TWICE_GAP_MS` apart, when flagged. */
-  send(tx: TxFrame, at: number): BusReply {
+  send(tx: TxFrame, at: number, gap = SEND_TWICE_GAP_MS): BusReply {
     const first = this.deliver(tx.frame, at);
     if (!tx.sendTwice) return first;
-    return this.deliver(tx.frame, at + SEND_TWICE_GAP_MS);
+    return this.deliver(tx.frame, at + gap);
   }
 
   outputAt(t: number): Map<string, ChannelDrive> {

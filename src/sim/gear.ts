@@ -338,12 +338,35 @@ export class Da5l {
     return colourAt(this.planAt(t).colour, t);
   }
 
+  /** The arc level's share of full output at a time, on the curve in use. */
+  arcFractionAt(t: number): number {
+    const level = this.levelAt(t);
+    return this.planAt(t).linear ? clamp(level, 0, 254) / 254 : arcToFraction(level);
+  }
+
   /** Each terminal's drive at a time. Pure: it reads the plans and changes nothing. */
   outputAt(t: number): ChannelDrive {
     const p = this.planAt(t);
-    const level = this.levelAt(t);
-    const arc = p.linear ? clamp(level, 0, 254) / 254 : arcToFraction(level);
-    const c = colourAt(p.colour, t);
+    return this.driveFor(p.linear, this.levelAt(t), colourAt(p.colour, t));
+  }
+
+  /**
+   * The drive the plan in force at `t` settles to, as if every fade ended at once. The rate guard uses
+   * this on hardware, where fades count as instant steps until confirmed (SPEC S3.7).
+   */
+  settledOutputAt(t: number): ChannelDrive {
+    const p = this.planAt(t);
+    const level = t < p.identifyUntil ? this.levelAt(t) : p.level.offAtEnd ? 0 : p.level.to;
+    return this.driveFor(p.linear, level, p.colour.to);
+  }
+
+  /** Times in a range at which a new plan starts. */
+  planStarts(from: number, to: number): number[] {
+    return this.s.plans.map((p) => p.since).filter((t) => t >= from && t <= to);
+  }
+
+  private driveFor(linear: boolean, level: number, c: Colour): ChannelDrive {
+    const arc = linear ? clamp(level, 0, 254) / 254 : arcToFraction(level);
     const set = this.profile.settings;
     const lim = this.s.tcLimits;
     const span = lim.physicalWarmest - lim.physicalCoolest;
