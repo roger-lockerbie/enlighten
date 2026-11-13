@@ -101,7 +101,7 @@ Nobody has published a descriptor dump from a real unit. What follows is inferen
 - The ROM driver's HID report descriptor is fixed, except for the two report lengths (UM Table 191). It is 27 bytes: usage page `06 01 00`, usage `09 01`, one application collection, 8-bit fields, an input report and an output report. It has no report ID item.
 - NXP's table labels the usage "Vendor Usage 1", but the bytes `06 01 00` encode usage page 0x0001, which is Generic Desktop. Usage 0x01 on that page is Pointer.
 
-So the expected descriptor is one collection on Generic Desktop, Pointer, with a 10-byte input report and a 10-byte output report, both unnumbered.
+The expected descriptor is therefore one collection on Generic Desktop, Pointer, with a 10-byte input report and a 10-byte output report, both unnumbered.
 
 ### Is 0xAA a report ID?
 
@@ -120,7 +120,7 @@ Recommendation: do not make this a user setting. At connect time, read `device.c
 
 Chrome protects some HID usages. Its guide says: "Chrome inspects the usage of each top-level collection and if a top-level collection has a protected usage (e.g. generic keyboard, mouse), then a website won't be able to send and receive any reports defined in that collection" (CHROME).
 
-In Chromium's source, `IsAlwaysProtected` returns true for input and output reports in a collection on Generic Desktop with usage Pointer, Mouse, Keyboard or Keypad. `RemoveProtectedReports` drops those reports before the page sees the device, and the connection drops protected input reports (CRHID). This check is separate from the device blocklist, so the switch that disables the blocklist does not obviously lift it.
+In Chromium's source, `IsAlwaysProtected` returns true for input and output reports in a collection on Generic Desktop with usage Pointer, Mouse, Keyboard or Keypad. `RemoveProtectedReports` drops those reports before the page sees the device, and the connection drops protected input reports (CRHID). This check is separate from the device blocklist, so the switch that disables the blocklist may not lift it.
 
 If the hasseb's collection is Generic Desktop, Pointer, as NXP's table says, then in Chrome `collections` would show no input or output reports, `sendReport` would be refused, and no `inputreport` events would arrive. WebHID would not work with the stock firmware.
 
