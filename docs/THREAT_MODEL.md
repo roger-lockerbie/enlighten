@@ -92,13 +92,13 @@ Accepted: a local program running as the same user can read the terminal, the br
 
 The server runs at the bench and the operator connects through an SSH forward. SSH supplies the encryption and the login.
 
-| Threat                                               | STRIDE | Mitigation                                                                                                                                                                                      | Test          |
-| ---------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| The forwarded port exposed on the operator's network | S      | The README's command names 127.0.0.1 on the local side                                                                                                                                          | README review |
-| Lights changing in a room the operator cannot see    | A1, A2 | The rate guard and ceiling apply as always. The app asks once on connect whether the operator can see the lights and shows the answer. A stop at the bench (Ctrl-C on the server) is documented | E-modes       |
-| The link dropping mid-sequence                       | D      | The server's 3 s stop turns the lights off                                                                                                                                                      | U-server      |
+| Threat                                               | STRIDE | Mitigation                                                                                                                                                                                                                                             | Test          |
+| ---------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------- |
+| The forwarded port exposed on the operator's network | S      | The README's command names 127.0.0.1 on the local side                                                                                                                                                                                                 | README review |
+| Lights changing in a room the operator cannot see    | A1, A2 | The rate guard and ceiling apply as always. The app asks once on connect whether the operator can see the lights and shows the answer. On "no", the `rate` unlock is refused for the session. A stop at the bench (Ctrl-C on the server) is documented | E-modes       |
+| The link dropping mid-sequence                       | D      | The server's 3 s stop turns the lights off                                                                                                                                                                                                             | U-server      |
 
-Accepted: the server cannot tell a forwarded client from a local one. Open question 1 asks whether a remote session should need a second person's confirmation.
+Accepted: the server cannot tell a forwarded client from a local one. The owner decided that an operator who answers "no" gets no `rate` unlock for that session, and that remote use will be rare.
 
 ### 3.6 The bus and the device
 

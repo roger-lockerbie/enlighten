@@ -16,7 +16,7 @@ R10 asks for a rendered hallway. The owner decided it is a best-effort estimate 
 - Surfaces are neutral and matte. One response per mount serves all five channels. A tinted or glossy surface is outside this version, and the UI says so.
 - Colour is carried as CIE XYZ. Each channel's chromaticity is mapped into the display's gamut once, on the CPU, holding luminance. The shader converts XYZ to linear sRGB or Display P3 with the CSS Color 4 matrices.
 - Exposure is fixed: three presets (night-adapted, evening, day) and a manual value. It never adapts by itself. Tone mapping scales all three channels by one factor, so hue does not shift.
-- White balance is a control: daylight, adapted to the scene, or a chosen colour temperature. The A/B view uses one balance for both sides.
+- White balance is a control: adapted to the scene (the default), daylight, or a chosen colour temperature. The A/B view uses one balance for both sides.
 - A false-colour view and a probe under the pointer give lux, cd/m², chromaticity, colour temperature and Duv, computed on the CPU from the same data.
 - Tape profiles carry the label "estimated" until measured. Flux per metre, chromaticity, angular distribution and diffuser transmission are placeholders with their source or "assumed" beside each.
 - No WebAssembly, no WebGPU, no path tracer in the app, and no three.js addons.

@@ -47,7 +47,13 @@ Decisions made during Stage 2, on the same day:
 
 10. **Panic's safe level is off.** Broadcast OFF, and the server's own stop does the same.
 11. **The server uses the `websockets` library.**
-12. **The server stays a relay.** It carries no rate limit of its own, in full or in part. The rate guard lives in the app, and keeping script out of the page is the control (`docs/THREAT_MODEL.md` 3.1).
+    K. **A remote operator who cannot see the lights** gets no `rate` unlock for that session, and nothing more. The app asks once on connect. Remote use will be rare.
+12. **The visualiser's white balance defaults to adapted to the scene.** The owner accepted the Stage 2 recommendations without naming this one, so it is recorded as accepted by default and is a one-line change if he prefers daylight.
+13. **Fonts:** Inter for the interface and JetBrains Mono for the console, stored in the repo.
+14. **Panic's shortcut is Escape twice within 500 ms.**
+15. **The edits to Stages 3, 4, 5 and 12 in `docs/STAGES.md` stand.**
+16. **The licence:** Apache-2.0 is the expected choice. Stage 11 still asks before the repo goes public, as the stage plan says.
+17. **From the client's side:** he uses Chrome and Brave. The switch brands stay as decided (zencontrol, with Basalte and Gira as KNX examples), because the house's choice will come well after this program has served its purpose.
 
 What this simplifies for Stage 2:
 

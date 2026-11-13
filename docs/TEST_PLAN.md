@@ -99,7 +99,7 @@ Every e2e test uses the Stage 0 harness, so each also fails on a CSP violation, 
 | E-switch     | Every event type by mouse, touch and keyboard, and a plate on an unverified address doing nothing                                                                                                                          |
 | E-a11y       | Keyboard reach of every control, roles and names, reduced motion, and no element that blinks                                                                                                                               |
 
-Firefox and Safari are not in CI. The simulator is checked by hand in both at each stage close from Stage 5, and the result goes in the stage report.
+CI runs Chromium only. The client uses Chrome and Brave, so from Stage 5 the app is checked by hand in both at each stage close, with hardware through the server from Stage 4. The simulator is also checked by hand in Firefox and Safari. The results go in the stage report.
 
 ## 8. Visual regression
 
