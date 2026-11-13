@@ -31,7 +31,7 @@ Findings that change the brief, with recommendations. Read on 13 and 14 November
 
 ## The owner's decisions (14 November 2026)
 
-These answer the questions this stage raised. Where they differ from `CLAUDE.md` or `docs/BRIEF.md`, those files still carry the older wording until they are updated, and Stage 2 designs to the decisions here.
+These answer the questions this stage raised. `CLAUDE.md` and `docs/BRIEF.md` were updated to match on the same day. The other research documents were written before these decisions and are not rewritten: where they treat the ceiling as a safety control or WebHID as the main path, the decisions here take precedence.
 
 1. **The brightness ceiling is a nice-to-have, not a safety control.** It is a comfort feature. It should work on the ordinary paths, and it does not have to hold in every edge case. The research documents' longer lists of ceiling edge cases (`dali.md` section 17, and the second governor in `hasseb.md` section 6) are background, not requirements. Stage 2 keeps one path for commands through the governor, a ceiling in the app and MAX LEVEL in the drivers, and decides which edge cases are worth handling by cost.
 2. **Client and server is the hardware path.** A small Python server using python-dali talks to the hasseb. It binds to 127.0.0.1 and serves the app and a WebSocket on one port. Remote use is by SSH port forward. python-dali at run time, in the server, is accepted.

@@ -42,5 +42,5 @@ The owner has answered the summary's questions: see "The owner's decisions" in `
 
 Then Stage 2 (design) on Fable, or Opus if Fable is short, in plan mode. Stage 2 should:
 
-- Design to those decisions. `CLAUDE.md` and `docs/BRIEF.md` still describe the ceiling as a safety control, WebHID as the hardware path and python-dali as dev-time only. Ask the owner whether to update them before designing against them.
+- Design to those decisions. `CLAUDE.md` and `docs/BRIEF.md` were updated to match on 14 November 2026. `docs/STAGES.md` was not: Stage 3 item 5 and Stage 4 still describe the governor and a WebHID transport as first planned. Stage 2's design documents are the authority once they exist, and Stage 2 should propose the edits to the later stages.
 - Read the WebHID specification's security section by hand only if the WebHID transport is kept.

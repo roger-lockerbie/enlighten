@@ -1,41 +1,45 @@
 # Enlighten
 
-Enlighten is a browser app for designing and testing DALI lighting on a two-tape test bench. It runs a simulator and a rendered hallway today, drives the real tapes through a hasseb USB DALI Master once it arrives, or does both at once. It will be shared with a client who is a capable, security-minded developer, and published as a public GitHub repo.
+Enlighten is a browser app for designing and testing DALI lighting on a two-tape test bench. It runs a simulator and a rendered hallway today, drives the real tapes through a hasseb USB DALI Master once it arrives, or does both at once. Hardware is reached through a small local server that talks to the hasseb. It will be shared with a client who is a capable, security-minded developer, and published as a public GitHub repo.
 
 Read before working:
 
 - `docs/BRIEF.md`: what we're building and why, with requirements R1 to R16 and safety requirements S1 to S6.
 - `docs/STAGES.md`: the build plan. Run only the stage you're asked to run, and stop at its gate.
 - `docs/STATUS.md`: where the build is up to. Keep it current during a stage so a new session can pick up where the last one stopped.
+- `docs/research/SUMMARY.md`: what Stage 1 found, and the owner's decisions on it.
 - From Stage 2 on: `docs/SPEC.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md`, `docs/TEST_PLAN.md`, `docs/UI.md` and `docs/adr/`. Once they exist they are the authority, and this file and the brief are background.
 
 ## Non-negotiables
 
-### Safety: every command goes through the governor
+### Safety and comfort: every command goes through the governor
 
 - Nothing reaches a simulated or real driver except through `src/safety`. That includes the playground, console, raw frames, scripts, sequences, effects, switches and imports.
-- The brightness ceiling holds in two places: the app's governor and each driver's MAX LEVEL. Lowering it takes effect at once. Raising it takes a deliberate action.
-- Panic (an always-visible button and a shortcut) stops every effect, sequence and script and sends every device to the safe level.
+- The rate guard is the safety control. It limits how fast and how far light can swing, because flashing light can trigger seizures: one swing a second by default, and never more than three, whatever is unlocked. Any change to it comes with property tests that try to defeat it.
+- Panic (an always-visible button and a shortcut) stops every effect, sequence and script and sends every device to the safe level. The rate guard never delays it.
+- The brightness ceiling is a comfort feature, not a safety control. It is set in the app's governor and written to each driver's MAX LEVEL. Lowering it takes effect at once. Raising it takes a deliberate action. It should hold on the ordinary paths. It does not have to hold in every edge case, and edge cases are handled where that is cheap.
 - RESET is blocked by default. It sends a driver to full output and puts MAX LEVEL back to 254.
-- Any change to `src/safety` comes with property tests that try to defeat it.
 
 ### Security
 
-- Static site only. No backend, telemetry, analytics, CDN or third-party requests. Fonts and assets are self-hosted.
+- The app is a static site. No telemetry, analytics, CDN or third-party requests. Fonts and assets are self-hosted. The one backend is the hardware server below, and the simulator runs without it.
 - Strict CSP with no `unsafe-inline` or `unsafe-eval`, `connect-src 'self'` at most, Trusted Types enforced, and the full header set from Stage 0. An e2e test fails on any CSP violation or console error.
 - Never use `eval`, `new Function`, string timers, `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` or `{@html}`. Lint enforces this.
 - Everything imported (workspace files, scripts, pasted text) is untrusted: size-limited, schema-validated and never executed. Scripts are data for the console, not code.
 - Dependencies: as few as possible, each justified in `docs/DEPENDENCIES.md` with its licence. Exact versions, frozen lockfile, install scripts blocked, and a minimum release age for new versions. Ask me before adding a runtime dependency that the brief or an ADR hasn't already approved.
-- WebHID: filter on the hasseb's vendor and product IDs only, revoke the device permission with `forget()` when I disconnect in the app, and serve the app on its own fixed port so no other local app shares its origin or its device permission.
+- The hardware server: a small Python program that uses python-dali to talk to the hasseb. It binds to 127.0.0.1 only, on a fixed strict port, and serves the built app and a WebSocket from that one origin. It checks the Host and Origin headers, needs a per-session token, takes one client at a time, and sends every device to the safe level when the client goes away or the server stops. It never listens on the LAN. Remote use is by SSH port forward. Its dependencies are pinned by hash.
+- WebHID is optional: a second, serverless transport, built only if Chrome accepts the hasseb, and chosen in the app with one setting. If it is built: filter on the hasseb's vendor and product IDs only, and revoke the device permission with `forget()` when I disconnect in the app.
+- Serve the app on its own fixed port so no other local app shares its origin.
 - No secrets, tokens, machine paths, or personal or household details in the repo. It will be public.
 - CI actions are pinned to commit SHAs, and workflow permissions are read-only unless a job needs more.
 
 ### Correctness
 
 - The DALI core matches python-dali byte for byte. Fixtures generated by `tools/golden` are the oracle for frames and hasseb reports.
-- The simulator follows the behaviour documented in `docs/research`, with sources. Where a driver's behaviour is unknown, make it a profile setting with a sourced default and add it to the hardware-day list. Don't hard-code a guess.
+- The simulator follows the behaviour documented in `docs/research`, with sources. It models the Skydance DA5-L, the driver on the bench, and no other. Where the DA5-L's behaviour is unknown, make it a profile setting with a sourced default and add it to the hardware-day list. Don't hard-code a guess.
+- The visualiser is a best-effort estimate of how the light might look. It uses placeholder tape and material data where none is published, and says so. It does not need measured optics.
 - The simulated bus is never faster than the real one.
-- python-dali is LGPL-3.0. Use it as a reference and a dev-time oracle. Don't copy its code into this repo.
+- python-dali is LGPL-3.0. The hardware server uses it as a dependency at run time. For the TypeScript core it is a reference and a dev-time oracle. Don't copy its code into this repo.
 
 ## How we work
 

@@ -4,7 +4,9 @@
 
 The bench drives two 5 m, 24 V DALI tapes through a hasseb USB DALI Master. It exists to answer one question for a high-end Australian home: what can DALI tunable-white and RGBCCT tape do? On tunable white that means night lighting, long slow fades and scenes. On RGBCCT it means finding out whether subtle colour and brightness cues can replace or reduce addressable pixel tape.
 
-Enlighten lets the owner and his client try those ideas in a simulator and a rendered hallway now, run the same ideas on the real tapes when the hasseb arrives, or run both at once and compare. The client is a capable developer who will read the code and test its security. Treat security as a feature he will try to break.
+Enlighten lets the owner and his client try those ideas in a simulator and a rendered hallway now, run the same ideas on the real tapes when the hasseb arrives, or run both at once and compare. It is for learning and experimenting with two chosen tapes and one driver. A lighting professional will be engaged when the house is built, and the tapes may change then.
+
+Stage 1's research and the owner's decisions on it are in `docs/research/SUMMARY.md`. This brief was updated to match on 14 November 2026. The client is a capable developer who will read the code and test its security. Treat security as a feature he will try to break.
 
 ## The bench
 
@@ -38,13 +40,13 @@ R1. Simulator first, hardware later. The output target is Simulator, Hardware or
 
 R2. Security comes first, as set out in `CLAUDE.md` and the threat model.
 
-R3. A sandboxed browser app. Stack defaults are under Decisions, to be confirmed or replaced by ADR in Stage 2.
+R3. A browser app, with a small local server for the hardware. Stack defaults are under Decisions, to be confirmed or replaced by ADR in Stage 2.
 
 R4. Research DALI's capabilities and build a playground for the outcomes the bench is for. On RGBCCT: subtle, distinguishable effects that could replace or reduce pixel tape. On tunable white: night lighting and scenes.
 
 R5. Tunable-white scenes, such as a fade from off to X% at Y K over Z minutes, saved as scenes. Write scenes into the drivers' 16 slots and recall them, and keep a richer library in the app (named, multi-step, longer than 16 minutes).
 
-R6. A global brightness ceiling, default 40% light output, adjustable, that overrides every later request. DALI supports this through MAX LEVEL, so it is enforced in the app and in the drivers.
+R6. A global brightness ceiling, default 40% light output, adjustable, that overrides later requests. DALI supports this through MAX LEVEL, so it is set in the app and in the drivers. It is a comfort feature and a nice-to-have, not a safety control: it should hold on the ordinary paths and need not hold in every edge case.
 
 R7. A console that sends DALI commands and shows decoded replies. Editing and shortcuts behave like zsh: emacs keys, up and down history, Ctrl-R, `history`, `!!`, `!n`, `!-n`, `!prefix`, `!?text?` and `^old^new`. History is persisted, and its length is a preference (default 1000).
 
@@ -52,7 +54,7 @@ R8. One user. Preferences are global and stored locally.
 
 R9. Scripts that run `first_light.py`-style sequences from the console without a general-purpose language: console commands plus `wait`, `pause "message"`, `echo`, comments and a bounded `repeat`. `first_light.py` ships as a built-in script.
 
-R10. A visualiser that shows the 5 m tapes in a rendered hallway.
+R10. A visualiser that shows the 5 m tapes in a rendered hallway. It is a best-effort estimate, to give an idea of how the light might look in different positions. It does not have to represent the light sources or the details of real profiles exactly.
 
 R11. Mounts. On each wall, a horizontal shadowline reveal at an adjustable height can hold an up-facing tape (washing the upper wall and ceiling, cove style), a down-facing tape (washing the lower wall and floor), or both. A flush aluminium channel set into the plaster at an adjustable height (default 600 mm) faces into the hallway. Any combination works, on the left, the right or both, mirrored or set independently. Walls are a neutral matte colour, the ceiling builders' white, and the floor a light neutral matte microcement that diffuses what lands on it. The UI is refined and simple, with presets.
 
@@ -64,15 +66,17 @@ R14. Both tape types in the playground. In the visualiser, each mount chooses it
 
 R15. Tape look: 24 V, 10 to 12 mm wide, white PCB, with LED density (60 or 120 per metre) or COB chosen per mount.
 
-R16. Switchgear, after the playground. Emulate 1, 2 and 4 button plates from two or three providers common in high-end DALI homes. Press, double press and hold with the mouse, touch or keyboard, with each provider's behaviour researched, driving the simulator, the hardware or both through the same engine as everything else.
+R16. Switchgear, after the playground. Emulate 1, 2 and 4 button plates: zencontrol as the DALI-2 plates, with Basalte and Gira as examples of KNX plates that reach DALI through a gateway. Press, double press and hold with the mouse, touch or keyboard, with each provider's behaviour researched, driving the simulator, the hardware or both through the same engine as everything else.
 
 ## Safety requirements
 
+S3 and S4 are the safety controls, because flashing light can trigger seizures. S1 and S2 serve the brightness ceiling, which is a comfort feature (R6): they are worth doing well on the ordinary paths and are not critical in every edge case.
+
 S1. Gear safety profile. On connect, after commissioning and after any RESET, write and verify MAX LEVEL (the ceiling), POWER ON LEVEL (off by default), SYSTEM FAILURE LEVEL (255, no change) and a warm default colour on DT8 drivers. Warn on any mismatch.
 
-S2. The governor covers every path, including raw frames and DTR-based commands. SET MAX LEVEL, SET SCENE, SET POWER ON LEVEL and SET SYSTEM FAILURE LEVEL all take their value from DTR0, so the governor tracks DTR values.
+S2. Every command goes through the governor, including raw frames and DTR-based commands. Covering the ordinary paths matters. Rare edge cases are handled where that is cheap. SET MAX LEVEL, SET SCENE, SET POWER ON LEVEL and SET SYSTEM FAILURE LEVEL all take their value from DTR0, so the governor tracks DTR values.
 
-S3. A rate guard limits how large and how fast luminance changes can be (default no more than three swings a second, configurable). Going past it needs an explicit unlock that lasts one session.
+S3. A rate guard limits how large and how fast luminance changes can be: one swing a second by default, configurable up to three and never beyond. A swing is a rise and fall of 10% or more in light. Going past the default needs an explicit unlock that lasts one session. Panic is never held back by it.
 
 S4. Panic, as in `CLAUDE.md`.
 
@@ -82,10 +86,10 @@ S6. The UI honours `prefers-reduced-motion` and never flashes.
 
 ## Decisions
 
-- A browser app with no backend. Hardware goes through WebHID straight to the hasseb, which needs Chrome, Edge or another Chromium browser on a desktop. Firefox and Safari don't implement WebHID. The simulator runs in any current browser.
-- python-dali stays in the project as the reference implementation and the test oracle, generating fixtures at dev time. It is not part of the running app. `tools/first_light.py` stays as a standalone check.
-- Implement the hasseb's 10-byte protocol as python-dali's `dali/driver/hasseb.py` uses it: 0xAA header, sequence number, an explicit expect-reply flag and a send-twice delay byte. Don't use the 2-byte protocol in `dali/driver/hid.py`. It relies on the hasseb's internal list of commands that reply, which leaves out DT8 queries, so they hang.
-- If WebHID can't open the hasseb on hardware day, fall back to a small local bridge built on python-dali, bound to 127.0.0.1, with origin checks and a per-session token. Stage 2 designs it on paper. It gets built only if needed.
+- A browser app with a small local server for hardware. The server is a Python program that uses python-dali to talk to the hasseb. It binds to 127.0.0.1, serves the app and a WebSocket on one fixed port, checks origins and needs a per-session token. The app and the server can run on one computer, or the server can run on the bench computer and be reached from another through an SSH port forward. It never listens on the LAN. The simulator runs in any current browser with no server.
+- WebHID straight to the hasseb is an optional second transport, with no server. It needs a Chromium browser, and it only works if Chrome accepts the hasseb's HID descriptor, which is in doubt (`docs/research/hasseb.md`). If it is built, choosing between it and the server is one setting in the app.
+- python-dali stays in the project as the reference implementation and the test oracle, generating fixtures at dev time. The hardware server also uses it at run time. It is not part of the browser app. `tools/first_light.py` stays as a standalone check.
+- Use the hasseb's 10-byte protocol, as python-dali's `dali/driver/hasseb.py` does: 0xAA header, sequence number, an explicit expect-reply flag and a send-twice delay byte. Don't use the 2-byte protocol in `dali/driver/hid.py`. It relies on the hasseb's internal list of commands that reply, which leaves out DT8 queries, so they hang.
 - Default stack: TypeScript (strict), Vite, Svelte 5, three.js used directly, Vitest, fast-check, Playwright and pnpm, with a purpose-built console component rather than a terminal emulator. The framework must run under strict CSP and Trusted Types. Stage 2 proves that with a spike and can replace any part by ADR.
 - Visual direction: dark and restrained. A near-black neutral background, one accent colour used sparingly, generous spacing, tabular figures, and monospace only for the console and frames. No gradients, glows or decoration. The light in the visualiser should be the most colourful thing on screen.
 - Name: Enlighten, shown as a plain wordmark in the UI font. No logo for now.
@@ -99,7 +103,7 @@ Light transport is linear in each emitter's output, and DALI drives each tape ev
 ## Unknowns the build must settle
 
 - How the DA5-L presents C5's whites, its physical minimum level, and how it fades up from off.
-- The hasseb's HID report descriptor (whether 0xAA acts as a report ID), its firmware version, and its real throughput.
+- The hasseb's firmware version and its real throughput. Its HID report descriptor matters only if the WebHID transport is built.
 - Whether DT8 RGBWAF channel levels scale linearly under the arc level on the DA5-L.
 - The DA5-L's colour temperature mixing law: constant lumen or not.
 - How many PWM steps the DA5-L has at 16 kHz, which decides whether slow, dim fades step visibly.
@@ -122,4 +126,4 @@ Light transport is linear in each emitter's output, and DALI drives each tape ev
 
 ## Out of scope
 
-Multiple users, cloud sync, mobile layouts, DALI-2 input-device hardware (the hasseb can't hear it), and the pixel tape bench.
+Multiple users, cloud sync, mobile layouts, DALI-2 input-device hardware (the hasseb can't hear it), the pixel tape bench, and drivers other than the DA5-L. Whether the DA5-L dims low enough for night lighting is one of the things the bench is there to find out. If it does not, other drivers are a later piece of work.
