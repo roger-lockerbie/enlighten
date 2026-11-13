@@ -32,7 +32,7 @@ Handled, because each is cheap once DTRs and a shadow model are tracked:
 - A level command with a temporary colour pending is judged as the pair.
 - After commissioning or a group change, the inventory is marked stale, and group and broadcast indirect commands are refused until a rescan.
 - The rule table is default deny. Blocked for good in this version: IDENTIFY DEVICE, SET OPERATING MODE, START AUTO CALIBRATION, REFERENCE SYSTEM POWER, memory bank writes, the STORE PRIMARY commands and ASSIGN COLOUR TO LINKED CHANNEL. Blocked until unlocked for the session, and then accepted only from a person at the console or the UI: RESET, commissioning and SELECT DIMMING CURVE.
-- The hardware's governor state is separate from the simulated bench's and is reset on every connect and target change. A broadcast or group frame is also judged against a worst-case phantom driver, so gear the app has not seen is counted. Indirect and group commands are refused while the inventory is stale or unaddressed gear is present.
+- The hardware's governor state is separate from the simulated bench's and is reset on every connect and target change. A broadcast or group frame is also judged against a worst-case phantom driver, so gear the app has not seen is counted. While the inventory is stale or unaddressed gear is present, indirect level commands to a group or broadcast are refused.
 
 Not handled, and recorded in the threat model:
 

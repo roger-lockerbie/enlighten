@@ -17,7 +17,7 @@ Flashing light can trigger seizures, and the bus can flash a tape at about 16 Hz
 - A leg is a maximal monotonic run of a trace, across commands and sources, whose ends differ by a ratio of 1.10 or more, or that starts or ends at off. A swing is two legs in opposite directions.
 - Where the prediction is missing, the guard assumes the worst. On hardware, state is reset on every connect and target change, a transport fault makes the affected state unknown, and broadcast, group and unaddressed frames are also judged against a phantom driver with no fade and no limits.
 - Default: no more than one swing starts in any one-second window. With the `rate` unlock the limit can be set up to three, with the leading edges of swings at least 360 ms apart. No setting, unlock or code path goes past three.
-- A leg with a ratio above 2 needs a fade of at least 0.7 s, or it is refused.
+- A hard step is a leg with a ratio above 2, or to or from off, with no fade of at least 0.7 s. At most one starts in any 2 seconds per address and one a second for the room, whatever is unlocked. This lets lights be switched on and off and holds hard flashing to one change every 2 seconds.
 - Changes smaller than a leg are limited to three reversals a second.
 - A move to or from saturated red (only the red channel above 10%) counts as a leg whatever the change in output.
 - A repeating pattern faster than half a swing a second stops after 5 seconds.
@@ -34,7 +34,7 @@ Flashing light can trigger seizures, and the bus can flash a tape at about 16 Hz
 - Panic latches. Nothing is sent until a person chooses Resume. Turning lights back on afterwards goes through the rate guard like anything else.
 - If the bus worker does not confirm panic within 250 ms, the page ends the worker. That closes the WebSocket, and the server's own stop sends OFF.
 - The page and the dialogs are built so the Panic button can always be clicked: no modal state that makes the top bar inert, and no element fullscreen.
-- Accepted: if the page's main thread hangs, the button and the shortcut are lost until it recovers. A heartbeat from the page that stops runners was considered and left out, because browsers slow a hidden page's timers and S5 needs sequences to keep running there. The rate guard keeps running in the worker either way.
+- If the page's main thread hangs, the button and the shortcut are lost until it recovers. While the page is visible it sends the worker a heartbeat, and the worker stops every runner after 3 seconds without one. A hidden page is exempt, because browsers slow its timers and S5 needs sequences to keep running there. The rate guard runs in the worker either way.
 - OFF is chosen because it is one frame, takes effect at once whatever fade is stored, and needs no configuration write.
 
 ## Consequences
