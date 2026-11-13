@@ -100,7 +100,7 @@ This is an inference from one line of a table, and the certified product may rep
 
 ## PWM steps at 16 kHz
 
-Neither manual gives a PWM resolution. The question matters because the lowest arc levels are close together in output: on the logarithmic curve each step is about 2.8%, so level 86 is about 1.03% and level 85 about 1.00%. To show that step, the PWM needs a resolution much finer than 1 part in 3,000. At 16 kHz one period is 62.5 µs, so 1 part in 3,000 is about 21 ns of timer resolution, which needs a timer clock of about 48 MHz or more. A cheaper design would have fewer steps at FA than at F1, and slow fades at the bottom would move in visible jumps.
+Neither manual gives a PWM resolution. The question matters because the lowest arc levels are close together in output: on the logarithmic curve each step is about 2.8%, so level 86 is about 1.02% and level 85 about 0.99%. That step is about 1 part in 3,700 of full output. At 16 kHz one period is 62.5 µs, so showing it needs about 17 ns of timer resolution, which means a timer clock of about 60 MHz or more. A cheaper design would have fewer steps at FA than at F1, and slow fades at the bottom would move in visible jumps.
 
 A 1% floor would be one way a designer hides coarse PWM, which makes the two unknowns likely to be linked. The measurement on hardware day: at FA, step DAPC one level at a time from the physical minimum upward with a lux meter fixed against the tape, and count the distinct readings. Repeat at F1 or F2. If FA is coarse and F2 is fine, the PWM setting becomes a choice between camera-safe output and smooth low-level fades.
 
