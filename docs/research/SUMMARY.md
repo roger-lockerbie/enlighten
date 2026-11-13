@@ -29,15 +29,26 @@ Findings that change the brief, with recommendations. Read on 13 and 14 November
 - The pnpm and GitHub Actions settings from Stage 0 match current guidance.
 - zsh's editing and history behaviour is documented well enough to reproduce. `history -c` is a bash feature and stays as a deliberate one.
 
-## Decisions needed from the owner
+## The owner's decisions (14 November 2026)
 
-1. **The hasseb:** send the one-line question to the vendor now, or wait for the unit?
-2. **The hardware path:** a local server with SSH forwarding as the first choice, WebHID as the first choice, or both? This changes "static site, no backend" when hardware is in use. If a server is built, may it use python-dali at run time? `CLAUDE.md` keeps python-dali as a dev-time oracle. The alternative is the app's own TypeScript core running in Node, which needs a native HID module.
-3. **The rate guard:** accept one swing a second as the default and three as the fixed ceiling?
-4. **Night lighting:** what counts as dim enough? No sourced target was found, so it is a choice to make on the bench.
-5. **Switchgear:** which plate brands will the house use?
-6. **GitHub workflow lockfiles:** add one beside the SHA pins in Stage 11 and keep the SHA rule as written? (`security.md` 8)
-7. **Linear Lux:** ask for IES files and about the 14 W/m limit?
+These answer the questions this stage raised. Where they differ from `CLAUDE.md` or `docs/BRIEF.md`, those files still carry the older wording until they are updated, and Stage 2 designs to the decisions here.
+
+1. **The brightness ceiling is a nice-to-have, not a safety control.** It is a comfort feature. It should work on the ordinary paths, and it does not have to hold in every edge case. The research documents' longer lists of ceiling edge cases (`dali.md` section 17, and the second governor in `hasseb.md` section 6) are background, not requirements. Stage 2 keeps one path for commands through the governor, a ceiling in the app and MAX LEVEL in the drivers, and decides which edge cases are worth handling by cost.
+2. **Client and server is the hardware path.** A small Python server using python-dali talks to the hasseb. It binds to 127.0.0.1 and serves the app and a WebSocket on one port. Remote use is by SSH port forward. python-dali at run time, in the server, is accepted.
+3. **WebHID is optional.** It may be built as a second, serverless transport if it is simple to choose between the two in the app. It only works if Chrome accepts the hasseb. Recommendation: build the server first in Stage 4, and add WebHID only after the descriptor check on hardware day shows it can work.
+4. **The hasseb descriptor question waits for the unit.** It no longer blocks anything, because the server reaches the device through hidapi, as python-dali does today.
+5. **The rate guard:** one swing a second by default, with three as a fixed ceiling, is accepted. This stays strict. It concerns photosensitivity, and is separate from the brightness ceiling.
+6. **The DA5-L is the driver, limits included.** Finding out whether 1% is dim enough is part of what the bench is for. The app is designed for this driver and does not cater for others.
+7. **Switchgear:** zencontrol as the DALI-2 plates, with Basalte and Gira as examples of KNX plates through a DALI gateway.
+8. **GitHub workflow lockfiles:** left to judgement. Keep the SHA pins as `CLAUDE.md` says, and add a lockfile beside them in Stage 11.
+9. **The visualiser is a best-effort estimate.** It gives an idea of how the light might look in different positions. It does not need exact tape data, exact profile dimensions or measured optics. A lighting professional will be engaged when the house is built, and the tapes may change. No request to Linear Lux is needed.
+
+What this simplifies for Stage 2:
+
+- The server can be a thin relay with the access controls in `hasseb.md` section 6 (loopback only, Host and Origin checks, a session token) and a dead-man stop. It does not need its own copy of the governor.
+- The visualiser uses placeholder tape data and neutral surfaces, with the split of direct and indirect light from `rendering.md`. The glossy floor term, per-channel treatment of tinted surfaces and the measurement programme in `optics.md` are optional.
+- The simulator needs one DA5-L profile, corrected on hardware day, and not a general profile system.
+- Security of the app and the server still matters as the brief describes it: the client will read the code and test it.
 
 ## First things on hardware day
 

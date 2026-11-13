@@ -38,4 +38,9 @@ Known gaps: the research was cut short several times by usage limits. Each docum
 
 ## Next
 
-Review the summary and answer its decisions. Then Stage 2 (design) on Fable, or Opus if Fable is short, in plan mode. Stage 2 should read the WebHID specification's security section by hand, which this stage could not fetch.
+The owner has answered the summary's questions: see "The owner's decisions" in `docs/research/SUMMARY.md`. In short: the brightness ceiling is a nice-to-have, the hardware path is a Python server on python-dali with SSH forwarding for remote use, WebHID is optional, and the visualiser is a best-effort estimate.
+
+Then Stage 2 (design) on Fable, or Opus if Fable is short, in plan mode. Stage 2 should:
+
+- Design to those decisions. `CLAUDE.md` and `docs/BRIEF.md` still describe the ceiling as a safety control, WebHID as the hardware path and python-dali as dev-time only. Ask the owner whether to update them before designing against them.
+- Read the WebHID specification's security section by hand only if the WebHID transport is kept.
