@@ -128,7 +128,7 @@ type SendResult =
   | { kind: 'refused'; reason: string };
 ```
 
-`SimTransport` wraps the simulator and takes as long as the real bus would. `ServerTransport` speaks the protocol in `docs/SPEC.md` section 9. `webhid` is reserved (ADR 0003). No transport retries by itself.
+`SimTransport` wraps the simulator and takes as long as the real bus would. `ServerTransport` speaks the protocol in `docs/SPEC.md` section 9. `webhid` is reserved (ADR 0003). No transport retries by itself. Only `src/engine/router.ts` calls `send`, and it needs an `Approved` value that only the governor's `judge` creates. The worker shell constructs transports and passes them to the router.
 
 ### `Router`
 
@@ -140,7 +140,7 @@ Sends each frame according to the output target:
 | Hardware  | `ServerTransport`                          | The hardware     | Fed each frame after the hardware reports |
 | Both      | `ServerTransport`, then the same to shadow | The hardware     | As Hardware, and its replies are compared |
 
-In Hardware and Both, a frame the server did not send (fault or refused) is not given to the shadow. In Both, a difference between the shadow's reply and the hardware's goes to the divergence log, and the hardware's value corrects the shadow where the query makes that possible (levels, limits, fade settings, colour).
+The shadow for the hardware is a separate instance from the simulated bench, with its own governor state, reset on every connect and target change (SPEC R1.1a). A frame the server refused or dropped is not given to the shadow. A frame that ended in a fault may have reached the bus, so the state it could have changed becomes unknown (SPEC R1.9). In Both, a difference between the shadow's reply and the hardware's goes to the divergence log, and the hardware's value corrects the shadow where the query makes that possible (levels, limits, fade settings, colour).
 
 ### `src/engine`: `Engine`
 
@@ -173,18 +173,19 @@ IndexedDB in the page, an in-memory map in tests. See section 5.
 
 ## 3. The path every input takes
 
-| Source             | Enters as                                 | Then                                                                   |
-| ------------------ | ----------------------------------------- | ---------------------------------------------------------------------- |
-| Playground control | An intent from the page                   | Coalescer, compile, scheduler, governor, router                        |
-| Console command    | Parsed command, sent as an intent         | Compile, scheduler, governor, router. The result prints in the console |
-| Raw frame          | `raw` intent with two bytes               | No compile step. Decoded and judged by the governor like any frame     |
-| Script             | Step list held by the script runner       | Each step is a console command intent                                  |
-| Sequence           | Plan held by the sequence runner          | Checked against the rate guard when planned, then one intent per step  |
-| Effect             | Generator held by the effect runner       | As a sequence, repeating                                               |
-| Switch             | Button events into the switch engine      | Mapped actions become intents                                          |
-| Import             | Validated data into the store             | Sends nothing. What it adds is used later through the paths above      |
-| Ceiling control    | A governor setting, then profile writes   | The writes are transactions like any other                             |
-| Panic              | A message handled first by the bus worker | Scheduler `panic()`, straight to the transports                        |
+| Source                                                 | Enters as                                 | Then                                                                   |
+| ------------------------------------------------------ | ----------------------------------------- | ---------------------------------------------------------------------- |
+| Playground control                                     | An intent from the page                   | Coalescer, compile, scheduler, governor, router                        |
+| Console command                                        | Parsed command, sent as an intent         | Compile, scheduler, governor, router. The result prints in the console |
+| Raw frame                                              | `raw` intent with two bytes               | No compile step. Decoded and judged by the governor like any frame     |
+| Script                                                 | Step list held by the script runner       | Each step is a console command intent                                  |
+| Sequence                                               | Plan held by the sequence runner          | Checked against the rate guard when planned, then one intent per step  |
+| Effect                                                 | Generator held by the effect runner       | As a sequence, repeating                                               |
+| Switch                                                 | Button events into the switch engine      | Mapped actions become intents                                          |
+| Import                                                 | Validated data into the store             | Sends nothing. What it adds is used later through the paths above      |
+| Ceiling control                                        | A governor setting, then profile writes   | The writes are transactions like any other                             |
+| Scan, safety profile, background check, hardware check | Internal sources in the engine            | Transactions through the scheduler and governor like any other         |
+| Panic                                                  | A message handled first by the bus worker | Scheduler `panic()`, straight to the transports                        |
 
 After the router, every frame that was sent reaches `observe`, the shadow, the bus monitor and, through `outputAt`, the bench preview and the visualiser. The visualiser reads the shadow in every mode. It never reads the hardware.
 
@@ -199,7 +200,7 @@ After the router, every frame that was sent reaches `observe`, the shadow, the b
 | `session`  | One client, the token, the message parser, the queue of at most 8, the 3 second timer, and the stop                           |
 | `hasseb`   | Opens 04CC:0802 through hidapi, builds 10-byte reports, matches sequence numbers, times out, drops idle reports               |
 
-python-dali decodes each frame, so the server knows by itself whether to send twice and whether to wait for a reply. The header values come from a JSON file that `config/security.ts` writes at build time, and a test checks the two match.
+python-dali decodes each frame, so the server knows by itself whether to send twice and whether to wait for a reply. The header values come from a JSON file that `config/security.ts` writes at build time, and a test checks the two match. The server refuses to start without it, and sends the headers on every response, worker scripts included, because a worker takes its CSP from its own response.
 
 Remote use: the server runs on the bench computer, and the other computer forwards 127.0.0.1:47821 to it over SSH. Both ends are loopback, so the Host and Origin checks pass unchanged. The server cannot tell a forwarded client from a local one. The app therefore asks once on connect whether the person can see the lights, shows the answer in the top bar, and the README says to keep a way to stop the server within reach of the bench (`docs/OPEN_QUESTIONS.md` item 2).
 

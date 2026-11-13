@@ -12,7 +12,7 @@ Date: 2026-11-14
 
 ### One path
 
-Every source builds transactions (short, ordered groups of frames that must not be split) and hands them to the engine. The scheduler asks the governor to judge each transaction at the moment it is about to be sent, against the governor's tracked state. The governor returns allow, clamp (the same transaction with a lower level), or refuse with a reason. No other route to a transport exists, and a lint rule stops any module outside the engine importing a transport.
+Every source builds transactions (short, ordered groups of frames that must not be split) and hands them to the engine. The scheduler asks the governor to judge each transaction at the moment it is about to be sent, against the governor's tracked state. The governor returns allow, clamp (the same transaction with a lower level), or refuse with a reason. No other route to a transport exists: only the router imports a transport's send, and that send takes an approval value that only `judge` can create.
 
 The governor is pure TypeScript: a `judge` function and an `observe` function over a state value. The state holds the ceiling, the unlocks, the last frame sent (for device type context), DTR0 to DTR2 (each a value or unknown), and one shadow gear model per address.
 
@@ -31,14 +31,15 @@ Handled, because each is cheap once DTRs and a shadow model are tracked:
 - For RGBWAF, the app holds arc fraction times the sum of channel fractions to the ceiling. Friendly colour controls lower the level to fit. Raw DT8 frames that would pass it are refused. Stored colours (scenes, power-on) are judged the same way when stored.
 - A level command with a temporary colour pending is judged as the pair.
 - After commissioning or a group change, the inventory is marked stale, and group and broadcast indirect commands are refused until a rescan.
-- Blocked for good in this version: SET OPERATING MODE, START AUTO CALIBRATION, REFERENCE SYSTEM POWER, memory bank writes, the STORE PRIMARY commands and ASSIGN COLOUR TO LINKED CHANNEL. Blocked until unlocked for the session: RESET, commissioning, IDENTIFY DEVICE and SELECT DIMMING CURVE.
+- The rule table is default deny. Blocked for good in this version: IDENTIFY DEVICE, SET OPERATING MODE, START AUTO CALIBRATION, REFERENCE SYSTEM POWER, memory bank writes, the STORE PRIMARY commands and ASSIGN COLOUR TO LINKED CHANNEL. Blocked until unlocked for the session, and then accepted only from a person at the console or the UI: RESET, commissioning and SELECT DIMMING CURVE.
+- The hardware's governor state is separate from the simulated bench's and is reset on every connect and target change. A broadcast or group frame is also judged against a worst-case phantom driver, so gear the app has not seen is counted. Indirect and group commands are refused while the inventory is stale or unaddressed gear is present.
 
 Not handled, and recorded in the threat model:
 
 - Another master or tool on the bus.
 - Script injected into the page. The governor is in the page, so it does not defend against the page.
 - A colour temperature change that raises output on the tunable-white tape. The governor uses the profile's mixing law (constant total until measured). If the bench shows a hump, the profile changes and the governor follows it.
-- The half second at full output after an unlocked RESET, and any flash before POWER ON LEVEL applies at power-up.
+- The 300 ms plus one frame at full output after an unlocked RESET, and any flash before POWER ON LEVEL applies at power-up.
 - The RGBWAF mix has no limit in the driver. A frame from outside the governor can light every channel at the capped arc level.
 - Per-channel lumen weighting of the mix. The sum of channel fractions is the whole rule.
 

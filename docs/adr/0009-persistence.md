@@ -15,7 +15,7 @@ R8 asks for one user with local preferences. Stage 5 asks for IndexedDB with a s
 - Every load validates, from IndexedDB as well as from a file. A record that fails is set aside, not deleted, the user is told, and defaults are used.
 - A workspace file is JSON with `"format": "enlighten-workspace"` and a `version`. The schema is in `docs/SPEC.md` section 8.
 - The validator is hand-written, with no runtime dependency. It checks size before parsing (2 MB), then depth (8), array lengths, string lengths, number ranges and enumerations. It rejects the keys `__proto__`, `constructor` and `prototype`, and unknown keys. It builds its result as fresh objects and never merges parsed data into live ones.
-- Import never connects, unlocks, raises the ceiling or runs anything. An imported ceiling applies only if it is lower than the present one.
+- Import never connects, unlocks, raises the ceiling or runs anything. Imported preferences cannot make the app less careful, and imported simulator settings never reach the hardware's governor. An imported ceiling applies only if it is lower than the present one.
 - Nothing secret is stored. The server token is never written anywhere.
 - Unlocks, the panic latch and the connection are session state and are not stored.
 - A reload starts with the ceiling from preferences, no unlocks, and nothing running.

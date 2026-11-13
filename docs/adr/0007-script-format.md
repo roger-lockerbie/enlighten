@@ -15,7 +15,7 @@ R9 asks for scripts that run `first_light.py`-style sequences without a general-
 - Limits, checked before anything runs: 64 kB, 2,000 lines, 500 characters a line, `repeat` nested at most twice, and at most 10,000 steps once repeats are expanded.
 - The parser returns a list of typed steps or a list of errors with line numbers. The whole script is parsed and checked before the first step runs.
 - The runner feeds steps to the engine one at a time. Every frame goes through the governor. Panic and Ctrl-C stop it at once.
-- A script cannot raise the ceiling, unlock anything, change the output target, run another script, or touch history.
+- A script cannot use a command that needs an unlock, even while a person has that unlock on. It cannot raise the ceiling, unlock anything, change the output target, run another script, or touch history.
 - `first-light` ships as a built-in script. Unlike `tools/first_light.py` it respects the ceiling.
 
 ## Consequences

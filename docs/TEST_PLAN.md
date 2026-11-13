@@ -17,25 +17,25 @@ What is tested, how, and to what target. Test IDs are the ones `docs/SPEC.md` se
 | Panic on hardware                                       | OFF on the bus within 100 ms when idle                                        |
 | Hidden-tab sequence                                     | A 30-minute plan ends within 2 s of its planned time                          |
 
-The reference laptop is the owner's Apple M1 Pro until the client's machine is known.
+The reference laptop is an Apple M1 Pro until the client's machine is known.
 
 ## 2. Unit tests (Vitest, Node)
 
-| ID        | Covers                                                                                                                                                                                                                  |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U-headers | The header set and CSP string (exists from Stage 0, updated for ADR 0002)                                                                                                                                               |
-| U-dali    | Addresses, the command table, encode and decode, reply decoding, device type context                                                                                                                                    |
-| U-sim     | One behaviour test per section of `docs/research/dali.md`: curve, limits, fades, scenes, groups, DTRs, send twice, queries, RESET, power-on, system failure, commissioning, DT8. Each profile setting in both positions |
-| U-bus     | Settling times, send-twice spacing, reply windows, transactions kept whole, priorities, utilisation                                                                                                                     |
-| U-safety  | Every row of the rule table in the spec, the safety profile sequence and its failure cases, each rate guard rule, panic and the latch                                                                                   |
-| U-engine  | Compiling intents, shared DTR frames, the coalescer, the router in each target, divergence logging, runners, plan building                                                                                              |
-| U-console | Key-sequence tests for every binding, the kill ring, undo, search, completion, the command parser                                                                                                                       |
-| U-script  | The parser: every statement, every limit, every error message with its line                                                                                                                                             |
-| U-switch  | Every event and timer of the part 301 machine, and each preset's mapping                                                                                                                                                |
-| U-store   | Validators, each migration against its fixture, set-aside on failure                                                                                                                                                    |
-| U-light   | Form factors against closed forms, row sums and reciprocity, the direct term against the strip formula, emitter and diffuser models                                                                                     |
-| U-colour  | XYZ conversions, gamut mapping, the locus search against McCamy, exposure and tone mapping                                                                                                                              |
-| U-server  | pytest in `server/`: Host and Origin checks, the token, message lengths, flags mismatch, the queue limit, the 3 s stop, stop on exit, with a fake HID device                                                            |
+| ID        | Covers                                                                                                                                                                                                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U-headers | The header set and CSP string (exists from Stage 0, updated for ADR 0002)                                                                                                                                                                                                               |
+| U-dali    | Addresses, the command table, encode and decode, reply decoding, device type context                                                                                                                                                                                                    |
+| U-sim     | One behaviour test per section of `docs/research/dali.md`: curve, limits, fades, scenes, groups, DTRs, send twice, queries, RESET, power-on, system failure, commissioning, DT8. Each profile setting in both positions                                                                 |
+| U-bus     | Settling times, send-twice spacing, reply windows, transactions kept whole, priorities, utilisation                                                                                                                                                                                     |
+| U-safety  | Every row of the rule table in the spec, the safety profile sequence and its failure cases, each rate guard rule, panic and the latch                                                                                                                                                   |
+| U-engine  | Compiling intents, shared DTR frames, the coalescer, the router in each target, divergence logging, runners, plan building                                                                                                                                                              |
+| U-console | Key-sequence tests for every binding, the kill ring, undo, search, completion, the command parser                                                                                                                                                                                       |
+| U-script  | The parser: every statement, every limit, every error message with its line                                                                                                                                                                                                             |
+| U-switch  | Every event and timer of the part 301 machine, and each preset's mapping                                                                                                                                                                                                                |
+| U-store   | Validators, each migration against its fixture, set-aside on failure                                                                                                                                                                                                                    |
+| U-light   | Form factors against closed forms, row sums and reciprocity, the direct term against the strip formula, emitter and diffuser models                                                                                                                                                     |
+| U-colour  | XYZ conversions, gamut mapping, the locus search against McCamy, exposure and tone mapping                                                                                                                                                                                              |
+| U-server  | pytest in `server/`: Host and Origin checks, the token, message lengths, flags mismatch, the queue limit, the 3 s stop, stop on exit and on each signal, PANIC with a full queue (nothing queued is sent after OFF), the single-use URL token, a missing Origin, with a fake HID device |
 
 ## 3. Property tests (fast-check)
 
@@ -46,13 +46,15 @@ The reference laptop is the owner's Apple M1 Pro until the client's machine is k
 | P-dtr       | For any stream, a command that reads a DTR is sent only when the governor's view of that DTR equals the simulator's                                                                                                                   |
 | P-rate      | For any stream, with and without the `rate` unlock, the simulator's output trace has no more swing starts in any one-second window than the limit, and never more than three. Measured on the trace, not on the guard's counters      |
 | P-rate-fade | The same with random fade times, fade rates and extended fades, and with fade times changed mid-stream                                                                                                                                |
-| P-panic     | For any stream and any moment, after panic the next frame sent is TERMINATE or broadcast OFF, nothing else follows until Resume, and the guard never delays it                                                                        |
+| P-panic     | For any stream and any moment, after panic at most the frame already on the wire completes, then TERMINATE and broadcast OFF are sent, nothing else follows until Resume, and the guard never delays it                               |
 | P-sched     | For any set of transactions, frames of one transaction are never interleaved with another's, and no gap is shorter than the floor                                                                                                     |
 | P-parser    | The script parser never throws, never returns more than the step limit, and every accepted script prints back to an equivalent script                                                                                                 |
 | P-history   | History expansion never throws, and an expansion of a line with no `!` or leading `^` is the line                                                                                                                                     |
 | P-validator | The workspace validator never throws on any JSON value, never returns an object with a forbidden key, and accepts everything `exportWorkspace` produces                                                                               |
 | P-plan      | Any sequence the planner accepts runs on the simulator without a refusal and ends within one frame time of its planned end                                                                                                            |
 | P-light     | Energy balance in a closed box for random sizes, reflectances and emitter positions. Superposition: the response to a sum is the sum of responses                                                                                     |
+
+P-rate and P-rate-fade assert every clause of S3 on the traces, not only swings in a window: the 360 ms spacing, the 0.7 s fade for large legs, the reversal limit, saturated red, the 5 second stop, and legs on each channel and on luminance. Their generators include colour-only changes, staircases of small steps, group, broadcast and unaddressed frames with gear the governor has not seen, ENABLE DAPC SEQUENCE, SET MIN LEVEL and SET MAX LEVEL, RESET under the unlock, transport faults, target switches, reconnects, and several sources at once. P-ceiling uses the same generators.
 
 Any change to the rate guard or panic adds or strengthens a property here in the same commit.
 
@@ -70,32 +72,32 @@ Any change to the rate guard or panic adds or strengthens a property here in the
 ## 6. Lint tests
 
 - **L-sinks.** Exists from Stage 0: each banned sink is caught.
-- **L-boundary.** A test file proves lint catches an import of a transport outside `src/engine`, a DOM global or timer in a pure folder, `createPolicy` or `new Worker` outside `src/workers`, and an inline style attribute in a component.
+- **L-boundary.** A test file proves lint catches an import of a transport's send outside `src/engine/router.ts`, a DOM global or timer in a pure folder, `createPolicy` or `new Worker` outside `src/workers`, and an inline style attribute in a component.
 
 ## 7. End-to-end tests (Playwright, Chromium)
 
 Every e2e test uses the Stage 0 harness, so each also fails on a CSP violation, console error or cross-origin request.
 
-| ID           | Flow                                                                                                                                                                                    |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E-csp        | Exists. Extended to visit every route, load both workers, and check the meta fallback enforces Trusted Types                                                                            |
-| E-shell      | Navigation, preferences persist across a reload, unlocks and the latch do not                                                                                                           |
-| E-playground | Level, colour temperature, colour, fade, live and commit modes, clamped and refused values shown                                                                                        |
-| E-modes      | Simulator, Hardware and Both against the server with a fake HID device: connect, inventory, safety profile, a divergence logged when the fake is made to differ, fallback on disconnect |
-| E-server     | A page from another origin, a wrong Host, a missing or wrong token and a second client are each refused. Closing the tab turns the fake bus off                                         |
-| E-ceiling    | Lower at once, raise needs confirmation, a script cannot raise, mismatch shown                                                                                                          |
-| E-panic      | Button, Escape twice, and `panic`, from every page, with a dialog open, mid-script and mid-sequence. The latch holds until Resume. An unresponsive bus worker is ended                  |
-| E-console    | Typing sessions: editing, history, expansion with verify, completion, replies, refusals                                                                                                 |
-| E-keys       | A matrix of every binding against what Chromium lets a page cancel, so the legend is true                                                                                               |
-| E-script     | Run, pause, Ctrl-C, a refused step, import of a bad script                                                                                                                              |
-| E-import     | Workspace export and import, oversized and malformed files refused, a file with a higher ceiling does not raise it                                                                      |
-| E-sequence   | Plan preview, run, stop                                                                                                                                                                 |
-| E-hidden     | A long sequence with the page hidden, timed against the virtual bus                                                                                                                     |
-| E-effects    | Each built-in effect starts, shows its bus cost, and stops                                                                                                                              |
-| E-visualiser | Mount editor, presets, cameras, exposure, probe values against the pure core                                                                                                            |
-| E-ab         | Two set-ups side by side, one exposure                                                                                                                                                  |
-| E-switch     | Every event type by mouse, touch and keyboard, and a plate on an unverified address doing nothing                                                                                       |
-| E-a11y       | Keyboard reach of every control, roles and names, reduced motion, and no element that blinks                                                                                            |
+| ID           | Flow                                                                                                                                                                                                                       |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E-csp        | Exists. Extended to visit every route, load both workers, and check the meta fallback enforces Trusted Types                                                                                                               |
+| E-shell      | Navigation, preferences persist across a reload, unlocks and the latch do not                                                                                                                                              |
+| E-playground | Level, colour temperature, colour, fade, live and commit modes, clamped and refused values shown                                                                                                                           |
+| E-modes      | Simulator, Hardware and Both against the server with a fake HID device: connect, inventory, safety profile, a divergence logged when the fake is made to differ, fallback on disconnect                                    |
+| E-server     | A page from another origin, a wrong Host, a missing or wrong token and a second client are each refused. Closing the tab turns the fake bus off                                                                            |
+| E-ceiling    | Lower at once, raise needs confirmation, a script cannot raise, mismatch shown                                                                                                                                             |
+| E-panic      | Button, Escape twice, and `panic`, from every page, with a dialog open, mid-script and mid-sequence. The latch holds until Resume. An unresponsive bus worker is ended. The button is clicked while a confirmation is open |
+| E-console    | Typing sessions: editing, history, expansion with verify, completion, replies, refusals                                                                                                                                    |
+| E-keys       | A matrix of every binding against what Chromium lets a page cancel, so the legend is true                                                                                                                                  |
+| E-script     | Run, pause, Ctrl-C, a refused step, import of a bad script                                                                                                                                                                 |
+| E-import     | Workspace export and import, oversized and malformed files refused, a file with a higher ceiling does not raise it                                                                                                         |
+| E-sequence   | Plan preview, run, stop                                                                                                                                                                                                    |
+| E-hidden     | A long sequence with the page hidden, timed against the virtual bus                                                                                                                                                        |
+| E-effects    | Each built-in effect starts, shows its bus cost, and stops                                                                                                                                                                 |
+| E-visualiser | Mount editor, presets, cameras, exposure, probe values against the pure core                                                                                                                                               |
+| E-ab         | Two set-ups side by side, one exposure                                                                                                                                                                                     |
+| E-switch     | Every event type by mouse, touch and keyboard, and a plate on an unverified address doing nothing                                                                                                                          |
+| E-a11y       | Keyboard reach of every control, roles and names, reduced motion, and no element that blinks                                                                                                                               |
 
 Firefox and Safari are not in CI. The simulator is checked by hand in both at each stage close from Stage 5, and the result goes in the stage report.
 
@@ -122,7 +124,7 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Note whether the device has a serial number string.
 - [ ] Start the server and connect. Record the firmware version.
 - [ ] Count idle reports for five seconds.
-- [ ] If WebHID is still wanted: in Chrome, request the device and print `collections`. Record whether reports are listed.
+- [ ] If WebHID is still wanted: from a throwaway page on another port, not the app's origin, request the device in Chrome and print `collections`. Record whether reports are listed, then call `forget()`.
 
 ### Part 2: read both drivers, before sending any level
 
@@ -168,7 +170,8 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Send twice with a frame to the other driver in between.
 - [ ] Twenty UPs at fade rate 15, querying after each.
 - [ ] An extended fade of 16 minutes, timed.
-- [ ] With the tapes covered, once each: RESET and IDENTIFY DEVICE, then re-read everything.
+- [ ] With the tapes covered, once: RESET from the app, then re-read everything.
+- [ ] With the tapes covered, once: IDENTIFY DEVICE from a python-dali script, since the app refuses it. Record what the driver does.
 
 ### Part 6: light, with a lux meter if one is to hand
 

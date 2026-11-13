@@ -130,7 +130,7 @@ Goal: one Transport interface, the engine that sits above it, and the hardware s
 8. The gear safety profile: write, verify, re-apply after RESET or commissioning, and warn on mismatch.
 9. A hardware check flow, the acceptance plan as code: parts 2 to 4 of the hardware-day checklist in `docs/TEST_PLAN.md`, with results recorded for Stage 12.
 
-WebHID is not built in this stage. It may be added after Stage 12 if the hasseb's descriptor allows it, as ADR 0003 describes.
+WebHID is not built in this stage. It may be added after hardware day (Stage 12) if the hasseb's descriptor allows it, as ADR 0003 describes.
 
 Done when: the full hardware path passes e2e against the fake device in Chromium, the server's own tests pass, the stage-close checklist passes, and `dali-reviewer` signs off.
 
@@ -140,7 +140,7 @@ Done when: the full hardware path passes e2e against the fake device in Chromium
 
 Goal: the app you'll use every day, without the console or the 3D hallway yet.
 
-1. Apply ADR 0002 to the build: `fragments: 'tree'`, the `enlighten-worker` policy as the only Trusted Types policy, the lint rules for `createPolicy`, `new Worker` and inline styles, the wider Permissions-Policy list from `docs/THREAT_MODEL.md` section 4, and three.js as a lazily loaded chunk.
+1. Apply ADR 0002 to the build: `fragments: 'tree'`, the `enlighten-worker` policy as the only Trusted Types policy, the lint rules for `createPolicy`, `new Worker` and inline styles, the Permissions-Policy changes in `docs/THREAT_MODEL.md` section 4 (the wider list, `hid=()` and `fullscreen=()`), and three.js as a lazily loaded chunk.
 2. Layout per `docs/UI.md`: navigation; a top bar with the output target (Simulator, Hardware, Both) and its connection state, the ceiling, bus activity and panic; the main view; an inspector; and a placeholder console drawer.
 3. Design system: the dark tokens, self-hosted fonts, and components (sliders with paired readouts such as % and arc level, or K and mirek; numeric fields with units; segmented controls; a colour picker with white channels; toggles, menus and dialogs). Keyboard and screen-reader accessible, with reduced motion honoured.
 4. Playground per device. Tunable white: level, colour temperature and fade. RGBCCT: colour plus whites, raw channels, and a mode that matches how the driver presents itself. A fade picker that explains standard and extended fades. Live and commit modes, with slider movement coalesced to what the bus can carry.
