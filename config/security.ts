@@ -33,9 +33,14 @@ const DISABLED_FEATURES = [
 /** Features the app uses, for its own origin only. */
 const SELF_FEATURES = ['hid', 'screen-wake-lock', 'fullscreen'];
 
-export function permissionsPolicy(): string {
-  const off = DISABLED_FEATURES.map((f) => `${f}=()`);
-  const self = SELF_FEATURES.map((f) => `${f}=(self)`);
+/** The dev server is a separate origin, so it gets no device features at all. */
+export function permissionsPolicy(mode: Mode = 'strict'): string {
+  const off = (mode === 'dev' ? [...DISABLED_FEATURES, 'hid'] : DISABLED_FEATURES).map(
+    (f) => `${f}=()`,
+  );
+  const self = (mode === 'dev' ? SELF_FEATURES.filter((f) => f !== 'hid') : SELF_FEATURES).map(
+    (f) => `${f}=(self)`,
+  );
   return [...off, ...self].join(', ');
 }
 
@@ -76,7 +81,7 @@ export function securityHeaders(mode: Mode): Record<string, string> {
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Cross-Origin-Resource-Policy': 'same-origin',
-    'Permissions-Policy': permissionsPolicy(),
+    'Permissions-Policy': permissionsPolicy(mode),
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',

@@ -14,6 +14,8 @@ Stage 0 (repo, tooling and security baseline) is built and verified locally. `pn
 - CI, CodeQL and Dependabot workflows written, with every action pinned to a commit SHA.
 - `tools/golden/` requirements locked and installed into a git-ignored venv.
 
+- `security-reviewer` run on the diff. Medium findings fixed, the rest logged in `docs/SECURITY_FINDINGS.md`.
+
 ## Open items
 
 - `gh` is not installed, so the private GitHub repo, Dependabot alerts and the `main` ruleset are not set up. The workflows have not run on GitHub yet, so "passes in CI" is unconfirmed.

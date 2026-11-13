@@ -7,6 +7,9 @@ import { sinkConfig } from './eslint.sinks.js';
 
 export default tseslint.config(
   { ignores: ['dist/', 'coverage/', 'playwright-report/', 'test-results/', 'node_modules/'] },
+  {
+    linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: 'error' },
+  },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
@@ -38,4 +41,10 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   ...sinkConfig,
+  {
+    // These files name the banned sinks on purpose: the rule definitions, the lint test and the e2e test
+    // that proves the browser refuses them. Inline disable comments are off everywhere.
+    files: ['eslint.sinks.js', 'e2e/csp.spec.ts', 'tests/lint/sinks.test.ts'],
+    rules: { 'no-restricted-syntax': 'off', 'no-eval': 'off' },
+  },
 );

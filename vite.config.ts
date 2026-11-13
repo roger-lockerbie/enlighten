@@ -26,14 +26,14 @@ export default defineConfig({
     host: HOST,
     port: DEV_PORT,
     strictPort: true,
-    allowedHosts: [HOST, 'localhost'],
+    allowedHosts: [HOST],
     headers: securityHeaders('dev'),
   },
   preview: {
     host: HOST,
     port: PREVIEW_PORT,
     strictPort: true,
-    allowedHosts: [HOST, 'localhost'],
+    allowedHosts: [HOST],
     headers: securityHeaders('strict'),
   },
   build: {

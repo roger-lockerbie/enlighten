@@ -44,4 +44,4 @@ All live in `pnpm-workspace.yaml`.
 | `allowBuilds`             | `{}`           | The allowlist for dependency install scripts. It is empty: no dependency may run an install script.                                               |
 | `savePrefix`              | `''`           | Saves exact versions, never `^` or `~`.                                                                                                           |
 
-CI and `pnpm verify` use `pnpm install --frozen-lockfile`, which fails if `package.json` and the lockfile disagree.
+CI and the setup steps in the README use `pnpm install --frozen-lockfile`, which fails if `package.json` and the lockfile disagree.

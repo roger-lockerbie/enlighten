@@ -68,6 +68,11 @@ describe('meta fallback', () => {
 });
 
 describe('dev headers', () => {
+  it('grant no device features', () => {
+    expect(permissionsPolicy('dev')).toContain('hid=()');
+    expect(permissionsPolicy('dev')).not.toContain('hid=(self)');
+  });
+
   it('relax only what hot reload needs', () => {
     const csp = securityHeaders('dev')['Content-Security-Policy'] ?? '';
     expect(csp).toContain("style-src 'self' 'unsafe-inline'");

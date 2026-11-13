@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { cspDirectives } from '../config/security.ts';
 
 test('placeholder page loads with no CSP violation, console error or page error', async ({
   page,
@@ -11,6 +12,14 @@ test('placeholder page loads with no CSP violation, console error or page error'
     }
   });
   page.on('pageerror', (err) => problems.push(`page error: ${err.message}`));
+  page.on('request', (req) => {
+    if (
+      new URL(req.url()).origin !==
+      new URL(page.url() === 'about:blank' ? req.url() : page.url()).origin
+    ) {
+      problems.push(`cross-origin request: ${req.url()}`);
+    }
+  });
   page.on('requestfailed', (req) => problems.push(`request failed: ${req.url()}`));
   await page.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', (e) => {
@@ -31,6 +40,7 @@ test('placeholder page loads with no CSP violation, console error or page error'
   expect(headers['cross-origin-resource-policy']).toBe('same-origin');
   expect(headers['referrer-policy']).toBe('no-referrer');
   expect(headers['x-content-type-options']).toBe('nosniff');
+  expect(headers['content-security-policy']).toMatch(/trusted-types svelte-trusted-html(;|$)/);
   expect(headers['permissions-policy']).toContain('hid=(self)');
 
   const violations = await page.evaluate(
@@ -53,7 +63,6 @@ test('Trusted Types refuses plain strings in script and HTML sinks', async ({ pa
     }
     try {
       // Deliberate: proves Trusted Types refuses a plain string sink.
-      // eslint-disable-next-line no-restricted-syntax
       document.body.innerHTML = '<b>x</b>';
     } catch {
       htmlResult = 'blocked';
@@ -65,6 +74,8 @@ test('Trusted Types refuses plain strings in script and HTML sinks', async ({ pa
 
 test('the built page carries the meta fallback', async ({ request }) => {
   const html = await (await request.get('/')).text();
-  expect(html).toContain('http-equiv="Content-Security-Policy"');
+  expect(html).toContain(
+    `http-equiv="Content-Security-Policy" content="${cspDirectives('strict', { forMeta: true })}"`,
+  );
   expect(html).toContain('name="referrer" content="no-referrer"');
 });

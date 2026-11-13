@@ -15,6 +15,8 @@ const HTML_SINKS = [
   'srcdoc',
 ];
 
+const sinkName = `/^(${[...HTML_SINKS, 'write', 'writeln'].join('|')})$/`;
+
 const sinkProperty = `/^(${HTML_SINKS.join('|')})$/`;
 
 export const bannedSinkRules = {
@@ -49,6 +51,51 @@ export const bannedSinkRules = {
       message: 'new Function() builds code from a string and is banned.',
     },
     {
+      selector: `Literal[value=${sinkName}]`,
+      message: 'A string that names a banned sink is banned, so the sink cannot be reached by key.',
+    },
+    {
+      selector: `TemplateElement[value.raw=${sinkName}]`,
+      message: 'A string that names a banned sink is banned.',
+    },
+    {
+      selector:
+        'MemberExpression[property.name=/^(write|writeln)$/][object.property.name="document"]',
+      message: 'document.write is banned.',
+    },
+    {
+      selector:
+        'MemberExpression[computed=true][property.value=/^(write|writeln)$/][object.name="document"]',
+      message: 'document.write is banned.',
+    },
+    {
+      selector: 'CallExpression[callee.property.name=/^(Function|constructor)$/]',
+      message: 'Calling a Function constructor builds code from a string and is banned.',
+    },
+    {
+      selector: 'CallExpression[callee.property.name="setAttributeNS"]',
+      message: 'setAttributeNS is banned. Use setAttribute with a literal name.',
+    },
+    {
+      selector: 'CallExpression[callee.property.name="setAttribute"][arguments.0.type!="Literal"]',
+      message:
+        'setAttribute needs a literal attribute name, so srcdoc and on* handlers stay greppable.',
+    },
+    {
+      selector: 'ImportSpecifier[imported.name="createRawSnippet"]',
+      message:
+        'createRawSnippet renders HTML through the pass-through Trusted Types policy and is banned.',
+    },
+    {
+      selector:
+        'SvelteDirective[kind="Binding"][key.name.name=/^(innerHTML|outerHTML|textContent)$/]',
+      message: 'Binding to innerHTML, outerHTML or textContent is banned.',
+    },
+    {
+      selector: 'SvelteAttribute[key.name="srcdoc"]',
+      message: 'srcdoc is banned.',
+    },
+    {
       selector: 'CallExpression[callee.name="importScripts"]',
       message: 'importScripts is banned.',
     },
@@ -63,7 +110,7 @@ export const bannedSinkRules = {
 /** The sink rules for TypeScript, JavaScript and Svelte files. */
 export const sinkConfig = [
   {
-    files: ['**/*.{js,mjs,ts}'],
+    files: ['**/*.{js,mjs,cjs,ts,mts,cts,tsx}'],
     languageOptions: { parser: tseslint.parser, globals: { ...globals.browser, ...globals.node } },
     rules: bannedSinkRules,
   },

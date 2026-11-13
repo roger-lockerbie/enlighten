@@ -31,6 +31,16 @@ const bannedTs: [name: string, code: string, rule: string][] = [
   ['srcdoc attribute', 'iframe.setAttribute("srcdoc", x);', 'no-restricted-syntax'],
   ['inline handler attribute', 'el.setAttribute("onclick", x);', 'no-restricted-syntax'],
   ['importScripts', 'importScripts("x.js");', 'no-restricted-syntax'],
+  ['template-literal key', 'el[`innerHTML`] = x;', 'no-restricted-syntax'],
+  ['quoted key in Object.assign', 'Object.assign(el, { "innerHTML": x });', 'no-restricted-syntax'],
+  ['Reflect.set', 'Reflect.set(el, "innerHTML", x);', 'no-restricted-syntax'],
+  ['window.document.write', 'window.document.write(x);', 'no-restricted-syntax'],
+  ['document["write"]', 'document["write"](x);', 'no-restricted-syntax'],
+  ['globalThis.Function', 'globalThis.Function("return 1")();', 'no-restricted-syntax'],
+  ['constructor escape', '(function () {}).constructor("return 1")();', 'no-restricted-syntax'],
+  ['setAttributeNS', 'el.setAttributeNS(null, "onclick", x);', 'no-restricted-syntax'],
+  ['setAttribute with a variable', 'el.setAttribute(name, x);', 'no-restricted-syntax'],
+  ['createRawSnippet', 'import { createRawSnippet } from "svelte";', 'no-restricted-syntax'],
   ['innerHTML as object key', 'const o = { innerHTML: x };', 'no-restricted-syntax'],
 ];
 
@@ -63,6 +73,19 @@ describe('banned sinks in Svelte', () => {
     expect(ids).toContain('no-restricted-syntax');
   });
 
+  it('catches bind:innerHTML', async () => {
+    const ids = await ruleIds(
+      '<script lang="ts">let x = $state("");</script>\n<div bind:innerHTML={x}></div>\n',
+      'src/Fixture.svelte',
+    );
+    expect(ids).toContain('no-restricted-syntax');
+  });
+
+  it('catches srcdoc', async () => {
+    const ids = await ruleIds('<iframe title="t" srcdoc="x"></iframe>\n', 'src/Fixture.svelte');
+    expect(ids).toContain('no-restricted-syntax');
+  });
+
   it('lets ordinary markup through', async () => {
     const ids = await ruleIds(
       '<script lang="ts">let x = "a";</script>\n<p>{x}</p>\n',
@@ -73,6 +96,14 @@ describe('banned sinks in Svelte', () => {
 });
 
 describe('the project config', () => {
+  it('rejects inline disable comments', async () => {
+    const project = new ESLint();
+    const [result] = await project.lintText('// eslint-disable-next-line\neval("1");\n', {
+      filePath: 'tests/lint/fixture.js',
+    });
+    expect((result?.messages ?? []).map((m) => m.ruleId)).toContain('no-eval');
+  });
+
   it('applies the sink rules to TypeScript and Svelte files', async () => {
     const project = new ESLint();
     for (const file of ['src/main.ts', 'src/App.svelte']) {
