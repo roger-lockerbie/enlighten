@@ -23,16 +23,19 @@ Stage 0 (repo, tooling and security baseline) is built and verified locally. `pn
 - The `main` ruleset is not set: rulesets on a private repo need GitHub Pro. Add it in Stage 11. Until then, merge only with a green `verify`.
 - Commits use the GitHub noreply email.
 
-## Stage 1 (research), in progress
+## Stage 1 (research), done and waiting for review
 
-Branch `stage-1-research`. The plan: read python-dali 0.16 (sdist checked against the hash in `tools/golden/requirements.txt`, kept outside the repo), run nine web research threads through subagents, then write the ten documents in `docs/research/` one commit at a time.
+Branch `stage-1-research`. The ten documents are in `docs/research/`. Start with `SUMMARY.md`: it lists twelve findings that change the brief and seven decisions for the owner.
 
-Progress:
+- `dali.md`: commands, gear behaviour, bus timing, and every edge case that touches the ceiling.
+- `hasseb.md`: the 10-byte protocol, the WebHID mapping, a risk that Chrome blocks the device, the server design, and the hardware-day checklist.
+- `da5-l.md`: what is known about the driver, and the query that settles each unknown.
+- `optics.md`, `rendering.md`, `effects.md`, `switchgear.md`, `console.md`, `security.md`.
 
-- python-dali 0.16 source read: `gear/general.py`, `gear/colour.py`, `gear/sequences.py`, `gear/led.py`, `sequences.py`, `command.py`, `driver/hasseb.py`, `driver/hid.py` and `tests/fakes.py`.
-- Research threads started: DALI gear behaviour, hasseb and WebHID, DA5-L, optics, rendering, effects, switchgear, console, security. Their notes live in a session scratch folder, not in the repo, so a new session has to rerun any thread whose document is not yet committed.
-- Documents committed so far: none.
+No app code changed. python-dali 0.16 was read from a copy outside the repo and never run.
+
+Known gaps: the research was cut short several times by usage limits. Each document lists what it could not confirm. Nothing has been measured on hardware.
 
 ## Next
 
-Finish Stage 1 on Fable. Then Stage 2 (design) on Fable, in plan mode.
+Review the summary and answer its decisions. Then Stage 2 (design) on Fable, or Opus if Fable is short, in plan mode. Stage 2 should read the WebHID specification's security section by hand, which this stage could not fetch.
