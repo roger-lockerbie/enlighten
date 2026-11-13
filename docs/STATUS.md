@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stage 0 (repo, tooling and security baseline) is built and verified locally. `pnpm verify` passes. The branch is pushed and PR 1 is open (see "Open items").
+Stage 0 (repo, tooling and security baseline) is merged. Stage 1 (research) is written on `stage-1-research` and waiting for the owner's review.
 
 ## Done in Stage 0
 
@@ -18,7 +18,7 @@ Stage 0 (repo, tooling and security baseline) is built and verified locally. `pn
 
 ## Open items
 
-- Private repo `roger-lockerbie/enlighten` exists, with Dependabot alerts on. PR 1 is open and `verify` is green in CI.
+- Private repo `roger-lockerbie/enlighten` exists, with Dependabot alerts on. PR 1 (Stage 0) is merged.
 - CodeQL is written but skips while the repo is private, because code scanning needs a paid plan there. It runs once the repo is public in Stage 11.
 - The `main` ruleset is not set: rulesets on a private repo need GitHub Pro. Add it in Stage 11. Until then, merge only with a green `verify`.
 - Commits use the GitHub noreply email.
