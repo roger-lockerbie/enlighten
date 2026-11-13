@@ -1,0 +1,12 @@
+# Supply chain settings. Each one is explained in docs/DEPENDENCIES.md.
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade
+strictDepBuilds: true
+allowBuilds: {}
+savePrefix: ''
+# chokidar 4.0.3 is flagged as a trust downgrade (it was published without the
+# provenance that earlier releases had). Accepted for this one version only,
+# pulled in by svelte-check. See docs/DEPENDENCIES.md.
+trustPolicyExclude:
+  - chokidar@4.0.3
