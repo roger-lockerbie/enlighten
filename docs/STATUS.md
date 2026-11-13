@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stage 0 (repo, tooling and security baseline) is built and verified locally. `pnpm verify` passes. The branch is pushed and PR 1 is open (see "Open items").
+Stage 0 (repo, tooling and security baseline) is merged. Stage 1 (research) is written on `stage-1-research` and waiting for the owner's review.
 
 ## Done in Stage 0
 
@@ -18,11 +18,29 @@ Stage 0 (repo, tooling and security baseline) is built and verified locally. `pn
 
 ## Open items
 
-- Private repo `roger-lockerbie/enlighten` exists, with Dependabot alerts on. PR 1 is open and `verify` is green in CI.
+- Private repo `roger-lockerbie/enlighten` exists, with Dependabot alerts on. PR 1 (Stage 0) is merged.
 - CodeQL is written but skips while the repo is private, because code scanning needs a paid plan there. It runs once the repo is public in Stage 11.
 - The `main` ruleset is not set: rulesets on a private repo need GitHub Pro. Add it in Stage 11. Until then, merge only with a green `verify`.
 - Commits use the GitHub noreply email.
 
+## Stage 1 (research), done and waiting for review
+
+Branch `stage-1-research`. The ten documents are in `docs/research/`. Start with `SUMMARY.md`: it lists twelve findings that change the brief and seven decisions for the owner.
+
+- `dali.md`: commands, gear behaviour, bus timing, and every edge case that touches the ceiling.
+- `hasseb.md`: the 10-byte protocol, the WebHID mapping, a risk that Chrome blocks the device, the server design, and the hardware-day checklist.
+- `da5-l.md`: what is known about the driver, and the query that settles each unknown.
+- `optics.md`, `rendering.md`, `effects.md`, `switchgear.md`, `console.md`, `security.md`.
+
+No app code changed. python-dali 0.16 was read from a copy outside the repo and never run.
+
+Known gaps: the research was cut short several times by usage limits. Each document lists what it could not confirm. Nothing has been measured on hardware.
+
 ## Next
 
-Stage 1 (research) on Fable, in plan mode.
+The owner has answered the summary's questions: see "The owner's decisions" in `docs/research/SUMMARY.md`. In short: the brightness ceiling is a nice-to-have, the hardware path is a Python server on python-dali with SSH forwarding for remote use, WebHID is optional, and the visualiser is a best-effort estimate.
+
+Then Stage 2 (design) on Fable, or Opus if Fable is short, in plan mode. Stage 2 should:
+
+- Design to those decisions. `CLAUDE.md` and `docs/BRIEF.md` were updated to match on 14 November 2026. `docs/STAGES.md` was not: Stage 3 item 5 and Stage 4 still describe the governor and a WebHID transport as first planned. Stage 2's design documents are the authority once they exist, and Stage 2 should propose the edits to the later stages.
+- Read the WebHID specification's security section by hand only if the WebHID transport is kept.

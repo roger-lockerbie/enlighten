@@ -12,3 +12,4 @@ All notable changes to this project are recorded here. The format follows Keep a
 - An e2e test that fails on any CSP violation or console error.
 - Hardened pnpm settings, GitHub Actions CI with pinned actions, CodeQL and Dependabot.
 - `tools/golden/` with a hash-locked requirements file for python-dali 0.16 and hidapi.
+- Stage 1 research in `docs/research/`: DALI gear behaviour and timing, the hasseb and WebHID, the DA5-L, optics, rendering, effects, switchgear, the console and security, with a summary of findings that change the brief.
