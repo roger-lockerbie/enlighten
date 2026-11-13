@@ -106,10 +106,10 @@ Goal: a correct, tested core with no UI: frames, commands, simulated drivers, bu
 
 1. `tools/golden/generate.py`: with python-dali, write JSON fixtures for every command we support (frame bytes, send-twice flag, reply type), the DT8 sequences `first_light.py` sends (including ENABLE DEVICE TYPE 8), commissioning frames, and hasseb reports built by the driver's `construct` method without a device attached. Commit the fixtures and the generator. Tests read only the fixtures.
 2. `src/dali`: addressing, frames, a data-driven command table, encoders and decoders, typed replies and sequences, byte-for-byte equal to the fixtures.
-3. `src/sim`: a control-gear model per address with a virtual clock, following `docs/research/dali.md`: levels and the curve, fades (standard, extended, fade rate, from off), scenes, groups, DTRs, the send-twice window, queries, RESET, power-on and system-failure behaviour, commissioning and DT8 colour. DA5-L profiles for C1 to C5, with C5's bus presentation as a setting. Its output is each channel's drive over time, which the 2D preview and the visualiser read.
+3. `src/sim`: a control-gear model per address with a virtual clock, following `docs/research/dali.md`: levels and the curve, fades (standard, extended, fade rate, from off), scenes, groups, DTRs, the send-twice window, queries, RESET, power-on and system-failure behaviour, commissioning and DT8 colour. One DA5-L profile with light types C1 to C5, both colour presentations for C2 and for C5, and a setting for each unknown in the research with its sourced default. Its output is each channel's drive over time, which the 2D preview and the visualiser read.
 4. `src/bus`: a scheduler that serialises frames with the researched timing, send-twice spacing and reply windows, reports utilisation, and runs on an injectable clock (virtual in tests, real in the app).
-5. `src/safety`: the governor (ceiling, DTR tracking, a rule for every level-setting path, raw frames decoded then judged, unlock flows), the gear safety profile builder (S1), the rate guard (S3) and panic (S4).
-6. Tests: the fixtures; a behaviour test for each section of the research doc; property tests that random command streams, scripts and raw frames never push simulated output above the ceiling or past the rate guard unless unlocked; mutation testing on `src/safety` and the codec, to the score set in the test plan.
+5. `src/safety`: the governor as ADR 0004 and the rule table in `docs/SPEC.md` section 5 set it out (a pure `judge` and `observe` over tracked state, DTR0 to DTR2, a shadow gear model, the RGBWAF mix rule, raw frames decoded then judged, the three unlocks), the gear safety profile builder (S1), the rate guard (S3) and panic with its latch (S4), both as ADR 0005. The ceiling covers the ordinary paths listed in ADR 0004 and no more.
+6. Tests as `docs/TEST_PLAN.md` sets them out: the fixtures; a behaviour test for each section of the research doc; the property tests P-codec, P-ceiling, P-dtr, P-rate, P-rate-fade, P-panic and P-sched; mutation testing on `src/safety` and the codec, to the score in the test plan. Stryker is added as a development dependency for this.
 7. A differential check: where python-dali's fake gear (`dali/tests/fakes.py`) implements a behaviour, run the same command streams through it and through the simulator, and compare the query replies.
 
 Done when: the stage-close checklist passes and `dali-reviewer` signs off.
@@ -118,18 +118,21 @@ Done when: the stage-close checklist passes and `dali-reviewer` signs off.
 
 ## Stage 4: Transports and the hasseb
 
-Goal: one Transport interface with three implementations, tested end to end without hardware.
+Goal: one Transport interface, the engine that sits above it, and the hardware server, tested end to end without hardware. ADR 0003 and `docs/ARCHITECTURE.md` are the design.
 
-1. `SimTransport`.
-2. `HassebTransport` over WebHID: connect with a vendor and product filter, read the firmware version, send the 10-byte reports with sequence numbers, match replies, handle timeouts and retries, and drop idle reports cheaply. Disconnecting in the app closes the device and revokes its permission with `forget()`. A physical unplug while connected waits, then reconnects when the hasseb returns. Support both readings of the 0xAA byte behind one setting, defaulting from the research.
-3. `FakeHassebDevice`: a fake `HIDDevice` that speaks the hasseb protocol and drives the simulator. CI uses it, and so does a "demo hardware" mode, so the whole hardware path runs today.
-4. Both mode: hardware leads, the simulator mirrors, queries are compared at intervals, and differences go to a divergence log.
-5. Discovery and inventory: scan addresses, then query device types, colour type features, RGBWAF channels and assigned colours, colour temperature limits, physical minimum, levels and extended fade. Show what the C5 driver reports.
-6. Commissioning (address assignment) behind a confirmation step.
-7. The gear safety profile: write, verify, re-apply after RESET or commissioning, and warn on mismatch.
-8. A hardware check flow, the acceptance plan as code: the first-light steps plus inventory and the safety profile, with results recorded for Stage 12.
+1. `src/engine` and `src/transport`: the engine, router, live-control coalescer and `SimTransport`, with the bus worker shell and its message protocol (ADR 0010).
+2. `server/`: the Python hardware server. It binds to 127.0.0.1:47821, serves `dist/` and the `/bus` WebSocket with the full header set, checks Host, Origin and the session token, takes one client, speaks the protocol in `docs/SPEC.md` section 9, builds the hasseb's 10-byte reports itself with sequence numbers matched, and sends broadcast OFF when the client goes away, falls silent for 3 seconds, or the server stops. Its requirements (python-dali, hidapi, `websockets`) are pinned by hash.
+3. `ServerTransport` in the app. Hardware and Both are offered only when the page came from the server with a token.
+4. A fake HID device for the server that speaks the hasseb protocol and drives a small gear model. CI uses it, and so does a "demo hardware" start option, so the whole hardware path runs today.
+5. Both mode: hardware leads, the shadow simulator follows, query replies are compared, and differences go to a divergence log.
+6. Discovery and inventory: scan addresses, then query device types, colour type features, RGBWAF channels and assigned colours, colour temperature limits, physical minimum, levels and extended fade. Show what each driver reports, and choose how to drive it from that.
+7. Commissioning (address assignment) behind the `reset` unlock and a confirmation step.
+8. The gear safety profile: write, verify, re-apply after RESET or commissioning, and warn on mismatch.
+9. A hardware check flow, the acceptance plan as code: parts 2 to 4 of the hardware-day checklist in `docs/TEST_PLAN.md`, with results recorded for Stage 12.
 
-Done when: the full hardware path passes e2e against the fake device in Chromium, the stage-close checklist passes, and `dali-reviewer` signs off.
+WebHID is not built in this stage. It may be added after Stage 12 if the hasseb's descriptor allows it, as ADR 0003 describes.
+
+Done when: the full hardware path passes e2e against the fake device in Chromium, the server's own tests pass, the stage-close checklist passes, and `dali-reviewer` signs off.
 
 ---
 
@@ -137,13 +140,14 @@ Done when: the full hardware path passes e2e against the fake device in Chromium
 
 Goal: the app you'll use every day, without the console or the 3D hallway yet.
 
-1. Layout per `docs/UI.md`: navigation; a top bar with the output target (Simulator, Hardware, Both) and its connection state, the ceiling, bus activity and panic; the main view; an inspector; and a placeholder console drawer.
-2. Design system: the dark tokens, self-hosted fonts, and components (sliders with paired readouts such as % and arc level, or K and mirek; numeric fields with units; segmented controls; a colour picker with white channels; toggles, menus and dialogs). Keyboard and screen-reader accessible, with reduced motion honoured.
-3. Playground per device. Tunable white: level, colour temperature and fade. RGBCCT: colour plus whites, raw channels, and a mode that matches how the driver presents itself. A fade picker that explains standard and extended fades. Live and commit modes, with slider movement coalesced to what the bus can carry.
-4. Ceiling: set in light output %, with the arc level shown. It lowers at once and rises only with a deliberate action, and it shows its state in the app and in each driver.
-5. Bench preview: a 2D view of the two tapes at their true relative brightness and colour from the simulator, so the app is useful before the hallway exists.
-6. Bus monitor: frames, their decoded meaning, timing and utilisation.
-7. Preferences and persistence (IndexedDB with a schema version and migrations), and workspace export and import, validated.
+1. Apply ADR 0002 to the build: `fragments: 'tree'`, the `enlighten-worker` policy as the only Trusted Types policy, the lint rules for `createPolicy`, `new Worker` and inline styles, the wider Permissions-Policy list from `docs/THREAT_MODEL.md` section 4, and three.js as a lazily loaded chunk.
+2. Layout per `docs/UI.md`: navigation; a top bar with the output target (Simulator, Hardware, Both) and its connection state, the ceiling, bus activity and panic; the main view; an inspector; and a placeholder console drawer.
+3. Design system: the dark tokens, self-hosted fonts, and components (sliders with paired readouts such as % and arc level, or K and mirek; numeric fields with units; segmented controls; a colour picker with white channels; toggles, menus and dialogs). Keyboard and screen-reader accessible, with reduced motion honoured.
+4. Playground per device. Tunable white: level, colour temperature and fade. RGBCCT: colour plus whites, raw channels, and a mode that matches how the driver presents itself. A fade picker that explains standard and extended fades. Live and commit modes, with slider movement coalesced to what the bus can carry.
+5. Ceiling: set in light output %, with the arc level shown. It lowers at once and rises only with a deliberate action, and it shows its state in the app and in each driver.
+6. Bench preview: a 2D view of the two tapes at their true relative brightness and colour from the simulator, so the app is useful before the hallway exists.
+7. Bus monitor: frames, their decoded meaning, timing and utilisation.
+8. Preferences and persistence (IndexedDB with a schema version and migrations), and workspace export and import, validated.
 
 Done when: e2e tests cover the main flows in all three output modes against the fake device, and the stage-close checklist passes.
 
@@ -227,10 +231,11 @@ Done when: there are no open high or critical findings, the release is published
 
 Run whenever the hasseb arrives, once Stage 4 is merged.
 
-1. Run the hardware check in Chrome with the bench powered and both tapes unrolled.
+1. Work through the hardware-day checklist in `docs/TEST_PLAN.md` section 10, with the server running and the bench powered. Part 1 comes first, before the bench is wired: it includes the hasseb's report descriptor, which decides whether a WebHID transport is possible.
 2. Record the facts in `docs/research/da5-l.md` and `docs/research/hasseb.md`: the report descriptor, firmware version, C5 presentation, assigned colours, colour temperature limits, physical minimum, fade from off and measured throughput.
 3. Run Both mode through the test plan's comparison set. Fix differences in the simulator's profiles, not with special cases for hardware.
 4. Calibrate fade timing, colour mixing and low-level steps, optionally with lux and colour temperature readings from a meter entered by hand.
 5. Write the gear safety profile to both drivers and verify it.
+6. Decide with the owner whether to build the WebHID transport, from what part 1 found.
 
 Done when: the divergence log is clear or explained, and the stage-close checklist passes.
