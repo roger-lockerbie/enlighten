@@ -23,6 +23,16 @@ Stage 0 (repo, tooling and security baseline) is built and verified locally. `pn
 - The `main` ruleset is not set: rulesets on a private repo need GitHub Pro. Add it in Stage 11. Until then, merge only with a green `verify`.
 - Commits use the GitHub noreply email.
 
+## Stage 1 (research), in progress
+
+Branch `stage-1-research`. The plan: read python-dali 0.16 (sdist checked against the hash in `tools/golden/requirements.txt`, kept outside the repo), run nine web research threads through subagents, then write the ten documents in `docs/research/` one commit at a time.
+
+Progress:
+
+- python-dali 0.16 source read: `gear/general.py`, `gear/colour.py`, `gear/sequences.py`, `gear/led.py`, `sequences.py`, `command.py`, `driver/hasseb.py`, `driver/hid.py` and `tests/fakes.py`.
+- Research threads started: DALI gear behaviour, hasseb and WebHID, DA5-L, optics, rendering, effects, switchgear, console, security. Their notes live in a session scratch folder, not in the repo, so a new session has to rerun any thread whose document is not yet committed.
+- Documents committed so far: none.
+
 ## Next
 
-Stage 1 (research) on Fable, in plan mode.
+Finish Stage 1 on Fable. Then Stage 2 (design) on Fable, in plan mode.
