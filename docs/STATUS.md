@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stage 0 (repo, tooling and security baseline) is merged. Stage 1 (research) is written on `stage-1-research` and waiting for the owner's review.
+Stage 0 (repo, tooling and security baseline) and Stage 1 (research) are merged. Stage 2 (design) is written on `stage-2-design` and waiting for the owner's review. Stage 3 (DALI core, simulator and safety governor) is next, on Opus, in plan mode.
 
 ## Done in Stage 0
 
@@ -23,24 +23,26 @@ Stage 0 (repo, tooling and security baseline) is merged. Stage 1 (research) is w
 - The `main` ruleset is not set: rulesets on a private repo need GitHub Pro. Add it in Stage 11. Until then, merge only with a green `verify`.
 - Commits use the GitHub noreply email.
 
-## Stage 1 (research), done and waiting for review
+## Stage 1 (research), merged
 
-Branch `stage-1-research`. The ten documents are in `docs/research/`. Start with `SUMMARY.md`: it lists twelve findings that change the brief and seven decisions for the owner.
+The ten documents are in `docs/research/`. `SUMMARY.md` lists the findings that change the brief and the owner's decisions on them. Each document lists what it could not confirm. Nothing has been measured on hardware.
 
-- `dali.md`: commands, gear behaviour, bus timing, and every edge case that touches the ceiling.
-- `hasseb.md`: the 10-byte protocol, the WebHID mapping, a risk that Chrome blocks the device, the server design, and the hardware-day checklist.
-- `da5-l.md`: what is known about the driver, and the query that settles each unknown.
-- `optics.md`, `rendering.md`, `effects.md`, `switchgear.md`, `console.md`, `security.md`.
+## Stage 2 (design), done and waiting for review
 
-No app code changed. python-dali 0.16 was read from a copy outside the repo and never run.
+Branch `stage-2-design`. From this stage on, these documents are the authority, and the brief and `CLAUDE.md` are background:
 
-Known gaps: the research was cut short several times by usage limits. Each document lists what it could not confirm. Nothing has been measured on hardware.
+- `docs/SPEC.md`: features and acceptance criteria for R1 to R16 and S1 to S6, the governor's rule table, the console language, the script format, the workspace file, the server protocol, and the traceability table.
+- `docs/ARCHITECTURE.md`: modules, interfaces, the one path through the governor, the three output targets, the server, persistence and the folder layout.
+- `docs/THREAT_MODEL.md`, `docs/TEST_PLAN.md` (with the hardware-day checklist), `docs/UI.md` with wireframes in `docs/wireframes/`.
+- ADRs 0002 to 0010 in `docs/adr/`.
+- `docs/OPEN_QUESTIONS.md`: nothing is open for the owner or the client. It lists what waits on hardware.
+
+The spike is on `spike/stage-2-stack`, pushed and not merged. Its results are in ADR 0002: the default stack passed every check under the strict CSP and Trusted Types.
+
+Decisions the owner made during this stage: panic's safe level is off, the server uses the `websockets` library, the server stays a relay with no rate limit of its own, and the answers to the Stage 2 questions, recorded as decisions 10 to 19 in `docs/research/SUMMARY.md`.
+
+`docs/STAGES.md` now matches the design for Stages 3, 4, 5 and 12.
 
 ## Next
 
-The owner has answered the summary's questions: see "The owner's decisions" in `docs/research/SUMMARY.md`. In short: the brightness ceiling is a nice-to-have, the hardware path is a Python server on python-dali with SSH forwarding for remote use, WebHID is optional, and the visualiser is a best-effort estimate.
-
-Then Stage 2 (design) on Fable, or Opus if Fable is short, in plan mode. Stage 2 should:
-
-- Design to those decisions. `CLAUDE.md` and `docs/BRIEF.md` were updated to match on 14 November 2026. `docs/STAGES.md` was not: Stage 3 item 5 and Stage 4 still describe the governor and a WebHID transport as first planned. Stage 2's design documents are the authority once they exist, and Stage 2 should propose the edits to the later stages.
-- Read the WebHID specification's security section by hand only if the WebHID transport is kept.
+Stage 3 on Opus, in plan mode. Read `docs/SPEC.md` section 5, ADR 0004 and ADR 0005 first.

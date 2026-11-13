@@ -43,6 +43,18 @@ These answer the questions this stage raised. `CLAUDE.md` and `docs/BRIEF.md` we
 8. **GitHub workflow lockfiles:** left to judgement. Keep the SHA pins as `CLAUDE.md` says, and add a lockfile beside them in Stage 11.
 9. **The visualiser is a best-effort estimate.** It gives an idea of how the light might look in different positions. It does not need exact tape data, exact profile dimensions or measured optics. A lighting professional will be engaged when the house is built, and the tapes may change. No request to Linear Lux is needed.
 
+Decisions made during Stage 2, on the same day:
+
+10. **Panic's safe level is off.** Broadcast OFF, and the server's own stop does the same.
+11. **The server uses the `websockets` library.**
+    K. **A remote operator who cannot see the lights** gets no `rate` unlock for that session, and nothing more. The app asks once on connect. Remote use will be rare.
+12. **The visualiser's white balance defaults to adapted to the scene.** The owner accepted the Stage 2 recommendations without naming this one, so it is recorded as accepted by default and is a one-line change if he prefers daylight.
+13. **Fonts:** Inter for the interface and JetBrains Mono for the console, stored in the repo.
+14. **Panic's shortcut is Escape twice within 500 ms.**
+15. **The edits to Stages 3, 4, 5 and 12 in `docs/STAGES.md` stand.**
+16. **The licence:** Apache-2.0 is the expected choice. Stage 11 still asks before the repo goes public, as the stage plan says.
+17. **From the client's side:** he uses Chrome and Brave. The switch brands stay as decided (zencontrol, with Basalte and Gira as KNX examples), because the house's choice will come well after this program has served its purpose.
+
 What this simplifies for Stage 2:
 
 - The server can be a thin relay with the access controls in `hasseb.md` section 6 (loopback only, Host and Origin checks, a session token) and a dead-man stop. It does not need its own copy of the governor.

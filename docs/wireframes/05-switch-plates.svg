@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" font-family="system-ui, sans-serif" font-size="13">
+<title>Switch plates</title>
+<rect width="1440" height="900" fill="#0b0b0c"/>
+<rect x="0" y="0" width="1440" height="48" rx="0" fill="#131315" stroke="#2a2a2f"/>
+<text x="20" y="30" fill="#e8e8ea" font-size="16" text-anchor="start" font-weight="600">Enlighten</text>
+<rect x="200" y="10" width="92" height="28" rx="3" fill="#1b1b1e" stroke="#8fb4d9"/>
+<text x="246" y="29" fill="#e8e8ea" font-size="12" text-anchor="middle" font-weight="400">Simulator</text>
+<rect x="292" y="10" width="92" height="28" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<text x="338" y="29" fill="#9a9aa0" font-size="12" text-anchor="middle" font-weight="400">Hardware</text>
+<rect x="384" y="10" width="92" height="28" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<text x="430" y="29" fill="#9a9aa0" font-size="12" text-anchor="middle" font-weight="400">Both</text>
+<text x="500" y="29" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Server: not running</text>
+<rect x="690" y="10" width="250" height="28" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="702" y="29" fill="#e8e8ea" font-size="12" text-anchor="start" font-weight="400">Ceiling 40%  arc 220</text>
+<text x="928" y="29" fill="#9a9aa0" font-size="11" text-anchor="end" font-weight="400">2/2 verified</text>
+<text x="960" y="29" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Bus 3%</text>
+<rect x="1016" y="20" width="100" height="8" rx="2" fill="#1b1b1e" stroke="#2a2a2f"/>
+<rect x="1016" y="20" width="6" height="8" rx="2" fill="#8fb4d9" stroke="#8fb4d9"/>
+<text x="1150" y="29" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Unlocks: none</text>
+<rect x="1320" y="8" width="104" height="32" rx="4" fill="#d9534f" stroke="#d9534f"/>
+<text x="1372" y="29" fill="#ffffff" font-size="13" text-anchor="middle" font-weight="600">Panic</text>
+<rect x="0" y="48" width="180" height="852" rx="0" fill="#131315" stroke="#2a2a2f"/>
+<text x="24" y="84" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Playground</text>
+<text x="24" y="120" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Looks</text>
+<text x="24" y="156" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Sequences</text>
+<text x="24" y="192" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Effects</text>
+<text x="24" y="228" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Visualiser</text>
+<rect x="8" y="244" width="164" height="30" rx="4" fill="#1b1b1e" stroke="#2a2a2f"/>
+<text x="24" y="264" fill="#e8e8ea" font-size="13" text-anchor="start" font-weight="400">Switches</text>
+<text x="24" y="300" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Devices</text>
+<text x="24" y="336" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Bus monitor</text>
+<text x="24" y="372" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400">Settings</text>
+<rect x="1120" y="48" width="320" height="632" rx="0" fill="#131315" stroke="#2a2a2f"/>
+<text x="1140" y="80" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Inspector</text>
+<rect x="180" y="680" width="1260" height="220" rx="0" fill="#09090a" stroke="#2a2a2f"/>
+<text x="196" y="702" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Console</text>
+<text x="1420" y="702" fill="#9a9aa0" font-size="11" text-anchor="end" font-weight="400">Ctrl-` to hide   help keys</text>
+<text x="204" y="84" fill="#e8e8ea" font-size="18" text-anchor="start" font-weight="600">Switches</text>
+<rect x="204" y="110" width="260" height="330" rx="4" fill="#131315" stroke="#2a2a2f"/>
+<text x="220" y="136" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">1 button, zencontrol preset</text>
+<rect x="238" y="144" width="192" height="224" rx="10" fill="#1b1b1e" stroke="#2a2a2f"/>
+<rect x="256" y="162" width="156" height="156" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<rect x="326.0" y="308" width="16" height="3" rx="1" fill="#8fb4d9" stroke="#8fb4d9"/>
+<text x="220" y="420" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">Targets address 0. Dimmer type.</text>
+<rect x="494" y="110" width="260" height="330" rx="4" fill="#131315" stroke="#2a2a2f"/>
+<text x="510" y="136" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">2 button, zencontrol preset</text>
+<rect x="528" y="144" width="192" height="224" rx="10" fill="#1b1b1e" stroke="#2a2a2f"/>
+<rect x="546" y="162" width="156" height="76.0" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<rect x="616.0" y="228.0" width="16" height="3" rx="1" fill="#8fb4d9" stroke="#8fb4d9"/>
+<rect x="546" y="242.0" width="156" height="76.0" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<rect x="616.0" y="308.0" width="16" height="3" rx="1" fill="#8fb4d9" stroke="#8fb4d9"/>
+<text x="510" y="420" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">Targets address 0. Dimmer type.</text>
+<rect x="784" y="110" width="260" height="330" rx="4" fill="#131315" stroke="#2a2a2f"/>
+<text x="800" y="136" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">4 button, zencontrol preset</text>
+<rect x="818" y="144" width="192" height="224" rx="10" fill="#1b1b1e" stroke="#2a2a2f"/>
+<rect x="836" y="162" width="76.0" height="76.0" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<rect x="866.0" y="228.0" width="16" height="3" rx="1" fill="#8fb4d9" stroke="#8fb4d9"/>
+<rect x="916.0" y="162" width="76.0" height="76.0" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<rect x="946.0" y="228.0" width="16" height="3" rx="1" fill="#8fb4d9" stroke="#8fb4d9"/>
+<rect x="836" y="242.0" width="76.0" height="76.0" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<rect x="866.0" y="308.0" width="16" height="3" rx="1" fill="#8fb4d9" stroke="#8fb4d9"/>
+<rect x="916.0" y="242.0" width="76.0" height="76.0" rx="3" fill="#131315" stroke="#2a2a2f"/>
+<rect x="946.0" y="308.0" width="16" height="3" rx="1" fill="#8fb4d9" stroke="#8fb4d9"/>
+<text x="800" y="420" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">Targets address 0. Dimmer type.</text>
+<text x="1140" y="112" fill="#e8e8ea" font-size="14" text-anchor="start" font-weight="600">Button 1</text>
+<text x="1140" y="144" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Short press</text>
+<text x="1420" y="144" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">Toggle</text>
+<text x="1140" y="170" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Hold</text>
+<text x="1420" y="170" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">Dim, alternate direction</text>
+<text x="1140" y="196" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Double press</text>
+<text x="1420" y="196" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">Off (timer 0)</text>
+<text x="1140" y="222" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">LED</text>
+<text x="1420" y="222" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">On when target is off</text>
+<text x="1140" y="248" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Short timer</text>
+<text x="1420" y="248" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">500 ms</text>
+<text x="1140" y="274" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Repeat timer</text>
+<text x="1420" y="274" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">160 ms</text>
+<text x="1140" y="300" fill="#9a9aa0" font-size="12" text-anchor="start" font-weight="400">Stuck timer</text>
+<text x="1420" y="300" fill="#e8e8ea" font-size="12" text-anchor="end" font-weight="400">20 s</text>
+<text x="1140" y="340" fill="#9a9aa0" font-size="11" text-anchor="start" font-weight="400">Keyboard: focus a button, hold Space.</text>
+<text x="196" y="730" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">  plate 1 button 1: short press</text>
+<text x="196" y="750" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">  recall-max-level 0</text>
+<text x="196" y="770" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">  plate 1 button 1: long press start, repeat x6, stop</text>
+<text x="196" y="790" fill="#9a9aa0" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, monospace">  up 0 (x7)</text>
+</svg>
