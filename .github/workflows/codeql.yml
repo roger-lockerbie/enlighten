@@ -12,6 +12,9 @@ permissions:
 
 jobs:
   analyze:
+    # Code scanning needs GitHub Code Security on private repos, which this account lacks.
+    # The job skips until the repo is public (Stage 11), then runs with no edit.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

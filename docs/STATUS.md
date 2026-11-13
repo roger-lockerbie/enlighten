@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stage 0 (repo, tooling and security baseline) is built and verified locally. `pnpm verify` passes. The branch has not been pushed, because `gh` isn't installed and no GitHub remote is set (see "Open items").
+Stage 0 (repo, tooling and security baseline) is built and verified locally. `pnpm verify` passes. The branch is pushed and PR 1 is open (see "Open items").
 
 ## Done in Stage 0
 
@@ -18,8 +18,10 @@ Stage 0 (repo, tooling and security baseline) is built and verified locally. `pn
 
 ## Open items
 
-- `gh` is not installed, so the private GitHub repo, Dependabot alerts and the `main` ruleset are not set up. The workflows have not run on GitHub yet, so "passes in CI" is unconfirmed.
-- Stage 0 is not done until CI is green and the PR is merged.
+- Private repo `roger-lockerbie/enlighten` exists, with Dependabot alerts on. PR 1 is open and `verify` is green in CI.
+- CodeQL is written but skips while the repo is private, because code scanning needs a paid plan there. It runs once the repo is public in Stage 11.
+- The `main` ruleset is not set: rulesets on a private repo need GitHub Pro. Add it in Stage 11. Until then, merge only with a green `verify`.
+- Commits use the GitHub noreply email.
 
 ## Next
 
