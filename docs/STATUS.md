@@ -39,10 +39,10 @@ Branch `stage-2-design`. From this stage on, these documents are the authority, 
 
 The spike is on `spike/stage-2-stack`, pushed and not merged. Its results are in ADR 0002: the default stack passed every check under the strict CSP and Trusted Types.
 
-Decisions the owner made during this stage: panic's safe level is off, the server uses the `websockets` library, and the edits to later stages in `docs/STAGES.md` are their own commit.
+Decisions the owner made during this stage: panic's safe level is off, the server uses the `websockets` library, the server stays a relay with no rate limit of its own, and the edits to later stages in `docs/STAGES.md` are their own commit.
 
 `docs/STAGES.md` now matches the design for Stages 3, 4, 5 and 12.
 
 ## Next
 
-Stage 3 on Opus, in plan mode. Read `docs/SPEC.md` section 5, ADR 0004 and ADR 0005 first. Before starting, check `docs/OPEN_QUESTIONS.md` for answers: question 1 (a small rate limit in the server) affects Stage 4, not Stage 3.
+Stage 3 on Opus, in plan mode. Read `docs/SPEC.md` section 5, ADR 0004 and ADR 0005 first. Before starting, check `docs/OPEN_QUESTIONS.md` for answers.

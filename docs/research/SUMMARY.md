@@ -43,6 +43,12 @@ These answer the questions this stage raised. `CLAUDE.md` and `docs/BRIEF.md` we
 8. **GitHub workflow lockfiles:** left to judgement. Keep the SHA pins as `CLAUDE.md` says, and add a lockfile beside them in Stage 11.
 9. **The visualiser is a best-effort estimate.** It gives an idea of how the light might look in different positions. It does not need exact tape data, exact profile dimensions or measured optics. A lighting professional will be engaged when the house is built, and the tapes may change. No request to Linear Lux is needed.
 
+Decisions made during Stage 2, on the same day:
+
+10. **Panic's safe level is off.** Broadcast OFF, and the server's own stop does the same.
+11. **The server uses the `websockets` library.**
+12. **The server stays a relay.** It carries no rate limit of its own, in full or in part. The rate guard lives in the app, and keeping script out of the page is the control (`docs/THREAT_MODEL.md` 3.1).
+
 What this simplifies for Stage 2:
 
 - The server can be a thin relay with the access controls in `hasseb.md` section 6 (loopback only, Host and Origin checks, a session token) and a dead-man stop. It does not need its own copy of the governor.

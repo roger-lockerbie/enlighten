@@ -4,27 +4,25 @@ What Stage 2 could not decide alone. Each has a recommendation, and the design w
 
 ## For the owner
 
-1. **Should the server carry a small rate limit of its own?** The rate guard is the safety control, and it lives in the page. Script injected into the page could flash the tapes through the server (`docs/THREAT_MODEL.md` 3.1). You decided the server is a thin relay with no second governor. A middle path exists: the server counts direction changes in level commands (DAPC, OFF, the RECALL commands) per address and refuses more than three reversals a second. It is about 60 lines of Python, catches crude flashing, and does not see fades or colour. Recommendation: add it in Stage 4, described plainly as a backstop and not as a second rate guard. Without your yes, the server stays a relay.
+1. **Remote sessions and a room the operator cannot see.** The server cannot tell an SSH-forwarded client from a local one. The design asks once on connect, "Can you see the lights?", and shows the answer in the top bar. Should a "no" do more: for example, hold the rate guard at one swing a second with no unlock, or need someone at the bench to press a key in the server's terminal? Recommendation: on "no", refuse the `rate` unlock for that session, and nothing more.
 
-2. **Remote sessions and a room the operator cannot see.** The server cannot tell an SSH-forwarded client from a local one. The design asks once on connect, "Can you see the lights?", and shows the answer in the top bar. Should a "no" do more: for example, hold the rate guard at one swing a second with no unlock, or need someone at the bench to press a key in the server's terminal? Recommendation: on "no", refuse the `rate` unlock for that session, and nothing more.
+2. **The visualiser's default white balance.** "Adapted to the scene" shows a 2700 K hallway as white, the way eyes adapt. "Daylight" shows it orange, the way a camera does. Recommendation: adapted, with the scene's colour temperature always shown in the probe. The A/B view uses one balance for both sides in either case.
 
-3. **The visualiser's default white balance.** "Adapted to the scene" shows a 2700 K hallway as white, the way eyes adapt. "Daylight" shows it orange, the way a camera does. Recommendation: adapted, with the scene's colour temperature always shown in the probe. The A/B view uses one balance for both sides in either case.
+3. **Fonts.** Inter for the interface and JetBrains Mono for the console, both under the SIL Open Font License and stored in the repo. Say if you prefer system fonts only, which would mean no font files at all.
 
-4. **Fonts.** Inter for the interface and JetBrains Mono for the console, both under the SIL Open Font License and stored in the repo. Say if you prefer system fonts only, which would mean no font files at all.
+4. **Panic's shortcut.** Escape pressed twice within 500 ms. It is the only candidate that no browser or system reserves. The cost is that a fast double Escape to close two things turns the lights off. Recommendation: keep it, and tune the window on the bench.
 
-5. **Panic's shortcut.** Escape pressed twice within 500 ms. It is the only candidate that no browser or system reserves. The cost is that a fast double Escape to close two things turns the lights off. Recommendation: keep it, and tune the window on the bench.
+5. **The edits to Stages 3, 4, 5 and 12 in `docs/STAGES.md`.** They are one commit in this stage's PR. Read that diff, and revert the commit if the plan should stay as it was.
 
-6. **The edits to Stages 3, 4, 5 and 12 in `docs/STAGES.md`.** They are one commit in this stage's PR. Read that diff, and revert the commit if the plan should stay as it was.
-
-7. **The licence,** when the repository goes public in Stage 11. Apache-2.0 is still the suggestion. The server uses python-dali (LGPL-3.0) as an installed dependency and contains none of its code, which Apache-2.0 allows.
+6. **The licence,** when the repository goes public in Stage 11. Apache-2.0 is still the suggestion. The server uses python-dali (LGPL-3.0) as an installed dependency and contains none of its code, which Apache-2.0 allows.
 
 ## For the client
 
-8. **Which browser will you use?** The simulator runs in Chrome, Firefox and Safari, and hardware works in any of them through the server. The console loses three keys (Ctrl-W, Ctrl-N, Ctrl-T) in a normal Chrome tab on Windows and Linux. It matters for what gets tested by hand at each stage.
+7. **Which browser will you use?** The simulator runs in Chrome, Firefox and Safari, and hardware works in any of them through the server. The console loses three keys (Ctrl-W, Ctrl-N, Ctrl-T) in a normal Chrome tab on Windows and Linux. It matters for what gets tested by hand at each stage.
 
-9. **Which switch brands will the house use?** The app emulates zencontrol as the DALI-2 plates, with Basalte and Gira as examples of KNX plates through a gateway. If a different brand is planned, Stage 10 researches that one.
+8. **Which switch brands will the house use?** The app emulates zencontrol as the DALI-2 plates, with Basalte and Gira as examples of KNX plates through a gateway. If a different brand is planned, Stage 10 researches that one.
 
-10. **Will you run the bench from another room or site?** If remote use is rare, question 2 matters less.
+9. **Will you run the bench from another room or site?** If remote use is rare, question 1 matters less.
 
 ## Waiting on hardware
 

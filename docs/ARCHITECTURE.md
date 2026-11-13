@@ -202,7 +202,7 @@ After the router, every frame that was sent reaches `observe`, the shadow, the b
 
 python-dali decodes each frame, so the server knows by itself whether to send twice and whether to wait for a reply. The header values come from a JSON file that `config/security.ts` writes at build time, and a test checks the two match. The server refuses to start without it, and sends the headers on every response, worker scripts included, because a worker takes its CSP from its own response.
 
-Remote use: the server runs on the bench computer, and the other computer forwards 127.0.0.1:47821 to it over SSH. Both ends are loopback, so the Host and Origin checks pass unchanged. The server cannot tell a forwarded client from a local one. The app therefore asks once on connect whether the person can see the lights, shows the answer in the top bar, and the README says to keep a way to stop the server within reach of the bench (`docs/OPEN_QUESTIONS.md` item 2).
+Remote use: the server runs on the bench computer, and the other computer forwards 127.0.0.1:47821 to it over SSH. Both ends are loopback, so the Host and Origin checks pass unchanged. The server cannot tell a forwarded client from a local one. The app therefore asks once on connect whether the person can see the lights, shows the answer in the top bar, and the README says to keep a way to stop the server within reach of the bench (`docs/OPEN_QUESTIONS.md` item 1).
 
 ## 5. Persistence and migrations
 

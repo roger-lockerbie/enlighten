@@ -47,4 +47,4 @@ Chrome may refuse the hasseb over WebHID (`docs/research/hasseb.md` section 3). 
 - WebHID first: blocked on an unknown that only the hardware can settle.
 - A Node server sharing the TypeScript core: needs a native HID module, which the install-script block exists to stop.
 - A hand-written WebSocket implementation: no dependency, but our own parser in the most exposed part of the server.
-- A second governor in the server: the owner decided against it. A cheaper, partial rate limiter in the server is an open question (`docs/OPEN_QUESTIONS.md`).
+- A second governor in the server: the owner decided against it. A cheaper, partial rate limiter in the server was offered as well, and the owner declined it on 14 November 2026: the server stays a relay.

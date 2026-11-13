@@ -47,7 +47,7 @@ The governor, the rate guard and the session token are all in the page. Script r
 | Data sent out by injected script                       | I      | `connect-src 'self'`, `img-src 'self'`, `form-action 'none'`, `base-uri 'none'`, no third-party origins at all                | E-csp                 |
 | A compromised dependency shipping script in the bundle | T, E   | Two packages reach the bundle: Svelte's runtime and three.js core (no addons). Both pinned, with a release-age delay. See 3.7 | review at stage close |
 
-Accepted: if script does run in the page, the app has no second line that stops flashing. The server is a thin relay by the owner's decision (ADR 0003). A partial rate limit in the server is open question 1. The driver's MAX LEVEL still caps the arc level unless the script rewrites it, and does not cap the RGBWAF mix.
+Accepted: if script does run in the page, the app has no second line that stops flashing. The server is a thin relay by the owner's decision (ADR 0003). A partial rate limit in the server was offered, and the owner declined it on 14 November 2026. The driver's MAX LEVEL still caps the arc level unless the script rewrites it, and does not cap the RGBWAF mix.
 
 ### 3.2 Other sites and framing
 
@@ -98,7 +98,7 @@ The server runs at the bench and the operator connects through an SSH forward. S
 | Lights changing in a room the operator cannot see    | A1, A2 | The rate guard and ceiling apply as always. The app asks once on connect whether the operator can see the lights and shows the answer. A stop at the bench (Ctrl-C on the server) is documented | E-modes       |
 | The link dropping mid-sequence                       | D      | The server's 3 s stop turns the lights off                                                                                                                                                      | U-server      |
 
-Accepted: the server cannot tell a forwarded client from a local one. Open question 2 asks whether a remote session should need a second person's confirmation.
+Accepted: the server cannot tell a forwarded client from a local one. Open question 1 asks whether a remote session should need a second person's confirmation.
 
 ### 3.6 The bus and the device
 
