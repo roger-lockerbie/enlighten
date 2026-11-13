@@ -224,6 +224,34 @@ Chrome's Local Network Access asks the user before a public site reaches loopbac
 
 The app stops being a static site with no backend when hardware is in use. The client has to run a Python program, which he will read. Timing gets a second hop. In exchange the hardware path works in Firefox and Safari too. Stage 2's threat model should cover the bridge as a first-class variant, not an afterthought.
 
+### The bridge as the main hardware path, and remote use
+
+The owner raised this on 14 November 2026: make the process that talks to the hasseb a server with a network interface, so the hardware path does not depend on Chrome, and so the person using the app need not sit within a USB cable of the bench. This is the design above promoted from contingency to first choice. Nothing below has been tested. It is an assessment for Stage 2 to decide by ADR.
+
+In favour:
+
+- It removes the WebHID risk in section 3, and the Chromium-only limit.
+- It gives the ceiling a second enforcement point outside the page, which WebHID cannot.
+- The server can hold a dead-man timer: if the client stops talking, it sends the safe level. A browser tab cannot do that for itself.
+- The vendor's coming Ethernet unit speaks raw TCP, which a browser cannot open, so that unit would need a server in any case.
+
+Constraints that shape it:
+
+- A browser cannot open a raw TCP socket. The interface has to be WebSocket or HTTP.
+- An address typed into the app's UI does not fit a strict CSP. `connect-src` is fixed when the page is served, and the page cannot widen it. Allowing any host would give an injected script somewhere to send data, which is what `connect-src 'self'` exists to prevent. The address has to be known to whatever serves the page.
+- A page loaded from `http://<LAN address>` is not a secure context. Only loopback addresses and HTTPS are (https://www.w3.org/TR/secure-contexts/#is-origin-trustworthy). Without a secure context the app loses the Screen Wake Lock that S5 relies on, and cross-origin isolation with its finer timers. Not checked feature by feature.
+- Plain WebSocket on a LAN can be read and altered by anything on that network, token included. TLS fixes that but needs a certificate the browser trusts, which on a home LAN means a private CA or a warning to click through.
+- A server listening on the LAN is a lighting controller that anything on the network can try. That is a larger exposure than the brief accepted.
+
+Recommended shape:
+
+1. The server binds to 127.0.0.1 only, serves the app and the WebSocket on one fixed port, and keeps every control in the design above. Same origin, a secure context, and no change to the CSP.
+2. Remote use goes through an SSH port forward from the client's machine to the bench machine (`ssh -L 47821:127.0.0.1:47821 bench`), or a private overlay network that provides the same. Both ends are then loopback. SSH supplies the encryption and the authentication, and the server never listens on the LAN.
+3. The only setting is the port, given when the server starts. The app shows which bench it is connected to and needs no address field.
+4. The server enforces its own ceiling and its dead-man timer, since the person at the keyboard may not be able to see the lights, and someone else may be in the room with them.
+
+Open for Stage 2: whether WebHID stays as a second transport once the descriptor question is settled, or the server becomes the only hardware path. And which language the server is written in. Python has python-dali and hidapi already locked. Node could run the same `src/dali` and `src/safety` code as the app, so the second governor would be the first one's code and not a reimplementation, but it needs a native HID module, which the pnpm install-script block is there to stop.
+
 ## 7. Hardware-day checklist
 
 In this order. Steps 1 to 3 decide whether the WebHID transport is usable, and can be done the moment the device arrives, before the bench is wired.
