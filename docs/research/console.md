@@ -241,7 +241,7 @@ zsh has no `history -c`. It prints `history: bad option: -c` (observed). The fla
 - Trimming at the size limit drops the oldest events. Their numbers are not reused, and `!1` then fails.
 - Lines removed by `HIST_NO_STORE` or `HIST_IGNORE_SPACE` give their number to the next command.
 
-So numbers only grow within a session and are never reassigned. The console should keep them fixed for the life of the page and renumber from 1 when it loads stored history, as zsh does when it reads its file.
+Numbers only grow within a session and are never reassigned. The console should keep them fixed for the life of the page and renumber from 1 when it loads stored history, as zsh does when it reads its file.
 
 ### Two tabs
 
