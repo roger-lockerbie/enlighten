@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stage 0 (repo, tooling and security baseline) and Stage 1 (research) are merged. Stage 2 (design) is written on `stage-2-design` and waiting for the owner's review. Stage 3 (DALI core, simulator and safety governor) is next, on Opus, in plan mode.
+Stages 0 to 2 are merged. Stage 3 (DALI core, simulator and safety governor) is in progress on `stage-3-core`, on Opus. The approved plan is summarised under "Stage 3, in progress" below.
 
 ## Done in Stage 0
 
@@ -42,6 +42,15 @@ The spike is on `spike/stage-2-stack`, pushed and not merged. Its results are in
 Decisions the owner made during this stage: panic's safe level is off, the server uses the `websockets` library, the server stays a relay with no rate limit of its own, and the answers to the Stage 2 questions, recorded as decisions 10 to 19 in `docs/research/SUMMARY.md`.
 
 `docs/STAGES.md` now matches the design for Stages 3, 4, 5 and 12.
+
+## Stage 3, in progress
+
+Order of work: golden fixtures, `src/dali`, `src/sim`, `src/bus` clock and timing, `src/safety`, the scheduler, the property tests, then lint, coverage, Stryker and the stage close.
+
+- Done: `tools/golden/generate.py` and the fixtures in `tests/golden/` (frames, a decode sweep, sequences, hasseb reports, fake-gear streams). Run it with `pnpm golden`.
+- Done: `src/dali` (command table, codec, replies, curve, fades, sequences), byte-equal to python-dali.
+- Done: `src/sim` (the DA5-L profile with every unknown as a setting, the gear model, the simulated bus), with behaviour tests per section of `dali.md` and the differential check against python-dali's fake gear.
+- Next: `src/bus` clock and timing, then `src/safety`.
 
 ## Next
 
