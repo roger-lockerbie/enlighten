@@ -1,0 +1,49 @@
+{
+ "configure": {
+  "disable": [170,5,11,0,0,0,0,0,0,0],
+  "enable": [170,5,10,1,0,0,0,0,0,0]
+ },
+ "extract": [
+  {"pd":{"kind":"HassebDALIUSBNoDataAvailable"},"report":[170,0,0,0,0,0,0,0,0,0]},
+  {"pd":{"kind":"HassebDALIUSBNoAnswer"},"report":[170,7,3,1,0,0,0,0,0,0]},
+  {"pd":{"byte":127,"kind":"reply"},"report":[170,7,3,2,1,127,0,0,0,0]},
+  {"pd":{"byte":255,"kind":"reply"},"report":[170,7,3,2,1,255,0,0,0,0]},
+  {"pd":{"kind":"invalid"},"report":[170,7,3,2,8,127,0,0,0,0]},
+  {"pd":{"kind":"framing-error"},"report":[170,7,3,3,0,0,0,0,0,0]},
+  {"pd":{"kind":"HassebDALIUSBAnswerTooEarly"},"report":[170,7,3,4,0,0,0,0,0,0]},
+  {"pd":{"kind":"HassebDALIUSBSnifferByte"},"report":[170,7,3,5,1,18,0,0,0,0]},
+  {"pd":{"kind":"HassebDALIUSBSnifferByteError"},"report":[170,7,3,6,0,0,0,0,0,0]},
+  {"pd":{"kind":"invalid"},"report":[170,9,3,0,0,0,0,0,0,0]}
+ ],
+ "firmware": {
+  "reply": [170,2,7,2,4,0,0,0,0,0],
+  "request": [170,2,7,0,0,0,0,0,0,0],
+  "version": "2.4"
+ },
+ "generator": "tools/golden/generate.py",
+ "pythonDali": "0.16",
+ "send": [
+  {"frame":[0,220],"pd":"general.DAPC","report":[170,7,1,16,0,0,0,0,220,0]},
+  {"frame":[254,0],"pd":"general.DAPC","report":[170,7,2,16,0,0,0,254,0,0]},
+  {"frame":[255,0],"pd":"general.Off","report":[170,7,3,16,0,0,0,255,0,0]},
+  {"frame":[3,160],"pd":"general.QueryActualLevel","report":[170,7,4,16,1,0,0,3,160,0]},
+  {"frame":[1,144],"pd":"general.QueryStatus","report":[170,7,5,16,1,0,0,1,144,0]},
+  {"frame":[1,42],"pd":"general.SetMaxLevel","report":[170,7,6,16,0,0,10,1,42,0]},
+  {"frame":[3,32],"pd":"general.Reset","report":[170,7,7,16,0,0,10,3,32,0]},
+  {"frame":[163,220],"pd":"general.DTR0","report":[170,7,8,16,0,0,0,163,220,0]},
+  {"frame":[161,0],"pd":"general.Terminate","report":[170,7,9,16,0,0,0,161,0,0]},
+  {"frame":[165,0],"pd":"general.Initialise","report":[170,7,10,16,0,0,10,165,0,0]},
+  {"frame":[169,0],"pd":"general.Compare","report":[170,7,11,16,1,0,0,169,0,0]},
+  {"frame":[193,8],"pd":"general.EnableDeviceType","report":[170,7,12,16,0,0,0,193,8,0]},
+  {"frame":[3,226],"pd":"colour.Activate","report":[170,7,13,16,0,0,0,3,226,0]},
+  {"frame":[3,249],"pd":"colour.QueryColourTypeFeatures","report":[170,7,14,16,1,0,0,3,249,0]},
+  {"frame":[3,243],"pd":"colour.StoreGearFeaturesStatus","report":[170,7,15,16,0,0,10,3,243,0]},
+  {"frame":[1,238],"pd":"led.QueryDimmingCurve","report":[170,7,16,16,1,0,0,1,238,0]}
+ ],
+ "sequenceWrap": [
+  [170,7,255,16,0,0,0,1,0,0],
+  [170,7,1,16,0,0,0,1,0,0],
+  [170,7,2,16,0,0,0,1,0,0]
+ ],
+ "what": "hasseb 10-byte reports from the python-dali driver, with no device attached"
+}
