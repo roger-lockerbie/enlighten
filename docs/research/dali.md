@@ -130,7 +130,9 @@ Three data transfer registers are set by special commands, which every gear on t
 | DTR0 and DTR1       | DT8 16-bit values, low byte in DTR0: colour temperature, x and y (`gear/sequences.py:56-58`). Memory bank access.                                                                                                                                                                                                                                                                                                                                                                           |
 | DTR0, DTR1 and DTR2 | SET TEMPORARY RGB DIMLEVEL (red, green, blue) and SET TEMPORARY WAF DIMLEVEL (white, amber, free colour) (`gear/colour.py:166-177`). STORE COLOUR TEMPERATURE Tc LIMIT, with DTR2 choosing the limit.                                                                                                                                                                                                                                                                                       |
 
-STORE ACTUAL LEVEL IN DTR0 (`general.py:360`) writes DTR0 from the gear side. After it, the app cannot know DTR0 without asking. Some queries also change the DTRs: QUERY COLOUR VALUE puts the low byte of its answer in DTR0 (`gear/colour.py:327`), READ MEMORY LOCATION increments DTR0 (`general.py:953`), and QUERY LIGHT SOURCE TYPE can fill all three (`general.py:761`).
+STORE ACTUAL LEVEL IN DTR0 (`general.py:360`) writes DTR0 from the gear side. After it, the app cannot know DTR0 without asking. Some queries also change the DTRs: QUERY COLOUR VALUE puts the low byte of its answer in DTR0 (`gear/colour.py:327`), READ MEMORY LOCATION and both WRITE MEMORY LOCATION commands increment DTR0 (`general.py:953` and `1279-1311`), and QUERY LIGHT SOURCE TYPE can fill all three (`general.py:761`).
+
+python-dali's `uses_dtr` flags are not a safe source for the governor's rules. They mark commands that write a register and commands that read one alike, and `QueryColourValue` reads DTR0 without carrying the flag (`gear/colour.py:327-339`). Stage 3 builds its own table of which commands read, write and invalidate each register, from this section.
 
 For the governor (S2): track all three registers, and treat them as unknown after any command that lets gear write them. A command that reads an unknown register is refused until the register has been set again. This is stricter than tracking DTR0 alone, as the brief has it, and DT8 needs it.
 
@@ -170,11 +172,11 @@ Fade time 0 means no fade, unless a fast or extended fade time is set. Fade rate
 
 SET EXTENDED FADE TIME takes DTR0: bits 3 to 0 are the base and bits 6 to 4 the multiplier. A DTR0 above 0x4F sets both to 0 (PD `general.py:496-510`). The time is (base + 1) × multiplier, with multipliers of 100 ms, 1 s, 10 s and 1 minute for codes 1 to 4, and 0 for none (TC3 [5908382347]: base 1 to 16, range "0 ms to 16 min"). The longest is DTR0 = 0x4F: 16 minutes. QUERY EXTENDED FADE TIME returns the same byte (`general.py:890`).
 
-The usable values are 0.1 to 1.6 s in tenths, 1 to 16 s, 10 to 160 s in tens, and 1 to 16 minutes. There is nothing between 160 s and 3 minutes except 2 minutes, which matters when a sequence planner picks fades.
+The usable values are 0.1 to 1.6 s in tenths, 1 to 16 s, 10 to 160 s in tens, and 1 to 16 minutes. Above 160 s the steps are whole minutes, so nothing lies between 160 s and 3 minutes, which matters when a sequence planner picks fades.
 
 ### Which time applies
 
-When fade time is 0, the order is: the DT6 fast fade time if it is not 0, otherwise the extended fade time if its multiplier is not 0, otherwise as fast as possible (TC3 [6424389131]). The fast fade time is 25 ms per count, up to 27 (700 ms), and not below the gear's minimum (PD `gear/led.py:66-74` and `210-224`).
+When fade time is 0, the order is: the DT6 fast fade time if it is not 0, otherwise the extended fade time if its multiplier is not 0, otherwise as fast as possible (TC3 [6424389131]). The fast fade time is 25 ms per count, up to 27, and not below the gear's minimum. A count of 27 is 675 ms by that rule, and Beckhoff's table calls it 700 ms. The sources disagree by 25 ms (PD `gear/led.py:66-74` and `210-224`).
 
 | Uses                       | Commands                                                                                       |
 | -------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -246,8 +248,10 @@ Not confirmed: what SET SCENE stores as the colour. The expected rule is the tem
 | 160           | QUERY ACTUAL LEVEL                                                           | Level. 255 during start-up or on a lamp error                                                                                  | `general.py:796`               |
 | 161 to 164    | MAX, MIN, POWER ON and SYSTEM FAILURE LEVEL                                  | Level                                                                                                                          | `general.py:804-825`           |
 | 165           | QUERY FADE TIME/FADE RATE                                                    | High four bits time, low four bits rate                                                                                        | `general.py:828-854`           |
+| 166           | QUERY MANUFACTURER SPECIFIC MODE                                             | Yes when the operating mode is 0x80 to 0xFF                                                                                    | `general.py:857`               |
 | 167           | QUERY NEXT DEVICE TYPE                                                       | Next type, 254 at the end. Valid only straight after 153 or 167                                                                | `general.py:867`               |
 | 168           | QUERY EXTENDED FADE TIME                                                     | Bits 6 to 4 multiplier, 3 to 0 base                                                                                            | `general.py:890`               |
+| 170           | QUERY CONTROL GEAR FAILURE                                                   | Yes or silence                                                                                                                 | `general.py:900`               |
 | 176 to 191    | QUERY SCENE LEVEL n                                                          | Level or 255                                                                                                                   | `general.py:910`               |
 | 192, 193      | QUERY GROUPS 0-7, 8-15                                                       | One bit per group                                                                                                              | `general.py:919-932`           |
 | 194 to 196    | QUERY RANDOM ADDRESS H, M, L                                                 | Byte                                                                                                                           | `general.py:935-950`           |
@@ -304,7 +308,7 @@ Not confirmed: how the channel levels combine with the arc level. The usual desc
 
 ### Reading colour
 
-QUERY COLOUR VALUE (250) takes a selector in DTR0, answers the high byte, and leaves the low byte in DTR0, to be read with QUERY CONTENT DTR0. python-dali sends QUERY ACTUAL LEVEL first, as the standard's note asks, to refresh the report values (`gear/sequences.py:90-94`). One 16-bit read costs four queries and a DTR0, about a fifth of a second.
+QUERY COLOUR VALUE (250) takes a selector in DTR0, answers the high byte, and leaves the low byte in DTR0, to be read with QUERY CONTENT DTR0. python-dali sends QUERY ACTUAL LEVEL first, as the standard's note asks, to refresh the report values (`gear/sequences.py:90-94`). With the device type frame the hasseb driver adds, one 16-bit read is five frames: three queries and two commands, about a fifth of a second.
 
 | Selector           | Value                                                   |
 | ------------------ | ------------------------------------------------------- |
@@ -353,7 +357,8 @@ At about 31 ms a frame (section 14) a Tc change takes about 190 ms of bus time a
 Commands need ENABLE DEVICE TYPE 6 (PD `gear/led.py`).
 
 - SELECT DIMMING CURVE (227): DTR0 = 0 standard, 1 linear, sent twice (`gear/led.py:56-63`). QUERY DIMMING CURVE (238). RESET returns it to standard (TC3 [6424389131]).
-- Fast fade time: STORE DTR AS FAST FADE TIME (228), QUERY FAST FADE TIME (253) and QUERY MIN FAST FADE TIME (254), in units of 25 ms up to 700 ms.
+- Fast fade time: STORE DTR AS FAST FADE TIME (228), QUERY FAST FADE TIME (253) and QUERY MIN FAST FADE TIME (254), in units of 25 ms up to a count of 27.
+- REFERENCE SYSTEM POWER (224): see section 17, item 18. Blocked.
 - QUERY GEAR TYPE (237), QUERY POSSIBLE OPERATING MODES (239), QUERY FEATURES (240), QUERY FAILURE STATUS (241), QUERY OPERATING MODE (252), and yes or no queries for short circuit, open circuit, load change and thermal events.
 
 Under the linear curve, arc level 127 is about half output, where the standard curve gives 3%. A ceiling held as an arc level is only a ceiling on light if the curve is pinned. The governor blocks SELECT DIMMING CURVE, and the safety profile checks QUERY DIMMING CURVE on connect.
@@ -383,7 +388,7 @@ IDENTIFY DEVICE (37) starts a 10 second, manufacturer-defined identification, an
 From TC3 [12346803211], [12346805131] and [9837733003], with MC as the second source.
 
 - 1200 bits a second, Manchester coded. One bit is 0.833 ms and a half bit 0.417 ms.
-- A 16-bit forward frame is a start bit and 16 data bits: 14.2 ms, then a stop condition of at least 2.45 ms. Microchip counts 16.2 ms with the stop condition. A backward frame is 7.5 ms, or 9.95 ms with its stop condition.
+- A 16-bit forward frame is a start bit and 16 data bits: 14.2 ms, then a stop condition of at least 2.45 ms. Microchip gives 16.2 ms for the frame with its stop bits, as 39 half bits. A backward frame is 7.5 ms, or 9.95 ms with its stop condition.
 - A reply starts "no sooner than 5.5 ms ... and no later than 10.5 ms" after the forward frame (MC). The older rule was 7 to 22 half bits, 2.9 to 9.2 ms (TI).
 
 Settling time before a forward frame, by priority. Beckhoff counts the stop condition inside it.
@@ -398,13 +403,13 @@ Settling time before a forward frame, by priority. Beckhoff counts the stop cond
 
 Beckhoff's worked totals at priority 3:
 
-| Transaction               | Length  | A second |
-| ------------------------- | ------- | -------- |
-| 16-bit frame, no reply    | 31.2 ms | about 32 |
-| 16-bit frame with a reply | 46.7 ms | about 21 |
-| 16-bit frame sent twice   | 59.4 ms | about 16 |
+| Transaction               | Length  | A second                    |
+| ------------------------- | ------- | --------------------------- |
+| 16-bit frame, no reply    | 31.2 ms | about 32                    |
+| 16-bit frame with a reply | 46.7 ms | about 21                    |
+| 16-bit frame sent twice   | 59.4 ms | about 16 (16.8 by division) |
 
-The fastest the standard allows, from the minimum settling times: 27.7 ms for a command (36 a second), 40.7 ms for an answered query (24.6 a second) and 55.3 ms for a send-twice pair. A query with no answer still has to wait out the reply window, so a "no" is not faster than a "yes".
+The fastest the standard allows for ordinary frames comes from the priority 2 minimum, since priority 1 is reserved for the later frames of a pair or a transaction: 29.1 ms for a command (34 a second), 42.1 ms for an answered query (23.8 a second) and 56.7 ms for a send-twice pair (the first frame at priority 2 and the second at priority 1). Inside a transaction, later frames may use priority 1: 27.7 ms for a command and 40.7 ms for an answered query. A query with no answer still has to wait out the reply window, so a "no" is not faster than a "yes".
 
 The brief's "roughly 30 frames a second" is confirmed. Queries are slower than the brief implies: about 21 a second.
 
@@ -412,10 +417,10 @@ The brief's "roughly 30 frames a second" is confirmed. Queries are slower than t
 
 `CLAUDE.md` says the simulated bus is never faster than the real one. Recommended defaults, each a setting:
 
-- 31.2 ms for a command, 46.7 ms for a query and 59.4 ms for a send-twice pair (Beckhoff's mean figures). The floor that no setting may go below is 27.7, 40.7 and 55.3 ms.
+- 31.2 ms for a command, 46.7 ms for a query and 59.4 ms for a send-twice pair (Beckhoff's mean figures). The floor that no setting may go below is 29.1, 42.1 and 56.7 ms.
 - The real bench will be slower. python-dali waits 20 ms before every hasseb send (`driver/hasseb.py:176`), and each exchange crosses USB twice at an unknown polling interval (`hasseb.md`). Expect 20 to 25 frames a second until measured, and set the simulator's default to the measured figure after hardware day.
 - Simulated gear answers 5.5 to 9.2 ms after the frame, which satisfies both the old and new reply windows.
-- Gear ignores commands for 300 ms after RESET, and for 100 ms after RANDOMISE.
+- Gear may ignore commands for 300 ms after RESET and after SAVE PERSISTENT VARIABLES, and for up to 10 s after RESET MEMORY BANK (`general.py:369-406`). After RANDOMISE the new random address is ready within 100 ms (`general.py:1154`), so the sequence waits that long before searching.
 
 ## 15. python-dali's fake gear, for Stage 3's differential check
 
@@ -425,7 +430,7 @@ It models: DAPC with clamping and MASK, OFF, RECALL MAX and MIN, SET MAX and MIN
 
 It does not model: fades or time of any kind, UP, DOWN and the step commands, RESET, power-on and system failure, fade time and rate, status bits, the send-twice rule (a single SET MAX LEVEL takes effect, `tests/fakes.py:221`), the ENABLE DEVICE TYPE requirement for DT8 commands (it checks the command's class, `tests/fakes.py:392`), RGBWAF, xy, or the 15 minute INITIALISE timer.
 
-One bug to expect in a differential run: SET MIN LEVEL with DTR0 = 0 stores 0, not 1, because the second `if` at `tests/fakes.py:234` is not an `elif`. The simulator should follow the documented rule (not below PHYSICAL MINIMUM), and the differential check should list this as a known difference.
+One bug to expect in a differential run: SET MIN LEVEL with DTR0 = 0 stores 0, not 1, because the second `if` at `tests/fakes.py:234` is not an `elif`. The simulator should follow the documented rule (not below PHYSICAL MINIMUM), and the differential check should list this as a known difference. Three more to list: GO TO SCENE with a stored 0 gives MIN LEVEL in the fake, not off (`tests/fakes.py:295-296`). Its QUERY COLOUR VALUE overwrites DTR1 as well as DTR0 (`tests/fakes.py:399-435`). And its SET MIN LEVEL uses 1 as the floor and ignores its own `physical_minimum`.
 
 The differential check is worth having for clamping, scenes, groups, DTRs, addressing and commissioning. For everything in the second list, the oracle is this document and the bench.
 
@@ -473,8 +478,8 @@ The differential check is worth having for clamping, scenes, groups, DTRs, addre
 14. **DT8 colour at a fixed level.** On RGBWAF, going from one channel at 254 to five at 254 multiplies the light and the current at the same arc level. The 40% ceiling on arc level alone is not a ceiling on light for the RGBCCT tape. See the note below.
 15. **Automatic activation.** Any level command applies a pending temporary colour. The governor judges the pair.
 16. **DT8 scene, power-on and failure colours.** A scene with the level masked and every channel full raises output with no level change. Judged like item 14 when stored.
-17. **Normalised colour control.** May rescale channels upward. The governor refuses SET TEMPORARY RGBWAF CONTROL values other than channel control until the DA5-L's behaviour is measured.
-18. **START AUTO CALIBRATION.** The driver takes over its outputs for up to 15 minutes and ignores level commands. Blocked. Panic also sends TERMINATE.
+17. **Normalised colour control, and the other colour types.** Normalised control may rescale channels upward. The governor refuses SET TEMPORARY RGBWAF CONTROL values other than channel control until the DA5-L's behaviour is measured. SET TEMPORARY PRIMARY N DIMLEVEL and the xy commands (set and step) carry the same risk as item 14, by a route the mix limit does not see. They are refused unless the driver reports that colour type and the simulator has a model for it.
+18. **START AUTO CALIBRATION and REFERENCE SYSTEM POWER.** After START AUTO CALIBRATION (DT8) the driver takes over its outputs for up to 15 minutes and ignores level commands. REFERENCE SYSTEM POWER (DT6, command 224) starts a measurement during which the gear ignores everything but queries and TERMINATE, for up to 15 minutes (`gear/led.py:23-35`). Panic's level commands would be ignored in both. Both are blocked. Panic also sends TERMINATE.
 19. **IDENTIFY DEVICE.** Manufacturer-defined, probably a flash to full. Blocked.
 20. **SET OPERATING MODE.** A manufacturer mode may not follow part 102 at all. Blocked.
 21. **Memory bank writes.** May hold manufacturer limits. Blocked, except reads.
@@ -483,7 +488,7 @@ The differential check is worth having for clamping, scenes, groups, DTRs, addre
 24. **A fade already running.** A long fade toward a high target continues after the ceiling drops. Lowering the ceiling sends a level command, not only a new MAX LEVEL.
 25. **Panic.** OFF is immediate where a DAPC with a fade time is not. If the safe level is off, panic sends OFF. If it is a low level, panic sets fade time 0 and then sends the DAPC, or accepts the current fade. Stage 2 has to choose, and say which in the spec.
 26. **STORE ACTUAL LEVEL IN DTR0 and other gear-written registers.** The governor loses track of DTR0. It marks the register unknown and refuses DTR0-based commands until it is set again.
-27. **Group and broadcast addressing.** One frame reaches several drivers with different stored values. The governor judges it against every driver that would respond, including drivers it has not yet seen.
+27. **Group and broadcast addressing.** One frame reaches several drivers with different stored values. The governor judges it against every driver that would respond, including drivers it has not yet seen. Its map of addresses and groups goes stale after SET SHORT ADDRESS, PROGRAM SHORT ADDRESS, any commissioning run, ADD TO GROUP or REMOVE FROM GROUP. After any of these it marks the map unknown and rebuilds it by query before allowing indirect or group commands.
 28. **Gear the app has not configured.** A new or reset driver has MAX LEVEL 254 and may answer group 0 (LUNA). Until its safety profile is verified, the governor allows it nothing above the ceiling by direct command and no indirect level commands at all.
 29. **Other masters.** A second controller or a manufacturer's tool on the bus can do all of the above. Only the driver's stored values survive that, and RESET removes them. Out of the app's control. The threat model should say so.
 30. **Raw frames.** Decoded with the previous frame as context (for ENABLE DEVICE TYPE), then judged by the same rules. A frame that does not decode to a known command is refused.
@@ -499,6 +504,7 @@ The driver half of this ceiling does not exist for the mix. A stray frame from o
 ## 18. Corrections to the brief
 
 - QUERY DEVICE TYPE answers 255 for several device types and 254 for none.
+- `tools/first_light.py` sends both tapes to arc level 254, by broadcast and one channel at a time, with no MAX LEVEL set. It is a bench check that ignores the 40% ceiling. The built-in `first-light` script in Stage 6 goes through the governor and will not reach those levels unless the ceiling is raised. Its docstring also calls the file `dali_first_light.py`.
 - The ceiling needs a second part for RGBWAF (section 17).
 - The governor must track DTR1 and DTR2 as well as DTR0, and must treat all three as unknown after gear-written commands.
 - "POWER ON LEVEL (off by default)" in S1 relies on the DALI-2 meaning of 0. The older range started at 1.
