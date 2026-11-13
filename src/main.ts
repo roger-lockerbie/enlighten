@@ -1,10 +1,12 @@
 import { mount } from 'svelte';
 import './app.css';
-import App from './App.svelte';
+import Spike from './spike/Spike.svelte';
 
 const target = document.getElementById('app');
 if (!target) {
   throw new Error('Missing #app element');
 }
 
-mount(App, { target });
+const start = performance.now();
+mount(Spike, { target });
+(window as unknown as { __mountMs: number }).__mountMs = performance.now() - start;

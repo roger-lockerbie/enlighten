@@ -12,6 +12,12 @@ export type Mode = 'strict' | 'dev';
 /** The one Trusted Types policy Svelte 5 creates, for its compiled static templates. */
 export const TRUSTED_TYPES_POLICY = 'svelte-trusted-html';
 
+/** Spike: SPIKE_FRAGMENTS=tree drops Svelte's policy. The worker policy is always allowed. */
+export const SPIKE_TREE = process.env['SPIKE_FRAGMENTS'] === 'tree';
+export const TRUSTED_TYPES_POLICIES = SPIKE_TREE
+  ? ['enlighten-worker']
+  : [TRUSTED_TYPES_POLICY, 'enlighten-worker'];
+
 /** Features turned off for every origin. */
 const DISABLED_FEATURES = [
   'accelerometer',
@@ -68,7 +74,7 @@ export function cspDirectives(mode: Mode, { forMeta = false } = {}): string {
   }
   if (!dev) {
     directives['require-trusted-types-for'] = ["'script'"];
-    directives['trusted-types'] = [TRUSTED_TYPES_POLICY];
+    directives['trusted-types'] = TRUSTED_TYPES_POLICIES;
   }
   return Object.entries(directives)
     .map(([name, values]) => `${name} ${values.join(' ')}`)
