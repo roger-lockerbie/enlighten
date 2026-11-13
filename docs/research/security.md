@@ -103,7 +103,7 @@ This is the main thing the Stage 2 spike has to prove, since the visualiser, the
 
 ### three.js
 
-A search of three.js issues and pull requests for "trusted types" found nothing, and three.js is not installed yet, so its core is unchecked. Addon loaders such as KTX2Loader and DRACOLoader build workers from blob URLs, so the app must not use them. When three.js is added, search its build for `innerHTML`, `new Worker`, `importScripts` and `createObjectURL`. `rendering.md` covers the rest.
+A search of three.js issues and pull requests for "trusted types" found nothing. A scan of the r187 core build files for `rendering.md` found no HTML or script sinks, no workers and no `cssText`, so the core should need no policy. That is a reading of the source and not yet a browser test. Addon loaders such as KTX2Loader and DRACOLoader build workers from blob URLs, so the app must not use them. When three.js is added, search its build for `innerHTML`, `new Worker`, `importScripts` and `createObjectURL`. `rendering.md` covers the rest.
 
 ### Not confirmed
 

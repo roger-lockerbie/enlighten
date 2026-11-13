@@ -14,7 +14,7 @@ Keep the brief's superposition approach, with one change: split direct light fro
 
 It needs three.js core and no other runtime dependency. It needs no WebAssembly and nothing the strict CSP forbids.
 
-The split is needed because a tape 75 mm from a ceiling lights it very unevenly: the illuminance falls by a factor of 4.6 across 100 mm (section 2). A radiosity mesh fine enough to show that would need more than 100,000 patches. An analytic direct term has no such limit, and what is left for radiosity to carry is smooth.
+The split is needed because a tape 75 mm from a ceiling lights it unevenly: the illuminance falls by a factor of 4.6 across 100 mm (section 2). A radiosity mesh fine enough to show that would need more than 100,000 patches. An analytic direct term has no such limit, and what is left for radiosity to carry is smooth.
 
 ## 1. The four approaches
 
