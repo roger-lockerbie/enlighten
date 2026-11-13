@@ -1,0 +1,154 @@
+# Threat model
+
+What Enlighten protects, who or what could harm it, and what stops them. Threats are grouped by entry point and labelled in STRIDE terms: spoofing (S), tampering (T), repudiation (R), information disclosure (I), denial of service (D) and elevation of privilege (E). Each mitigation names the test that proves it, using the IDs in `docs/TEST_PLAN.md`.
+
+The client will read this and test it. Where a risk is accepted, it says so.
+
+## 1. Assets
+
+| Asset                                     | Why it matters                                                                                                                                                 |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1. People near the lights                | Flashing light can trigger seizures. This is the one asset where harm is physical. The rate guard and panic protect it.                                        |
+| A2. Comfort of the occupants              | Full output at night, or lights that cannot be turned off. The brightness ceiling and the safety profile serve this. It is a comfort matter, not a safety one. |
+| A3. Control of the bus                    | Whoever can send frames controls the lights and can rewrite the drivers' stored settings.                                                                      |
+| A4. The drivers' stored configuration     | MAX LEVEL, power-on and failure levels, scenes, addresses. Wrong values outlast the app.                                                                       |
+| A5. Stored designs                        | Looks, sequences, scripts and the hallway set-up, in IndexedDB and in workspace files. Low sensitivity, but someone's work.                                    |
+| A6. The developer's and client's machines | The build, the Python server and their dependencies run there.                                                                                                 |
+| A7. The repository and its releases       | The client builds from it. A poisoned release reaches A6.                                                                                                      |
+
+Nothing in the app is secret except the session token, which lives for one server run.
+
+## 2. Trust boundaries and entry points
+
+| Boundary                            | Entry points                                                                      |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| The web and the page                | Script or markup reaching the page; another site framing or probing the app       |
+| The user's files and the page       | Workspace files, script files, pasted text                                        |
+| Storage and the page                | IndexedDB, written by an earlier version or by another program on the same origin |
+| The page and the server             | HTTP requests and the WebSocket on 127.0.0.1:47821                                |
+| Other local programs and the server | Anything on the machine can connect to a loopback port and forge headers          |
+| The network and the server          | The LAN, and the SSH forward for remote use                                       |
+| The server and the USB device       | Reports from the hasseb                                                           |
+| The bus                             | Replies from gear, and any other master wired to the bus                          |
+| The supply chain                    | npm packages, Python packages, GitHub Actions, the release                        |
+
+## 3. Threats and mitigations
+
+### 3.1 Script injected into the page (XSS)
+
+The governor, the rate guard and the session token are all in the page. Script running in the page can send any frame the server accepts, as fast as the bus carries it, which is about 16 flashes a second. XSS here is a physical-safety problem (A1), and keeping script out is the control. Nothing behind it is as strong.
+
+| Threat                                                 | STRIDE | Mitigation                                                                                                     | Test                  |
+| ------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------- | --------------------- |
+| Injected inline or remote script                       | T, E   | CSP: `default-src 'none'`, `script-src 'self'`, no inline, no eval, on an origin that serves only our files    | E-csp, U-headers      |
+| A string reaching an HTML or script sink               | T, E   | Trusted Types enforced with one policy that makes worker URLs only. No HTML policy exists to borrow (ADR 0002) | E-csp                 |
+| A sink written by mistake                              | T      | Lint bans the sinks, `createPolicy` and `new Worker` outside one folder, and inline disable comments           | L-sinks, L-boundary   |
+| Text from a file, reply or device shown as markup      | T      | All such text is rendered as text nodes by Svelte. `{@html}` is banned and fails closed under Trusted Types    | L-sinks, E-import     |
+| Data sent out by injected script                       | I      | `connect-src 'self'`, `img-src 'self'`, `form-action 'none'`, `base-uri 'none'`, no third-party origins at all | E-csp                 |
+| A compromised dependency shipping script in the bundle | T, E   | One runtime dependency (three.js core, no addons), pinned, with a release-age delay. See 3.7                   | review at stage close |
+
+Accepted: if script does run in the page, the app has no second line that stops flashing. The server is a thin relay by the owner's decision (ADR 0003). A partial rate limit in the server is open question 1. The driver's MAX LEVEL still caps the arc level unless the script rewrites it, and does not cap the RGBWAF mix.
+
+### 3.2 Other sites and framing
+
+| Threat                                                | STRIDE | Mitigation                                                                                                                                                                                                                | Test                |
+| ----------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| Clickjacking the Panic, ceiling or unlock controls    | T      | `frame-ancestors 'none'` and `X-Frame-Options: DENY`, sent as headers by both servers                                                                                                                                     | U-headers, U-server |
+| A site reading the app's responses                    | I      | No CORS headers, `Cross-Origin-Resource-Policy: same-origin`, COOP and COEP                                                                                                                                               | U-headers           |
+| A site connecting to the WebSocket                    | S, E   | Exact Origin check on the upgrade, and the token                                                                                                                                                                          | E-server            |
+| DNS rebinding to 127.0.0.1                            | S      | Exact Host check on every request                                                                                                                                                                                         | E-server            |
+| The built files served by a host that sets no headers | T      | The meta tag keeps the script, style, connect and Trusted Types rules (the spike confirmed enforcement). Framing protection is lost, so the only supported ways to run the app are `vite preview` and the hardware server | E-csp               |
+
+### 3.3 Imported files and stored data
+
+| Threat                                               | STRIDE | Mitigation                                                                                                  | Test                  |
+| ---------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- | --------------------- |
+| A huge or deeply nested file hanging the page        | D      | Size checked before parsing, then depth, lengths and counts                                                 | P-validator, E-import |
+| Prototype pollution                                  | T, E   | Forbidden keys rejected, results built as fresh objects, no deep merge                                      | P-validator           |
+| A script that does more than drive lights            | E      | Scripts are parsed to a step list and never executed as code. The grammar has no expressions                | P-parser, U-script    |
+| A script or file that raises the ceiling or unlocks  | E      | Only a person at the UI or the console prompt can do either                                                 | U-safety, E-ceiling   |
+| A sequence or effect built to flash                  | T (A1) | It reaches the lights only through the governor. The rate guard judges predicted output whatever the source | P-rate                |
+| An import that acts at once                          | T      | Import sends no frame, connects nothing and runs nothing                                                    | E-import              |
+| Stored data altered by another program on the origin | T      | Every load validates as if the data were a file. Nothing secret is stored                                   | U-store               |
+
+### 3.4 The hardware server
+
+| Threat                                   | STRIDE | Mitigation                                                                                                                                                                | Test               |
+| ---------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Reached from the LAN                     | S, E   | Binds to 127.0.0.1 only. No option changes that                                                                                                                           | U-server           |
+| Another local program driving the lights | S, E   | The 256-bit session token, sent as the first message and compared in constant time. Headers alone are not trusted                                                         | U-server           |
+| The token leaking                        | I      | Printed once to the terminal, carried in the URL fragment (never sent to a server), removed from the address bar and history, held in memory only, never stored or logged | E-server           |
+| A second client taking over              | S      | One client at a time                                                                                                                                                      | U-server           |
+| Malformed or oversized messages          | D, T   | Fixed-size messages. Any other length or type closes the connection                                                                                                       | U-server           |
+| The page sending arbitrary USB reports   | T, E   | The server builds every report itself from a 16-bit frame it has decoded. Unknown frames are refused                                                                      | U-server           |
+| The client vanishing with lights on      | D (A2) | Broadcast OFF on close, on 3 s of silence and on exit                                                                                                                     | U-server, E-server |
+| Path traversal in static file serving    | I      | Files are served from a list built at start from `dist/`, not from the request path                                                                                       | U-server           |
+| Another program taking the port first    | S      | Strict port: the server fails to start if it is taken. A program that held the port earlier would share the origin's stored data (see 3.3), and never has the token       | U-server           |
+| A flood of frames                        | D      | One frame at a time and a queue of 8. The bus itself carries about 30 frames a second                                                                                     | U-server           |
+
+Accepted: a local program running as the same user can read the terminal, the browser's memory or the USB device directly. The token is not a defence against that, and nothing in a user-level program could be.
+
+### 3.5 Remote use
+
+The server runs at the bench and the operator connects through an SSH forward. SSH supplies the encryption and the login.
+
+| Threat                                               | STRIDE | Mitigation                                                                                                                                                                                      | Test          |
+| ---------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| The forwarded port exposed on the operator's network | S      | The README's command names 127.0.0.1 on the local side                                                                                                                                          | README review |
+| Lights changing in a room the operator cannot see    | A1, A2 | The rate guard and ceiling apply as always. The app asks once on connect whether the operator can see the lights and shows the answer. A stop at the bench (Ctrl-C on the server) is documented | E-modes       |
+| The link dropping mid-sequence                       | D      | The server's 3 s stop turns the lights off                                                                                                                                                      | U-server      |
+
+Accepted: the server cannot tell a forwarded client from a local one. Open question 2 asks whether a remote session should need a second person's confirmation.
+
+### 3.6 The bus and the device
+
+| Threat                                               | STRIDE | Mitigation                                                                                                             | Test                  |
+| ---------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| A reply attributed to the wrong command              | T      | Sequence numbers matched. Unmatched reports dropped                                                                    | U-server, G-hasseb    |
+| "The hasseb said nothing" read as "the gear said no" | T      | Separate results all the way to the governor. A safety profile read-back that faults is not a pass                     | U-safety              |
+| A configuration write that did not take              | T (A4) | Every safety profile write is read back. No automatic retry of configuration frames                                    | U-safety              |
+| RESET or another tool undoing the profile            | T (A4) | RESET is blocked without an unlock and followed by the profile. The profile is checked on every connect                | U-safety, E-modes     |
+| Another master on the bus                            | T, E   | None. Accepted. Only the drivers' stored values apply, and RESET removes those                                         | none                  |
+| Bus power or USB lost                                | D (A2) | SYSTEM FAILURE LEVEL 255 and POWER ON LEVEL 0 are already in the drivers                                               | H                     |
+| The simulator disagreeing with the hardware          | T      | The governor's prediction is corrected from replies. Until a fade is read back, the rate guard assumes an instant step | U-engine, P-rate-fade |
+
+Accepted, and explained in ADR 0004: the RGBWAF mix limit exists only in the app, a colour temperature change may raise output until the mixing law is measured, and an unlocked RESET shows full output for about half a second.
+
+### 3.7 Supply chain
+
+| Threat                                       | STRIDE | Mitigation                                                                                                                                                          | Test                  |
+| -------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| A malicious new release of an npm dependency | T, E   | Exact versions, frozen lockfile, a seven-day release age, `trustPolicy: no-downgrade`, install scripts blocked                                                      | CI                    |
+| A malicious Python package                   | T, E   | Three direct dependencies for the server, every file pinned by hash, installed with `--require-hashes` into a virtual environment                                   | CI                    |
+| A dependency added without thought           | T      | Each one is justified in `docs/DEPENDENCIES.md` with its licence. Runtime dependencies need the owner's approval                                                    | review at stage close |
+| A compromised GitHub Action                  | T, E   | Actions pinned to commit SHAs, read-only token, no `pull_request_target`, untrusted values passed through the environment. A workflow lockfile is added in Stage 11 | Stage 11 review       |
+| A tampered release                           | T      | Stage 11: a CI-built artefact with its SHA-256 and a build provenance attestation, and README steps to verify it or build from source                               | Stage 11              |
+| LGPL code copied into the app                | legal  | python-dali is a run-time dependency of the server and a dev-time oracle. None of its code is in this repo                                                          | review at stage close |
+
+### 3.8 The repository and privacy
+
+No secrets, tokens, machine paths, or personal or household details are committed. The security review at each stage close checks the diff for them. Secret scanning and push protection are turned on when the repository goes public.
+
+### 3.9 WebHID, if it is ever built
+
+Not built now (ADR 0003). If it is: script on the origin could reopen a granted device with no prompt, so the grant is revoked with `forget()` on every disconnect, the filter names the hasseb's IDs only, the dev origin gets `hid=()`, and no server sits between the page and the device to turn lights off when the page goes away. That last point means the WebHID path would need its own answer for the client vanishing. The WebHID specification's security section is read before any of it is built.
+
+## 4. The header set, checked against MDN
+
+Stage 1 asked for one check of the Stage 0 headers against MDN. Read on 14 November 2026.
+
+- The Permissions-Policy header in `config/security.ts` turns off 14 features and allows three for the app's own origin. MDN's page lists 34 more directives. Stage 5 adds the ones that name a capability the app never uses and that Chromium accepts without a console warning: `ambient-light-sensor`, `autoplay`, `encrypted-media`, `gamepad`, `idle-detection`, `local-fonts`, `picture-in-picture`, `publickey-credentials-create`, `identity-credentials-get`, `otp-credentials`, `storage-access`, `web-share`, `window-management`, `compute-pressure`, `captured-surface-control`, `speaker-selection`, `browsing-topics` and `attribution-reporting`. Each is tried against the e2e test, because an unknown name logs a warning that the test treats as a failure.
+- `local-network-access` and `loopback-network` are left at their defaults. The app talks to its own loopback origin, and the effect of denying them there was not checked.
+- `cross-origin-isolated` is left at its default, which the app relies on.
+- `Origin-Agent-Cluster` is a hint the browser may ignore, and MDN does not describe it as a security feature. It is not added.
+- `hid=(self)` stays only while the WebHID slot is open. If ADR 0003's option is dropped, it becomes `hid=()`.
+
+## 5. Residual risks, in one place
+
+1. Script in the page defeats the governor and the rate guard. Keeping script out is the control.
+2. The server relays any valid frame from an authenticated client, at any rate the bus allows.
+3. Another master on the bus is outside the app's control.
+4. The RGBWAF mix has no limit in the driver.
+5. A program running as the same user on the machine can bypass everything.
+6. Two parts of the safety profile rest on behaviour not yet confirmed on hardware.
+7. A remote operator cannot see the room.
