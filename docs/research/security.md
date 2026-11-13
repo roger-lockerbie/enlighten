@@ -56,7 +56,7 @@ trusted-types svelte-trusted-html enlighten-worker
 ```
 
 - Add `blob:` to `img-src` only if three.js textures prove to need it. Add `data:` nowhere.
-- `connect-src 'self'` could become `'none'` if the app never fetches its own files at run time. The spike can tell.
+- `connect-src 'self'` could become `'none'` if the app never fetches its own files at run time and no same-origin server is used for hardware (`hasseb.md` section 6 needs `'self'` for its WebSocket). The spike can tell.
 - Leave out `upgrade-insecure-requests`. The app is served over http on 127.0.0.1 and makes no cross-origin requests.
 - The dev server needs its relaxations: Vite injects styles, and its client builds a `SharedWorker` from a blob URL (local check of vite 8.3.6 `dist/client/client.mjs`, and https://github.com/vitejs/vite/issues/22457). Production output does not contain the client.
 
@@ -160,9 +160,13 @@ Mitigations, all already in the brief or `CLAUDE.md`: a fixed, strict port that 
 
 ### What an injected script could do
 
-By the shape of the API, script running on the granted origin can call `getDevices()`, `open()` and `sendReport()` with no prompt, because only `requestDevice()` needs a gesture. This is inference, not a quoted statement. It is why the rules stack up as they do: a strict CSP and Trusted Types so no script gets in, `forget()` on disconnect so a grant does not outlive its use, and MAX LEVEL written into the drivers so that even a hostile frame cannot exceed the ceiling without first raising it.
+By the shape of the API, script running on the granted origin can call `getDevices()`, `open()` and `sendReport()` with no prompt, because only `requestDevice()` needs a gesture. This is inference, not a quoted statement. It is why the rules stack up as they do: a strict CSP and Trusted Types so no script gets in, `forget()` on disconnect so a grant does not outlive its use, and MAX LEVEL written into the drivers as a backstop.
 
-That last point has a limit worth stating in the threat model: an injected script can send SET MAX LEVEL too. The driver-side ceiling protects against bugs and stale commands, not against an attacker who can send arbitrary frames. The governor is in the same page as the attacker in that case. Keeping script out is the control.
+That backstop has limits worth stating in the threat model. An injected script can send SET MAX LEVEL too. It also need not: switching a driver to the linear dimming curve, or turning on every RGBWAF channel, raises the light at the same arc level without touching MAX LEVEL (`dali.md` section 17, items 13 and 14). The driver-side ceiling protects against bugs and stale commands, not against an attacker who can send arbitrary frames. The governor is in the same page as the attacker in that case. Keeping script out is the control.
+
+### The dev origin
+
+The dev server runs on its own port with a relaxed CSP, so it is a separate origin with weaker protection. A device grant made there would sit behind that weaker policy. Stage 4 should disable Connect in dev builds, or make hardware work only from the preview and production origin.
 
 ### Not confirmed
 

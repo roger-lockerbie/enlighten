@@ -39,8 +39,8 @@ Sources are cited where a fact was read. Several perception figures came only fr
 - **Large swings** (a ratio above 2, about 26 arc levels) need a fade of at least 0.7 s each way, the shortest standard fade.
 - **Small ripples** under 4 levels are not swings, but are still held under 3 reversals a second, so they cannot sit in the 8 to 20 Hz band where the eye is most sensitive to flicker.
 - **Saturated red:** any transition to or from a saturated red counts as a swing whatever the change in luminance. The built-in effects do not use one.
-- **Duration:** a repeating pattern above half a swing a second times out after a few seconds. Slower ones can run on.
-- **Where it is enforced:** at the governor, on frames about to be sent, from every source: effects, sequences, the console, scripts, raw frames, switches and panic's own recovery. It works on predicted light output, so it needs the simulator's model of each driver's fade.
+- **Duration:** a repeating pattern above half a swing a second times out after 5 seconds, the ITU's figure. Slower ones can run on.
+- **Where it is enforced:** at the governor, on frames about to be sent, from every source: effects, sequences, the console, scripts, raw frames, switches and panic's own recovery. It works on predicted light output, so it needs the simulator's model of each driver's fade. Until a driver's fade time has been read back, and until its fade behaviour is confirmed on the bench (`dali.md` section 16), the guard treats every level command as an instant step. That is the worst case. Panic is never refused or delayed by the guard: a move to the safe level always goes out.
 
 The guard has to reason about the driver's fade, not only about the frames. A DAPC with a long fade is one slow change. Two DAPCs a second apart with fade time 0 are a swing. Changing the fade time is therefore a guarded act as well.
 
