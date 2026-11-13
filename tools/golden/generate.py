@@ -117,7 +117,7 @@ def instances(cls):
             for p in (0, 1, 127, 254, 255):
                 yield cls(p), None, p
             return
-        yield cls(), None, 0
+        yield cls(), None, None
         return
     hasparam = getattr(cls, '_hasparam', False)
     for a in all_addresses():
