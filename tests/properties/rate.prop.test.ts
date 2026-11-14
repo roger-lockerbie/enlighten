@@ -123,7 +123,37 @@ describe('P-rate on hardware the governor has never seen', () => {
           const { rec } = await play(b, [...extra, ...stream]);
           expect(rateProblems(rec, 1)).toEqual([]);
         }),
-        { numRuns: RUNS },
+        {
+          numRuns: RUNS,
+          // Found by the Stage 4 run at 1,000: A0 off by a group scene, then a broadcast scene that
+          // lifts A1 at once while A2 fades out. The room rises and falls from one moment, and the
+          // guard had merged the two legs into one.
+          examples: [
+            [
+              {
+                units: [1, 0, 2],
+                light: ['C1', 'C1', 'C1'],
+                groups: [0, 8, 0],
+                scene: [161, 0, 0],
+                min: [85, 85, 85],
+                phys: [1, 1, 1],
+                level: [0, 136, 137],
+                fade: [0, 0, 1],
+              },
+              [
+                {
+                  kind: 'tx',
+                  dt: 2100,
+                  source: 'ui',
+                  cmds: [
+                    { id: 'DTR0', value: 0 },
+                    { id: 'SET_FADE_TIME', address: { kind: 'short', n: 0 } },
+                  ],
+                },
+              ],
+            ],
+          ],
+        },
       );
     },
     timeout(RUNS),

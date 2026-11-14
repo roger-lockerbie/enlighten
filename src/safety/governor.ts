@@ -20,7 +20,7 @@ import { Da5l, RESET_DEAF_MS } from '../sim/gear.ts';
 import { da5l, type Da5lProfile } from '../sim/profile.ts';
 import { maxArcForMix, measure, mixSum, WORST_FACTS, type ColourFacts } from './mix.ts';
 import { PHANTOM, predictEvents, ROOM, scopeOf } from './rate/trace.ts';
-import { mergeTimes, type TraceEvents } from './rate/legs.ts';
+import { uniteTimes, type TraceEvents } from './rate/legs.ts';
 import { swingLimit, violations, withExtra, type Violation } from './rate/guard.ts';
 import {
   LIGHT_CHANGING,
@@ -1057,9 +1057,9 @@ export class Governor {
     for (const [scope, a] of faded) {
       const b = steps.get(scope) ?? a;
       out.set(scope, {
-        legs: mergeTimes([a.legs, b.legs]),
-        hard: mergeTimes([a.hard, b.hard]),
-        reversals: mergeTimes([a.reversals, b.reversals]),
+        legs: uniteTimes(a.legs, b.legs),
+        hard: uniteTimes(a.hard, b.hard),
+        reversals: uniteTimes(a.reversals, b.reversals),
       });
     }
     return out;

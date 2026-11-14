@@ -200,3 +200,36 @@ export function mergeTimes(lists: readonly (readonly number[])[], tol = 5): numb
   }
   return out;
 }
+
+/**
+ * Unite the events of two predictions of the same trace (faded, and with every change made at once,
+ * ADR 0011). An event within `tol` ms of one in the other prediction is the same event, so each group
+ * keeps as many events as the prediction that has the most of them. Unlike `mergeTimes`, events of one
+ * prediction are never merged with each other: they were already merged where they came from, and two
+ * left that close together are distinct legs (an instant rise with a fade starting down at the same
+ * moment, found by the Stage 4 property run).
+ */
+export function uniteTimes(a: readonly number[], b: readonly number[], tol = 5): number[] {
+  const all = [...a.map((t) => ({ t, i: 0 })), ...b.map((t) => ({ t, i: 1 }))].sort(
+    (x, y) => x.t - y.t || x.i - y.i,
+  );
+  const out: number[] = [];
+  let start = -Infinity;
+  const counts = [0, 0];
+  let kept = 0;
+  for (const e of all) {
+    if (e.t - start > tol) {
+      start = e.t;
+      counts[0] = 0;
+      counts[1] = 0;
+      kept = 0;
+    }
+    const c = (counts[e.i] ?? 0) + 1;
+    counts[e.i] = c;
+    if (c > kept) {
+      out.push(e.t);
+      kept = c;
+    }
+  }
+  return out;
+}
