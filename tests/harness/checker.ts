@@ -139,7 +139,11 @@ function dirEventsOf(pts: readonly { t: number; v: number }[]): DirEvents {
         e.hard.push({ t: r.start, dir: r.dir });
     }
     const p = rs[i - 1];
-    if (p !== undefined && p.dir !== r.dir && (!isLeg(p) || !isLeg(r))) e.reversals.push(r.start);
+    // A run under 0.5% is not a change for the reversal rule (ADR 0011).
+    const change = (x: Run) => ratioOf(x.from, x.to) >= 1.005;
+    if (p !== undefined && p.dir !== r.dir && (!isLeg(p) || !isLeg(r)) && change(p) && change(r)) {
+      e.reversals.push(r.start);
+    }
   });
   return e;
 }

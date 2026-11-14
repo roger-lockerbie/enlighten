@@ -29,7 +29,7 @@ ADR 0004 and ADR 0005 describe the governor and the rate guard in words, and `do
 - **A leg** is a run whose ends differ by a ratio of 1.10 or more, or that goes between off and on. A change into or out of saturated red (red above 10%, every other channel at or under 10%) is also a leg.
 - **One address, several traces.** Legs on an address's traces that go the same way and start within 100 ms of the first of them are one leg. One movement shows on several channels, each peaking at a slightly different time. Opposite directions are never merged, so a fast flicker still counts every leg.
 - **A hard step** is a leg with an instant step (within 50 ms) whose ratio is above 2, or a leg whose ends differ by more than 2 and that took less than 0.7 s. For these ratios, output below 2% counts as 2%. A fade from off begins with the gear's jump to its minimum, about 1% on the DA5-L, and that jump alone is not a hard step.
-- **A small reversal** is a change of direction where either run is smaller than a leg.
+- **A small reversal** is a change of direction where either run is smaller than a leg. A run whose ends differ by less than 0.5% is not a change for this rule: a smooth peak where two fades cross wobbles below that, depending on where the trace is sampled.
 
 ### The limits
 
@@ -45,7 +45,7 @@ With swing limit N (1 by default, 2 or 3 with the `rate` unlock, never more):
 ### How the guard decides
 
 - It predicts the output with and without the transaction, from 6 s before now to the end of every fade (up to 17 minutes), and refuses only breaches that involve an event the prediction without it does not have. That includes an older run that the transaction extends into a leg.
-- It decides with a margin, so differences in where a trace is sampled cannot let the real output pass a limit: ratios 1% lower, windows 40 ms longer, the 0.7 s fade test 5 ms longer, same-direction legs merged within 60 ms rather than 100 ms, and fades sampled every 10 ms.
+- It decides with a margin, so differences in where a trace is sampled cannot let the real output pass a limit: ratios 1% lower, the reversal threshold 0.4% rather than 0.5%, windows 40 ms longer, the 0.7 s fade test 5 ms longer, same-direction legs merged within 60 ms rather than 100 ms, and fades sampled every 10 ms.
 - On Hardware, until `FADE_BEHAVIOUR_CONFIRMED` is set by a reviewed commit, it counts the events of both an instant-step prediction and a faded one. Instant steps are the worst case for hard steps. A level and a colour fading together can make one channel rise and fall, and only the faded prediction shows that.
 - On Hardware, a light change counts as a leg and a hard step for the address and the room when the shadow cannot predict it: the address is not modelled, its level or colour is not known, the command recalls memory a scan does not read (GO TO SCENE, GO TO LAST ACTIVE LEVEL, which also leave the level unknown), or it is a broadcast or group frame while the inventory is stale or unaddressed gear is present. One transaction counts once per address, and that event merges with any event the trace has inside the transaction's span. `judge` and `observe` use one function for these, so what is judged is what is remembered. Colour becomes known when this session has set a whole temporary colour and activated it.
 - On Hardware, nothing is known about what the lights did before a connect, so light changes other than OFF wait 2 s after it.

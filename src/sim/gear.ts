@@ -433,10 +433,12 @@ export class Da5l {
       extendedFade?: number | undefined;
       linear?: boolean | undefined;
       level?: number | undefined;
+      scenes?: readonly number[] | undefined;
     },
     at: number,
   ): void {
     const s = this.s;
+    if (f.scenes !== undefined) s.scenes = [...f.scenes];
     if (f.minLevel !== undefined) s.minLevel = f.minLevel;
     if (f.maxLevel !== undefined) s.maxLevel = f.maxLevel;
     if (f.groups !== undefined) s.groups = f.groups;

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { broadcast, group, short, type Address } from '../dali/address.ts';
 import type { Command } from '../dali/codec.ts';
-import { framesForAll, tcCommands } from '../dali/sequences.ts';
+import { framesForAll, rgbwafCommands, tcCommands } from '../dali/sequences.ts';
 import { asSubmit, makeBench, type Bench } from '../../tests/harness/bench.ts';
 import { Rig } from '../sim/rig.ts';
 import { da5l } from '../sim/profile.ts';
@@ -90,7 +90,11 @@ describe('H1: unknown colour is remembered, not only judged', () => {
     expect((await b.run(tx([...tcCommands(short(0), 300), c('DAPC', short(0), 150)]))).kind).toBe(
       'done',
     );
+    await b.clock.advance(2100);
+    // The room is trusted only once every driver's colour is known.
+    expect((await b.run(tx(rgbwafCommands(short(1), [0, 0, 0, 254, 0, 0])))).kind).toBe('done');
     expect(b.governor.addressInfo(0)?.colourKnown).toBe(true);
+    expect(b.governor.addressInfo(1)?.colourKnown).toBe(true);
     await b.clock.advance(2100);
     const r1 = await b.run(tx([c('DAPC', short(0), 160)]));
     expect(r1.kind === 'refused' ? r1.reason : r1.kind).toBe('done');

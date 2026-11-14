@@ -122,6 +122,9 @@ export async function scanAddress(
     await ask(submit, [q('DT6_QUERY_DIMMING_CURVE', a)], source, 'dimming curve');
   if (types.includes(8))
     await ask(submit, [q('DT8_QUERY_COLOUR_TYPE_FEATURES', a)], source, 'colour type features');
+  for (let k = 0; k < 16; k++) {
+    await ask(submit, [{ id: 'QUERY_SCENE_LEVEL', address: a, value: k }], source, 'scene level');
+  }
   // The level last, so the hardware shadow starts where the gear is.
   await ask(submit, [q('QUERY_ACTUAL_LEVEL', a)], source, 'actual level');
   governor.modelAddress(n);

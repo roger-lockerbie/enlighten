@@ -101,6 +101,10 @@ describe('what the governor learns from replies', () => {
     tell(g, c('QUERY_ACTUAL_LEVEL', A), { kind: 'reply', byte: 150 });
     expect(reasonOf(g.modelAddress(0))).toMatch(/curve/);
     tell(g, c('DT6_QUERY_DIMMING_CURVE', A), { kind: 'reply', byte: 0 });
+    expect(reasonOf(g.modelAddress(0))).toMatch(/scene/);
+    for (let k = 0; k < 16; k++)
+      tell(g, c('QUERY_SCENE_LEVEL', A, k), { kind: 'reply', byte: k === 2 ? 120 : 255 });
+    tell(g, c('DT6_QUERY_DIMMING_CURVE', A), { kind: 'reply', byte: 0 });
     expect(g.modelAddress(0).ok).toBe(true);
     const snap = g.shadow.byShortAddress(0)?.gear.snapshot();
     expect([snap?.minLevel, snap?.maxLevel, snap?.groups, snap?.fadeTime, snap?.fadeRate]).toEqual([
@@ -147,6 +151,8 @@ describe('what the governor learns from replies', () => {
         tell(h, c(id, B), { kind: 'reply', byte: v });
       }
       tell(h, c('DT8_QUERY_COLOUR_TYPE_FEATURES', B), { kind: 'reply', byte });
+      for (let k = 0; k < 16; k++)
+        tell(h, c('QUERY_SCENE_LEVEL', B, k), { kind: 'reply', byte: 255 });
       expect(h.modelAddress(1).ok).toBe(true);
       expect(h.shadow.byShortAddress(1)?.gear.profile.lightType).toBe(light);
     }

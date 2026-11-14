@@ -48,7 +48,21 @@ import {
 export const FADE_BEHAVIOUR_CONFIRMED = false;
 
 /** Recalls of gear memory that a scan does not read: on hardware their result is unknown. */
-const RECALLS_MEMORY: ReadonlySet<string> = new Set(['GO_TO_SCENE', 'GO_TO_LAST_ACTIVE_LEVEL']);
+const RECALLS_MEMORY: ReadonlySet<string> = new Set(['GO_TO_LAST_ACTIVE_LEVEL']);
+
+/** Level commands after which the gear's last active level is what the shadow says. */
+const SETS_LAST_ACTIVE: ReadonlySet<string> = new Set([
+  'DAPC',
+  'UP',
+  'DOWN',
+  'STEP_UP',
+  'STEP_DOWN',
+  'RECALL_MAX_LEVEL',
+  'RECALL_MIN_LEVEL',
+  'ON_AND_STEP_UP',
+  'CONTINUOUS_UP',
+  'CONTINUOUS_DOWN',
+]);
 
 /** The DA5-L light type that matches what gear reported, for a hardware shadow unit. */
 function profileFor(types: readonly number[], colour: ColourFacts | undefined): Da5lProfile {
@@ -109,6 +123,10 @@ export interface AddressInfo {
   extendedFade?: number | undefined;
   /** The last level read back. */
   level?: number | undefined;
+  /** The 16 scene levels read back. */
+  scenes?: (number | undefined)[] | undefined;
+  /** On hardware: whether the shadow's last active level matches the gear's (a level command this session set it). */
+  lastActiveKnown?: boolean | undefined;
 }
 
 export interface GovernorOptions {
@@ -825,14 +843,23 @@ export class Governor {
     }
     for (const n of this.members(a)) {
       const i = this.info.get(n);
+      // Scene levels are read in the scan. Scene colours are not.
+      const sceneColour = cmd.id === 'GO_TO_SCENE' && (i?.deviceTypes ?? []).includes(8);
       const unknown =
         i === undefined ||
         !i.modelled ||
         !levelKnown(n) ||
         !i.colourKnown ||
-        RECALLS_MEMORY.has(cmd.id);
+        RECALLS_MEMORY.has(cmd.id) ||
+        sceneColour;
       if (unknown) out.push({ t: at, scope: `a${String(n)}` });
     }
+    // The room is a sum: while any gear is not fully known, the shadow's room total can be wrong, so
+    // every light change also counts as a leg and a hard step for the room.
+    const unsure = [...this.info.entries()].some(
+      ([n, i]) => i.present === true && (!i.modelled || !levelKnown(n) || !i.colourKnown),
+    );
+    if (unsure) out.push({ t: at, scope: ROOM });
     return out;
   }
 
@@ -861,6 +888,9 @@ export class Governor {
       return no('The dimming curve was not read back.');
     if (types.includes(8) && i.colour === undefined)
       return no('The colour features were not read back.');
+    const scenes = i.scenes ?? [];
+    if (scenes.length < 16 || scenes.some((x) => x === undefined))
+      return no('The scene levels were not read back.');
     let unit = this.shadow.byShortAddress(n);
     if (unit === undefined) {
       unit = {
@@ -879,11 +909,13 @@ export class Governor {
         extendedFade: i.extendedFade,
         linear: i.linearCurve ?? false,
         level: i.level,
+        scenes: scenes.map((x) => x ?? 255),
       },
       this.lastAt,
     );
     i.modelled = true;
     i.levelKnown = true;
+    i.lastActiveKnown = false;
     if (!types.includes(8)) i.colourKnown = true;
     return OK;
   }
@@ -1064,6 +1096,10 @@ export class Governor {
         i.levelKnown = this.target === 'simulator';
         i.colourKnown = this.target === 'simulator';
       }
+      const setsLast =
+        SETS_LAST_ACTIVE.has(cmd.id) &&
+        !(cmd.id === 'DAPC' && (cmd.value === 0 || cmd.value === 255));
+      if (setsLast && !fault) i.lastActiveKnown = true;
       switch (cmd.id) {
         case 'RESET':
           i.verified = false;
@@ -1098,11 +1134,11 @@ export class Governor {
           if (!fault && cmd.value !== 255) i.levelKnown = true;
           break;
         case 'GO_TO_SCENE':
+          if (this.target === 'hardware' && (i.deviceTypes ?? []).includes(8))
+            i.colourKnown = false;
+          break;
         case 'GO_TO_LAST_ACTIVE_LEVEL':
-          if (this.target === 'hardware') {
-            i.levelKnown = false;
-            if (cmd.id === 'GO_TO_SCENE') i.colourKnown = false;
-          }
+          if (this.target === 'hardware' && i.lastActiveKnown !== true) i.levelKnown = false;
           break;
         case 'OFF':
           if (!fault) i.levelKnown = true;
@@ -1185,6 +1221,12 @@ export class Governor {
       case 'QUERY_EXTENDED_FADE_TIME':
         if (v !== undefined) i.extendedFade = v;
         break;
+      case 'QUERY_SCENE_LEVEL': {
+        const scenes = i.scenes ?? Array<number | undefined>(16).fill(undefined);
+        scenes[cmd.value ?? 0] = v;
+        i.scenes = scenes;
+        break;
+      }
       case 'QUERY_GROUPS_0_7':
         if (v !== undefined) i.groups = ((i.groups ?? 0) & 0xff00) | v;
         break;
@@ -1215,12 +1257,13 @@ export class Governor {
     this.observe(sent, result);
   }
 
-  /** True when an address's light, by the ceiling's measure, is above the ceiling at a time. */
+  /** True when an address's light, by the ceiling's measure, is or will be above the ceiling from a time on. */
   overCeiling(n: number, at: number): boolean {
     const u = this.shadow.byShortAddress(n);
     if (u === undefined) return false;
-    const m = measure(u.gear.arcFractionAt(at), this.factsFor(u), this.colourOf(u, at));
-    return m > arcToFraction(this.ceiling) + 1e-9;
+    // From now to the end of every fade: a level and a mix fading together can peak later.
+    const to = Math.max(at, u.gear.settlesAt()) + 1;
+    return this.maxMeasure(this.shadow, u.id, at, to) > arcToFraction(this.ceiling) + 1e-9;
   }
 
   /** Gear facts as a person would see them: for the UI and the tests. */

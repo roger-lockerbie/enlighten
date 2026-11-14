@@ -40,9 +40,20 @@ export async function lowerCeiling(
     });
     const unit = governor.shadow.byShortAddress(n);
     if (unit !== undefined) {
-      if (unit.gear.finalLevel() > arc || unit.gear.levelAt(now()) > arc) {
+      const over = governor.overCeiling(n, now());
+      if (over || unit.gear.finalLevel() > arc || unit.gear.levelAt(now()) > arc) {
+        // The governor lowers this DAPC further if the colour mix needs it.
         await submit({
-          frames: framesForAll([{ id: 'DAPC', address: short(n), value: arc }]),
+          // Fading to off already: OFF ends the fade now. Otherwise the level it is heading for, at most the ceiling.
+          frames: framesForAll([
+            unit.gear.finalLevel() < 1
+              ? { id: 'OFF', address: short(n) }
+              : {
+                  id: 'DAPC',
+                  address: short(n),
+                  value: Math.min(arc, Math.round(unit.gear.finalLevel())),
+                },
+          ]),
           source: 'profile',
           label: 'hold under the new ceiling',
         });

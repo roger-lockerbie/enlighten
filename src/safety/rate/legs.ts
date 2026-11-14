@@ -99,6 +99,17 @@ export function runs(samples: readonly Sample[]): Run[] {
   return out;
 }
 
+/**
+ * For the reversal rule, a run whose ends differ by less than 0.5% is not a change: a smooth peak
+ * where two fades cross wobbles below that, by however the trace happens to be sampled. The guard
+ * uses 0.4%, so it never counts fewer reversals than the rule.
+ */
+export const REVERSAL_MIN_RATIO = 1.005;
+
+function isChange(r: Run): boolean {
+  return ratio(r.from, r.to) >= 1 + (REVERSAL_MIN_RATIO - 1) * 0.8;
+}
+
 export function isLeg(r: Run): boolean {
   return ratio(r.from, r.to) >= LEG_RATIO * RATIO_MARGIN;
 }
@@ -140,8 +151,15 @@ export function directedEvents(samples: readonly Sample[]): DirectedEvents {
     if (isLeg(r)) legs.push({ t: r.start, dir: r.dir });
     if (isHard(r)) hard.push({ t: r.start, dir: r.dir });
     const prev = rs[i - 1];
-    if (prev !== undefined && prev.dir !== r.dir && (!isLeg(prev) || !isLeg(r)))
+    if (
+      prev !== undefined &&
+      prev.dir !== r.dir &&
+      (!isLeg(prev) || !isLeg(r)) &&
+      isChange(prev) &&
+      isChange(r)
+    ) {
       reversals.push(r.start);
+    }
   });
   return { legs, hard, reversals };
 }
