@@ -87,7 +87,9 @@ describe('P-sched', () => {
             const cur = log[i];
             if (prev === undefined || cur === undefined) continue;
             const floor =
-              cur.tx === prev.tx ? FLOOR_TIMING.settleLaterMs : FLOOR_TIMING.settleFirstMs;
+              cur.tx === prev.tx && !cur.frame.sendTwice
+                ? FLOOR_TIMING.settleLaterMs
+                : FLOOR_TIMING.settleFirstMs;
             expect(cur.wireStart - prev.end).toBeGreaterThanOrEqual(floor - 1e-9);
             expect(cur.deliverAt - cur.wireStart).toBeCloseTo(FORWARD_FRAME_MS, 9);
           }

@@ -141,6 +141,8 @@ export interface GearState {
   busUp: boolean;
   /** The level when the mains last went, for POWER ON LEVEL 255. */
   levelBeforePowerDown: number;
+  /** Until this time after power-up, QUERY ACTUAL LEVEL answers 255 (dali.md section 10). */
+  startingUntil: number;
   /** Output plans, oldest first. The last one with `since <= t` applies at t. */
   plans: OutputPlan[];
 }
@@ -161,8 +163,6 @@ const BANK0: readonly number[] = [
   0x1a, 0x00, 0x00, 0x06, 0x97, 0x56, 0x17, 0x41, 0x13, 0x24, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x08, 0x08, 0x01, 0x00, 0x00,
 ];
-
-const zeroColour = (tc: number): Colour => ({ tc, ch: [254, 254, 254, 254, 254, 254] });
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -214,7 +214,11 @@ export class Da5l {
     const set = this.profile.settings;
     const at = opts.at ?? 0;
     const lim = set.tcLimits;
-    const colour = zeroColour(lim.physicalWarmest);
+    const ch = set.factoryChannelLevel;
+    const colour: Colour = {
+      tc: set.factoryTc === 'warmest' ? lim.physicalWarmest : lim.physicalCoolest,
+      ch: [ch, ch, ch, ch, ch, ch],
+    };
     let groups = 0;
     for (const g of opts.groups ?? []) groups |= 1 << g;
     return {
@@ -222,9 +226,9 @@ export class Da5l {
       groups,
       dtr: [0, 0, 0],
       minLevel: set.physicalMinimum,
-      maxLevel: 254,
-      powerOnLevel: 254,
-      systemFailureLevel: 254,
+      maxLevel: set.factoryMaxLevel,
+      powerOnLevel: set.factoryPowerOnLevel,
+      systemFailureLevel: set.factorySystemFailureLevel,
       fadeTime: 0,
       fadeRate: 7,
       extendedFade: 0,
@@ -233,7 +237,7 @@ export class Da5l {
       sceneColours: Array<StoredColour | null>(16).fill(null),
       powerOnColour: null,
       systemFailureColour: null,
-      lastActiveLevel: 254,
+      lastActiveLevel: set.factoryMaxLevel,
       linearCurve: false,
       limitError: false,
       powerFailure: false,
@@ -262,6 +266,7 @@ export class Da5l {
       powered: true,
       busUp: true,
       levelBeforePowerDown: 0,
+      startingUntil: -Infinity,
       plans: [
         {
           since: at,
@@ -434,6 +439,7 @@ export class Da5l {
   }
 
   private pushPlan(at: number, change: Partial<Omit<OutputPlan, 'since'>>): void {
+    this.s.startingUntil = -Infinity;
     const cur = this.planAt(at);
     const plan: OutputPlan = { ...cur, ...change, since: at };
     // A new plan replaces any that were waiting for a later time (power-on, system failure).
@@ -456,6 +462,7 @@ export class Da5l {
 
   /** The level QUERY ACTUAL LEVEL reports. */
   private actualLevel(at: number): number {
+    if (at < this.s.startingUntil) return MASK;
     const p = this.planAt(at);
     if (at < p.identifyUntil) return Math.round(this.levelAt(at));
     const target = p.level.offAtEnd ? 0 : p.level.to;
@@ -471,6 +478,7 @@ export class Da5l {
   fadeMs(): number {
     const s = this.s;
     if (s.fadeTime > 0) return fadeTimeMs(s.fadeTime);
+    if (s.fastFade >= 27) return this.profile.settings.fastFade27Ms;
     if (s.fastFade > 0) return fastFadeMs(s.fastFade);
     return extendedFadeMs(s.extendedFade);
   }
@@ -491,7 +499,13 @@ export class Da5l {
   }
 
   /** Fade the level to a target over a duration, switching on from off as the profile says. */
-  private goTo(target: number, ms: number, at: number, offAtEnd = false): void {
+  private goTo(
+    target: number,
+    ms: number,
+    at: number,
+    offAtEnd = false,
+    keepIdentify = false,
+  ): void {
     let from = this.startFrom(at);
     if (from <= 0 && target > 0) {
       from = this.profile.settings.fadeFromOff === 'jump-to-min' ? this.s.minLevel : 0;
@@ -500,12 +514,12 @@ export class Da5l {
     const end = ms > 0 ? at + ms : at;
     this.pushPlan(at, {
       level: { from: ms > 0 ? from : target, to: target, start: at, end, offAtEnd },
-      identifyUntil: -Infinity,
+      ...(keepIdentify ? {} : { identifyUntil: -Infinity }),
     });
   }
 
-  private setNow(level: number, at: number): void {
-    this.goTo(level, 0, at);
+  private setNow(level: number, at: number, keepIdentify = false): void {
+    this.goTo(level, 0, at, false, keepIdentify);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -622,6 +636,7 @@ export class Da5l {
       identifyUntil: -Infinity,
     });
     const when = at + POWER_UP_MS;
+    s.startingUntil = when;
     const lvl = this.powerOnTarget();
     const cur = this.colourAt(at);
     const pc = s.powerOnColour;
@@ -655,6 +670,15 @@ export class Da5l {
       s.systemFailureLevel === 0 ? 0 : clamp(s.systemFailureLevel, s.minLevel, s.maxLevel);
     const from = levelAt(this.planAt(when).level, when);
     const ms = this.profile.settings.systemFailure === 'fade' ? this.fadeMs() : 0;
+    // The stored failure colour applies with the level, in the same way (dali.md sections 4 and 9).
+    const cur = this.colourAt(when);
+    const fc = s.systemFailureColour;
+    const to: Colour =
+      fc === null || !this.model.dt8
+        ? cur
+        : fc.type === 'tc'
+          ? { tc: fc.tc === MASK16 ? cur.tc : this.tcClamped(fc.tc), ch: cur.ch }
+          : { tc: cur.tc, ch: cur.ch.map((v, i) => (fc.ch[i] === MASK ? v : (fc.ch[i] ?? v))) };
     this.schedulePlan(when, {
       level: {
         from: ms > 0 ? from : target,
@@ -663,6 +687,7 @@ export class Da5l {
         end: when + ms,
         offAtEnd: false,
       },
+      colour: { from: cur, to, start: when, end: when + ms },
       identifyUntil: -Infinity,
     });
   }
@@ -761,8 +786,7 @@ export class Da5l {
     const p = this.planAt(at);
     if (
       at < p.identifyUntil &&
-      !['INITIALISE', 'RECALL_MIN_LEVEL', 'RECALL_MAX_LEVEL', 'IDENTIFY_DEVICE'].includes(sp.id) &&
-      sp.kind !== 'special'
+      !['INITIALISE', 'RECALL_MIN_LEVEL', 'RECALL_MAX_LEVEL', 'IDENTIFY_DEVICE'].includes(sp.id)
     ) {
       this.pushPlan(at, {
         identifyUntil: -Infinity,
@@ -863,12 +887,12 @@ export class Da5l {
         return undefined;
       case 'RECALL_MAX_LEVEL':
         levelCommand(() => {
-          this.setNow(s.maxLevel, at);
+          this.setNow(s.maxLevel, at, true);
         }, 0);
         return undefined;
       case 'RECALL_MIN_LEVEL':
         levelCommand(() => {
-          this.setNow(s.minLevel, at);
+          this.setNow(s.minLevel, at, true);
         }, 0);
         return undefined;
       case 'ENABLE_DAPC_SEQUENCE':
@@ -1175,22 +1199,31 @@ export class Da5l {
     s.groups = 0;
     s.scenes = Array<number>(16).fill(MASK);
     s.sceneColours = Array<StoredColour | null>(16).fill(null);
-    s.powerOnColour = null;
-    s.systemFailureColour = null;
+    if (set.resetStoredColours === 'mask') {
+      s.powerOnColour = null;
+      s.systemFailureColour = null;
+    }
     s.randomAddress = 0xffffff;
     s.searchAddress = 0xffffff;
     s.limitError = false;
     s.powerFailure = false;
     s.linearCurve = false;
     s.autoActivation = true;
-    s.lastActiveLevel = 254;
-    s.tcLimits = { ...set.tcLimits };
+    // Back to the physical limits, which RESET does not change (dali.md section 5).
+    s.tcLimits = {
+      ...s.tcLimits,
+      coolest: s.tcLimits.physicalCoolest,
+      warmest: s.tcLimits.physicalWarmest,
+    };
     s.tcOutOfRange = false;
     this.clearTemp();
     s.temp.control = MASK;
     s.dapcSequenceUntil = -Infinity;
     s.deafUntil = at + RESET_DEAF_MS;
+    const lastActive = s.lastActiveLevel;
+    this.pushPlan(at, { linear: false });
     this.goTo(254, set.reset === 'fade' ? oldFade : 0, at);
+    if (set.lastActiveAfterReset === 'unchanged') s.lastActiveLevel = lastActive;
   }
 
   private inResetState(at: number): boolean {
@@ -1312,7 +1345,7 @@ export class Da5l {
         return undefined;
       }
       case 'DT8_STORE_TC_LIMIT': {
-        if (!m.tc) return undefined;
+        if (!m.tc || !this.profile.settings.tcLimitsStorable) return undefined;
         const v = d[0] | (d[1] << 8);
         if (v === MASK16 || v === 0) return undefined;
         const l = s.tcLimits;
@@ -1383,6 +1416,13 @@ export class Da5l {
     if (sel === 207) return s.temp.control;
     if (sel === 208) return typeByte(s.temp.type);
     if (sel === 240) return typeByte(s.activeType);
+    // 16-bit values the DA5-L is not modelled to have (xy, primary N): MASK in both bytes.
+    const unmodelled16 =
+      (sel >= 3 && sel <= 8) ||
+      (sel >= 64 && sel <= 81) ||
+      (sel >= 195 && sel <= 200) ||
+      (sel >= 227 && sel <= 232);
+    if (unmodelled16) return sixteen(MASK16);
     if (sel === 0 || sel === 1 || sel === 192 || sel === 193 || sel === 224 || sel === 225)
       return sixteen(MASK16);
     return MASK;

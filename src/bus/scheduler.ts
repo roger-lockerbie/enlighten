@@ -187,7 +187,7 @@ export class Scheduler {
       if (f === undefined || at === undefined) break;
       // Never closer than the settle time to the end of the frame before, whatever the transport took.
       const go = await this.waitUntil(
-        Math.max(at.wireStart, this.freeAt + settleMs(k === 0, this.timing)),
+        Math.max(at.wireStart, this.freeAt + settleMs(f, k === 0, this.timing)),
       );
       if (!go || this.panicking !== undefined) {
         q.resolve({ kind: 'dropped', reason: 'Panic dropped this transaction.', results });
@@ -199,7 +199,7 @@ export class Scheduler {
       const result = await sending;
       this.inFlight = undefined;
       const end = Math.max(this.clock.now(), wireStart + wireMs(f, this.timing));
-      const settle = settleMs(k === 0, this.timing);
+      const settle = settleMs(f, k === 0, this.timing);
       this.freeAt = end;
       this.record(wireStart - settle, end);
       const deliverAt = wireStart + FORWARD_FRAME_MS;
@@ -244,7 +244,7 @@ export class Scheduler {
     for (let k = 0; k < PANIC_FRAMES.length; k++) {
       const f = PANIC_FRAMES[k];
       if (f === undefined) continue;
-      const settle = settleMs(k === 0, this.timing);
+      const settle = settleMs(f, k === 0, this.timing);
       const wireStartAt = Math.max(this.clock.now(), this.freeAt + settle);
       if (wireStartAt > this.clock.now()) await this.waitFor(wireStartAt);
       const wireStart = this.clock.now();

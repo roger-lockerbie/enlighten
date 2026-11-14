@@ -64,3 +64,10 @@ describe('VirtualClock', () => {
     expect(seen).toEqual([10, 20]);
   });
 });
+
+describe('send-twice inside a transaction (dali.md section 14)', () => {
+  it('is never under 56.7 ms, even after another frame of the same transaction', () => {
+    expect(frameMs(twice, false, FLOOR_TIMING)).toBeGreaterThanOrEqual(56.7);
+    expect(frameMs(twice, false, DEFAULT_TIMING)).toBeCloseTo(59.4, 6);
+  });
+});

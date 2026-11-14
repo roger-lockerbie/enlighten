@@ -59,6 +59,16 @@ export interface Da5lSettings {
   minFastFadeCount: number;
   rgbwafControl: number;
   c2Terminals: readonly Terminal[];
+  c5Whites: 'w-warm-a-cool' | 'w-cool-a-warm';
+  factoryPowerOnLevel: number;
+  factorySystemFailureLevel: number;
+  factoryMaxLevel: number;
+  factoryChannelLevel: number;
+  factoryTc: 'warmest' | 'coolest';
+  tcLimitsStorable: boolean;
+  resetStoredColours: 'mask' | 'kept';
+  lastActiveAfterReset: 'max' | 'unchanged';
+  fastFade27Ms: 675 | 700;
 }
 
 export interface SettingInfo {
@@ -102,6 +112,16 @@ export const DEFAULT_SETTINGS: Readonly<Da5lSettings> = {
   minFastFadeCount: 0,
   rgbwafControl: 0,
   c2Terminals: ['WW', 'CW', 'WW', 'CW', 'unused'],
+  c5Whites: 'w-warm-a-cool',
+  factoryPowerOnLevel: 254,
+  factorySystemFailureLevel: 254,
+  factoryMaxLevel: 254,
+  factoryChannelLevel: 254,
+  factoryTc: 'warmest',
+  tcLimitsStorable: true,
+  resetStoredColours: 'mask',
+  lastActiveAfterReset: 'max',
+  fastFade27Ms: 675,
 };
 
 /** Where each default comes from and how hardware day settles it. The Devices page lists these. */
@@ -128,7 +148,7 @@ export const SETTINGS_INFO: readonly SettingInfo[] = [
     default: 'yes, at once',
     alternative: 'no',
     source: 'dali.md section 16',
-    hardwareDay: 'Level 100, SET MIN LEVEL 150, query',
+    hardwareDay: 'Level 100, SET MIN LEVEL 150, query (part 5)',
   },
   {
     key: 'fadeFromOff',
@@ -256,7 +276,7 @@ export const SETTINGS_INFO: readonly SettingInfo[] = [
     default: 'no change',
     alternative: 'goes to the last active level',
     source: 'dali.md section 16',
-    hardwareDay: 'Send it at a known level and query',
+    hardwareDay: 'Send it at a known level and query (part 5)',
   },
   {
     key: 'upDownRounding',
@@ -345,6 +365,87 @@ export const SETTINGS_INFO: readonly SettingInfo[] = [
     alternative: 'any order',
     source: 'da5-l.md light types; DA4-L manual',
     hardwareDay: 'Light each white in turn and look (part 6)',
+  },
+  {
+    key: 'c5Whites',
+    unknown: 'Channel to colour mapping in C5',
+    default: 'W warm, A cool (the label order R, G, B, WW, CW)',
+    alternative: 'W cool, A warm',
+    source: 'da5-l.md colour accounts and unknowns',
+    hardwareDay: 'QUERY ASSIGNED COLOUR, then light each white in turn (part 2 and part 6)',
+  },
+  {
+    key: 'factoryPowerOnLevel',
+    unknown: 'POWER ON LEVEL as shipped',
+    default: '254 (the DALI reset value)',
+    alternative: 'any level, or 255 (MASK) as Lunatone ships',
+    source: 'dali.md section 4 (LUNA); da5-l.md profile defaults',
+    hardwareDay: 'QUERY POWER ON LEVEL before any write (part 2)',
+  },
+  {
+    key: 'factorySystemFailureLevel',
+    unknown: 'SYSTEM FAILURE LEVEL as shipped',
+    default: '254 (the DALI reset value)',
+    alternative: 'any level, or 255',
+    source: 'dali.md section 4; da5-l.md profile defaults',
+    hardwareDay: 'QUERY SYSTEM FAILURE LEVEL before any write (part 2)',
+  },
+  {
+    key: 'factoryMaxLevel',
+    unknown: 'MAX LEVEL as shipped',
+    default: '254 (the DALI reset value)',
+    alternative: 'any level',
+    source: 'dali.md section 3; da5-l.md profile defaults',
+    hardwareDay: 'QUERY MAX LEVEL before any write (part 2)',
+  },
+  {
+    key: 'factoryChannelLevel',
+    unknown: 'RGBWAF channel levels as shipped',
+    default: '254 on every channel (the worst case for the ceiling)',
+    alternative: 'any level',
+    source: 'No source. Chosen as the worst case.',
+    hardwareDay: 'QUERY COLOUR VALUE selectors 233 to 238 before any write (part 2)',
+  },
+  {
+    key: 'factoryTc',
+    unknown: 'Colour temperature as shipped',
+    default: 'the physical warmest limit',
+    alternative: 'the physical coolest limit',
+    source: 'No source.',
+    hardwareDay: 'QUERY COLOUR VALUE selector 226 before any write (part 2)',
+  },
+  {
+    key: 'tcLimitsStorable',
+    unknown: 'Whether Tc limits can be stored',
+    default: 'yes',
+    alternative: 'no',
+    source: 'da5-l.md unknowns',
+    hardwareDay:
+      'STORE COLOUR TEMPERATURE Tc LIMIT, then read back (part 2, with the expert unlock)',
+  },
+  {
+    key: 'resetStoredColours',
+    unknown: 'DT8 power-on and failure colours after RESET',
+    default: 'MASK',
+    alternative: 'kept',
+    source: 'dali.md section 5 ("manufacturer dependent")',
+    hardwareDay: 'Read them back after the covered-tape RESET (part 5)',
+  },
+  {
+    key: 'lastActiveAfterReset',
+    unknown: 'The DALI-2 last active level after RESET',
+    default: 'MAX LEVEL (254)',
+    alternative: 'unchanged',
+    source: 'dali.md section 5',
+    hardwareDay: 'GO TO LAST ACTIVE LEVEL after the covered-tape RESET and OFF (part 5)',
+  },
+  {
+    key: 'fastFade27Ms',
+    unknown: 'Fast fade time at a count of 27',
+    default: '675 ms (25 ms a count)',
+    alternative: "700 ms (Beckhoff's table)",
+    source: 'dali.md section 7 (PD gear/led.py against TC3)',
+    hardwareDay: 'Only if QUERY MIN FAST FADE TIME shows support: time a fade at count 27 (part 5)',
   },
 ];
 
@@ -452,7 +553,7 @@ export function colourModel(p: Da5lProfile): ColourModel {
         channels: 5,
         assigned: [1, 2, 3, 4, 5, 255],
         terminals: ['R', 'G', 'B', 'WW', 'CW'],
-        sources: [0, 1, 2, 3, 4],
+        sources: p.settings.c5Whites === 'w-warm-a-cool' ? [0, 1, 2, 3, 4] : [0, 1, 2, 4, 3],
       };
   }
 }

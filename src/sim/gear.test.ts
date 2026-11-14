@@ -1027,3 +1027,153 @@ describe('the simulator', () => {
     expect(r.sim.unit('Z')).toBeUndefined();
   });
 });
+
+describe('review follow-ups (dali.md sections 5, 4, 9, 10, 11 and 13)', () => {
+  it('RESET puts the curve back to standard for the output, not only for the query', () => {
+    const r = rig({ physicalMinimum: 1 }, 'C1');
+    r.set('DT6_SELECT_DIMMING_CURVE', 0, 1);
+    r.to('RESET', 0);
+    r.wait(400);
+    r.to('DAPC', 0, 127);
+    expect(gearOf(r).outputAt(r.t).terminals[0]).toBeCloseTo(arcToFraction(127), 9);
+    expect(r.ask('DT6_QUERY_DIMMING_CURVE', 0)).toBe(0);
+  });
+  it('RESET restores MIN, fades, automatic activation, the temporary colour and the Tc limits', () => {
+    const r = rig();
+    r.set('SET_MAX_LEVEL', 0, 200);
+    r.set('SET_MIN_LEVEL', 0, 150);
+    r.set('SET_EXTENDED_FADE_TIME', 0, 0x23);
+    r.dtr(0, 0);
+    r.to('DT8_STORE_GEAR_FEATURES', 0);
+    // Store a new physical warmest, then a narrower warmest limit.
+    r.dtr(0, 400 & 0xff);
+    r.dtr(1, 400 >> 8);
+    r.dtr(2, 3);
+    r.to('DT8_STORE_TC_LIMIT', 0);
+    r.dtr(0, 300 & 0xff);
+    r.dtr(1, 300 >> 8);
+    r.dtr(2, 1);
+    r.to('DT8_STORE_TC_LIMIT', 0);
+    r.run(tcCommands(short(0), 250, false));
+    r.to('RESET', 0);
+    r.wait(400);
+    expect(r.ask('QUERY_MIN_LEVEL', 0)).toBe(85);
+    expect(r.ask('QUERY_EXTENDED_FADE_TIME', 0)).toBe(0);
+    expect(r.ask('DT8_QUERY_GEAR_FEATURES', 0)).toBe(1);
+    const snap = gearOf(r).snapshot();
+    expect(snap.temp.type).toBe('none');
+    expect(snap.tcLimits).toEqual({
+      coolest: 154,
+      warmest: 400,
+      physicalCoolest: 154,
+      physicalWarmest: 400,
+    });
+  });
+  it('a bus failure applies the stored failure colour', () => {
+    const r = rig();
+    r.run(tcCommands(short(0), 154));
+    r.run(tcCommands(short(0), 370, false));
+    r.set('SET_SYSTEM_FAILURE_LEVEL', 0, 150);
+    r.run(tcCommands(short(0), 200));
+    const g = gearOf(r);
+    g.busDown(r.t);
+    expect(Math.round(g.colourAt(r.t + 1000).tc)).toBe(370);
+  });
+  it('QUERY ACTUAL LEVEL answers 255 during start-up', () => {
+    const r = rig();
+    const g = gearOf(r);
+    g.powerDown(r.t);
+    g.powerUp(r.t);
+    expect(r.ask('QUERY_ACTUAL_LEVEL', 0)).toBe(255);
+    r.wait(700);
+    expect(r.ask('QUERY_ACTUAL_LEVEL', 0)).not.toBe(255);
+  });
+  it('16-bit colour values the gear does not have read back as 0xFFFF', () => {
+    const r = rig();
+    for (const sel of [3, 64, 195, 227]) {
+      r.dtr(0, sel);
+      expect(r.ask('DT8_QUERY_COLOUR_VALUE', 0)).toBe(255);
+      expect(r.ask('QUERY_CONTENT_DTR0', 0)).toBe(255);
+    }
+  });
+  it('IDENTIFY keeps flashing through RECALL MIN and MAX, and DTR0 stops it', () => {
+    const r = rig();
+    r.to('DAPC', 0, 150);
+    r.to('IDENTIFY_DEVICE', 0);
+    r.to('RECALL_MAX_LEVEL', 0);
+    const g = gearOf(r);
+    const seen = new Set<number>();
+    for (let t = r.t; t < r.t + 1500; t += 100) seen.add(g.levelAt(t));
+    expect(seen.size).toBe(2);
+    r.dtr(0, 1);
+    expect(g.levelAt(r.t + 600)).toBe(g.levelAt(r.t + 100));
+  });
+});
+
+describe('the further profile settings, both ways', () => {
+  it('C5 whites: W warm and A cool, or the other way', () => {
+    for (const [mode, ww] of [
+      ['w-warm-a-cool', 1],
+      ['w-cool-a-warm', 0],
+    ] as const) {
+      const r = rig({ c5Whites: mode }, 'C5', 'rgbwaf');
+      r.to('DAPC', 0, 254);
+      r.run(rgbwafCommands(short(0), [0, 0, 0, 254, 0, 255]));
+      expect(Math.round(gearOf(r).outputAt(r.t).terminals[3] ?? -1)).toBe(ww);
+    }
+  });
+  it('factory levels and colour', () => {
+    const r = rig(
+      {
+        factoryPowerOnLevel: 255,
+        factorySystemFailureLevel: 100,
+        factoryMaxLevel: 200,
+        factoryChannelLevel: 10,
+        factoryTc: 'coolest',
+      },
+      'C5',
+      'rgbwaf',
+    );
+    expect([
+      r.ask('QUERY_POWER_ON_LEVEL', 0),
+      r.ask('QUERY_SYSTEM_FAILURE_LEVEL', 0),
+      r.ask('QUERY_MAX_LEVEL', 0),
+    ]).toEqual([255, 100, 200]);
+    expect(gearOf(r).colourAt(r.t).ch[0]).toBe(10);
+    expect(gearOf(rig({ factoryTc: 'coolest' })).colourAt(0).tc).toBe(154);
+  });
+  it('Tc limits that cannot be stored', () => {
+    const r = rig({ tcLimitsStorable: false });
+    r.dtr(0, 250);
+    r.dtr(1, 0);
+    r.dtr(2, 1);
+    r.to('DT8_STORE_TC_LIMIT', 0);
+    expect(gearOf(r).snapshot().tcLimits.warmest).toBe(370);
+  });
+  it('stored colours and the last active level after RESET, both ways', () => {
+    for (const keep of [false, true]) {
+      const r = rig({
+        resetStoredColours: keep ? 'kept' : 'mask',
+        lastActiveAfterReset: keep ? 'unchanged' : 'max',
+      });
+      r.run(tcCommands(short(0), 300, false));
+      r.set('SET_POWER_ON_LEVEL', 0, 100);
+      r.to('DAPC', 0, 120);
+      r.to('RESET', 0);
+      r.wait(400);
+      const snap = gearOf(r).snapshot();
+      expect(snap.powerOnColour === null).toBe(!keep);
+      expect(snap.lastActiveLevel).toBe(keep ? 120 : 254);
+    }
+  });
+  it('fast fade at count 27: 675 or 700 ms', () => {
+    for (const ms of [675, 700] as const) {
+      const r = rig({ minFastFadeCount: 1, fastFade27Ms: ms });
+      r.set('DT6_STORE_DTR_AS_FAST_FADE_TIME', 0, 27);
+      expect(gearOf(r).fadeMs()).toBe(ms);
+    }
+  });
+  it('every hardware-day check names a part of the checklist', () => {
+    for (const s of SETTINGS_INFO) expect(s.hardwareDay).toMatch(/part \d/);
+  });
+});

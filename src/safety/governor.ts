@@ -432,7 +432,7 @@ export class Governor {
     let free = now;
     for (const f of tx.frames) {
       // When this frame reaches the gear, for the RESET deafness check below.
-      const deliverAt = free + settleMs(prev === undefined, this.timing) + FORWARD_FRAME_MS;
+      const deliverAt = free + settleMs(f, prev === undefined, this.timing) + FORWARD_FRAME_MS;
       free = deliverAt - FORWARD_FRAME_MS + wireMs(f, this.timing);
       const cmd = decode(f.frame, prev);
       prev = f.frame;
@@ -616,7 +616,7 @@ export class Governor {
     let prev: Frame | undefined;
     let free = now;
     for (const f of tx.frames) {
-      const deliverAt = free + settleMs(prev === undefined, this.timing) + FORWARD_FRAME_MS;
+      const deliverAt = free + settleMs(f, prev === undefined, this.timing) + FORWARD_FRAME_MS;
       free = deliverAt - FORWARD_FRAME_MS + wireMs(f, this.timing);
       const cmd = decode(f.frame, prev);
       prev = f.frame;

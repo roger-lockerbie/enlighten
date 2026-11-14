@@ -50,9 +50,13 @@ export function wireMs(f: Pick<TxFrame, 'sendTwice' | 'expectReply'>, t: BusTimi
   return ms;
 }
 
-/** Settle time before a frame: priority 1 inside a transaction, the first-frame priority otherwise. */
-export function settleMs(first: boolean, t: BusTiming): number {
-  return first ? t.settleFirstMs : t.settleLaterMs;
+/**
+ * Settle time before a frame. The first frame of a transaction waits the first-frame priority. Later
+ * frames wait priority 1, except a send-twice frame, whose first copy is a parameter write at
+ * priority 2 or slower, so a pair is never under 56.7 ms (dali.md section 14, SPEC R1.7).
+ */
+export function settleMs(f: Pick<TxFrame, 'sendTwice'>, first: boolean, t: BusTiming): number {
+  return first || f.sendTwice ? t.settleFirstMs : t.settleLaterMs;
 }
 
 /** A frame's total bus time, settle included. */
@@ -61,7 +65,7 @@ export function frameMs(
   first: boolean,
   t: BusTiming,
 ): number {
-  return settleMs(first, t) + wireMs(f, t);
+  return settleMs(f, first, t) + wireMs(f, t);
 }
 
 export interface FrameTime {
@@ -81,7 +85,7 @@ export function planFrames(
 ): FrameTime[] {
   let at = startAt;
   return frames.map((f, i) => {
-    const wireStart = at + settleMs(i === 0, t);
+    const wireStart = at + settleMs(f, i === 0, t);
     const end = wireStart + wireMs(f, t);
     at = end;
     return { wireStart, deliverAt: wireStart + FORWARD_FRAME_MS, end };

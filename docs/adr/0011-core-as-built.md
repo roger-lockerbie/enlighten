@@ -17,6 +17,8 @@ ADR 0004 and ADR 0005 describe the governor and the rate guard in words, and `do
 - **`FrameSink`** (`src/bus/scheduler.ts`) is what the scheduler sends to: `send(frame, approval)` and `sendPanic(frame)`. The router implements it in Stage 4. The bench in `tests/harness/` implements it for tests.
 - **The shadow.** In the Simulator target the shadow is the simulated bench, and the transport feeds it. In the Hardware target the shadow is a separate `Simulator` with the default DA5-L profile, fed by `observe`, and a new `Governor` and shadow are made on every connect.
 - **Time.** `Clock` and `VirtualClock` are in `src/bus/clock.ts`. The real clock waits for the worker shell in Stage 4.
+- **One departure from python-dali's decoder.** After ENABLE DEVICE TYPE, a command number below 224 decodes as the part 102 command. python-dali's decoder gives no command there, but the standard applies ENABLE DEVICE TYPE only to the application extended commands (224 to 255). Every other frame decodes as python-dali does, and `tests/golden/frames.test.ts` checks this against the decode sweep.
+- **A send-twice frame** waits the first-frame settle time before its first copy, even inside a transaction, so a pair is never under 56.7 ms (SPEC R1.7).
 - **The simulator's output** is a list of plans per gear, each valid from a time on. `outputAt(t)` is pure, and the guard reads the recent past and the predicted future from the same plans.
 
 ### What counts
