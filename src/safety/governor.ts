@@ -516,14 +516,8 @@ export class Governor {
     const frames: TxFrame[] = [];
     const notes: string[] = [];
     let changed = false;
-    let prev: Frame | undefined;
-    let free = now;
-    for (const f of tx.frames) {
-      // When this frame reaches the gear, for the RESET deafness check below.
-      const deliverAt = free + settleMs(f, prev === undefined, this.timing) + FORWARD_FRAME_MS;
-      free = deliverAt - FORWARD_FRAME_MS + wireMs(f, this.timing);
-      const cmd = decode(f.frame, prev);
-      prev = f.frame;
+    // `deliverAt` is when the frame reaches the gear, for the RESET deafness check below.
+    for (const { frame: f, cmd, deliverAt } of this.schedule(tx, now)) {
       if (cmd === undefined)
         return { ok: false, reason: `Frame ${frameText(f.frame)} is not a supported command.` };
       const sp = spec(cmd.id);
@@ -648,7 +642,6 @@ export class Governor {
       case 'refuse-colour-type':
         return no('the DA5-L is not known to report that colour type.');
       case 'expert':
-        return personOnly('expert');
       case 'expert-curve':
         return personOnly('expert');
       case 'reset':
@@ -666,15 +659,9 @@ export class Governor {
       const t = u.gear.snapshot().temp;
       if (t.type !== 'rgbwaf') continue;
       const f = this.factsFor(u);
-      const lvl = level === 255 ? this.ceiling : Math.min(level, this.ceiling);
-      if (
-        measure(
-          arcToFraction(lvl),
-          f,
-          t.ch.map((x) => (x === 255 ? 254 : x)),
-        ) >
-        arcToFraction(this.ceiling) + 1e-9
-      ) {
+      // 255 keeps the level, and the measure counts a masked channel (255) as full.
+      const lvl = Math.min(level, this.ceiling);
+      if (measure(arcToFraction(lvl), f, t.ch) > arcToFraction(this.ceiling) + 1e-9) {
         return no('the pending colour at that level would pass the ceiling.');
       }
     }
@@ -699,24 +686,36 @@ export class Governor {
   private colourOf(u: SimUnit, t: number): readonly number[] {
     const n = u.gear.shortAddress;
     const known = n !== null && this.info.get(n)?.colourKnown === true;
-    return known ? u.gear.colourAt(t).ch : [254, 254, 254, 254, 254, 254];
+    // An unknown colour has no channels to read, and the measure counts a missing channel as full.
+    return known ? u.gear.colourAt(t).ch : [];
   }
 
-  /** Feed a transaction into a fork of the shadow at the times the scheduler would send it. */
-  /** Each frame with its command and when the scheduler would deliver it. Called after the rules pass. */
-  private plan(tx: Transaction, now: number): Planned[] {
-    const out: Planned[] = [];
+  /**
+   * Each frame with its command (decoded with the frame before it) and when the scheduler would
+   * deliver it to the gear, for a transaction that starts on a free bus at `now`.
+   */
+  private schedule(
+    tx: Transaction,
+    now: number,
+  ): { frame: TxFrame; cmd: Command | undefined; deliverAt: number }[] {
+    const out: { frame: TxFrame; cmd: Command | undefined; deliverAt: number }[] = [];
     let prev: Frame | undefined;
     let free = now;
     for (const f of tx.frames) {
       const deliverAt = free + settleMs(f, prev === undefined, this.timing) + FORWARD_FRAME_MS;
       free = deliverAt - FORWARD_FRAME_MS + wireMs(f, this.timing);
-      const cmd = decode(f.frame, prev);
+      out.push({ frame: f, cmd: decode(f.frame, prev), deliverAt });
       prev = f.frame;
-      if (cmd === undefined) throw new Error('plan() needs a transaction that passed the rules');
-      out.push({ frame: f, cmd, spec: spec(cmd.id), deliverAt });
     }
     return out;
+  }
+
+  /** The schedule of a transaction that passed the rules, so every frame decodes. */
+  private plan(tx: Transaction, now: number): Planned[] {
+    return this.schedule(tx, now).map(({ frame, cmd, deliverAt }) => {
+      if (cmd === undefined) throw new Error('plan() needs a transaction that passed the rules');
+      return { frame, cmd, spec: spec(cmd.id), deliverAt };
+    });
   }
 
   /** When the first frame of a transaction starting on a free bus at `now` reaches the gear. */
@@ -747,9 +746,9 @@ export class Governor {
       }
       a = b;
     }
+    // Every time is inside the range: breakpoints come from it, and the rest lie between them.
     let max = 0;
     for (const t of times) {
-      if (t < from || t > to) continue;
       max = Math.max(max, measure(u.gear.arcFractionAt(t), facts, this.colourOf(u, t)));
     }
     return max;
@@ -852,7 +851,7 @@ export class Governor {
     levelKnown: (n: number) => boolean,
   ): { t: number; scope: string }[] {
     if (this.target !== 'hardware') return [];
-    if (!LIGHT_CHANGING.has(cmd.id) && cmd.id !== 'DT8_ACTIVATE') return [];
+    if (!LIGHT_CHANGING.has(cmd.id)) return [];
     const a = cmd.address;
     if (a === undefined) return [];
     const out: { t: number; scope: string }[] = [];

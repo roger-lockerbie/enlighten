@@ -38,7 +38,7 @@ export function scopeOf(id: string, shortAddress: number | null): string {
 export const ROOM = 'room';
 export const PHANTOM = 'phantom';
 
-function sampleTimes(gear: Da5l, from: number, to: number, instant: boolean): number[] {
+export function sampleTimes(gear: Da5l, from: number, to: number, instant: boolean): number[] {
   const bps = instant ? [from, to, ...gear.planStarts(from, to)] : gear.breakpoints(from, to);
   const sorted = [...new Set(bps)].sort((a, b) => a - b);
   const times = new Set<number>();
@@ -68,7 +68,7 @@ export function luminance(d: readonly number[], labels: readonly Terminal[]): nu
   return d.reduce((acc, x, i) => acc + x * LUMINANCE_WEIGHT[labels[i] ?? 'unused'], 0);
 }
 
-function satRed(d: readonly number[], labels: readonly Terminal[]): boolean {
+export function satRed(d: readonly number[], labels: readonly Terminal[]): boolean {
   const r = labels.indexOf('R');
   if (r < 0 || (d[r] ?? 0) <= SATURATED_RED) return false;
   return d.every((x, i) => i === r || labels[i] === 'unused' || x <= SATURATED_RED);
