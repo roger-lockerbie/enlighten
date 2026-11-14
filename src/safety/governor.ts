@@ -15,7 +15,8 @@ import {
   type BusTiming,
 } from '../bus/timing.ts';
 import type { Simulator, SimUnit } from '../sim/simulator.ts';
-import { RESET_DEAF_MS } from '../sim/gear.ts';
+import { Da5l, RESET_DEAF_MS } from '../sim/gear.ts';
+import { da5l, type Da5lProfile } from '../sim/profile.ts';
 import { maxArcForMix, measure, mixSum, WORST_FACTS, type ColourFacts } from './mix.ts';
 import { PHANTOM, predictEvents, ROOM, scopeOf } from './rate/trace.ts';
 import { mergeTimes, type TraceEvents } from './rate/legs.ts';
@@ -45,6 +46,19 @@ import {
  * after hardware day, every level or colour command on hardware counts as an instant step (SPEC S3.7).
  */
 export const FADE_BEHAVIOUR_CONFIRMED = false;
+
+/** Recalls of gear memory that a scan does not read: on hardware their result is unknown. */
+const RECALLS_MEMORY: ReadonlySet<string> = new Set(['GO_TO_SCENE', 'GO_TO_LAST_ACTIVE_LEVEL']);
+
+/** The DA5-L light type that matches what gear reported, for a hardware shadow unit. */
+function profileFor(types: readonly number[], colour: ColourFacts | undefined): Da5lProfile {
+  if (!types.includes(8) || colour === undefined) return da5l('C1');
+  if (colour.channels === 0) return da5l('C2', 'tc');
+  if (colour.channels === 2) return da5l('C2', 'rgbwaf');
+  if (colour.channels === 3) return colour.tc ? da5l('C5', 'tc') : da5l('C3');
+  if (colour.channels === 4) return da5l('C4');
+  return da5l('C5', 'rgbwaf');
+}
 
 /** Unlocked commands that can raise output past the ceiling, which a person confirmed. */
 const CONFIRMED_RAISE: ReadonlySet<string> = new Set([
@@ -85,6 +99,16 @@ export interface AddressInfo {
   /** On hardware: whether the level and colour are known. */
   levelKnown: boolean;
   colourKnown: boolean;
+  /**
+   * On hardware: whether the shadow has a unit at this address built from read-backs, so its
+   * predictions can be trusted (ADR 0011). Always true in the Simulator target.
+   */
+  modelled: boolean;
+  fadeTime?: number | undefined;
+  fadeRate?: number | undefined;
+  extendedFade?: number | undefined;
+  /** The last level read back. */
+  level?: number | undefined;
 }
 
 export interface GovernorOptions {
@@ -133,6 +157,14 @@ export function isApproved(a: unknown, tx: Transaction): boolean {
   return typeof a === 'object' && a !== null && issued.has(a) && (a as Approved).tx === tx;
 }
 
+/** A frozen deep copy, so what was approved is what is sent. */
+function freeze(tx: Transaction): Transaction {
+  const frames = tx.frames.map((f) =>
+    Object.freeze({ ...f, frame: Object.freeze({ ...f.frame }) }),
+  );
+  return Object.freeze({ ...tx, frames: Object.freeze(frames) });
+}
+
 function approve(tx: Transaction): Approved {
   const a = Object.freeze({ tx }) as unknown as Approved;
   issued.add(a);
@@ -167,9 +199,11 @@ export class Governor {
   private operatorCanSee: boolean | undefined;
   private lastResetAt = -Infinity;
   private lastSent: Frame | undefined;
+  /** When the last frame was delivered: the time the shadow is at. */
+  private lastAt = 0;
   private readonly info = new Map<number, AddressInfo>();
   /** Legs and hard steps the traces cannot show: commands to gear in an unknown state, and phantom gear. */
-  private synthetic: { t: number; scope: string }[] = [];
+  private synthetic: { t: number; scope: string; until: number; tx?: number | undefined }[] = [];
   /** The OFF that follows an unlocked RESET is part of the RESET's one swing (SPEC S3.10). */
   private resetOff: { targets: Set<number>; until: number } | undefined;
   private readonly holdUntil: number;
@@ -182,8 +216,11 @@ export class Governor {
     this.timing = opts.timing ?? DEFAULT_TIMING;
     this.ceiling = opts.ceilingArc ?? DEFAULT_CEILING_ARC;
     this.shadowFedByTransport = opts.shadowFedByTransport ?? opts.target === 'simulator';
+    if (opts.target === 'hardware' && opts.connectedAt === undefined) {
+      throw new Error('A hardware governor needs the time of the connect.');
+    }
     this.holdUntil =
-      opts.target === 'hardware' ? (opts.connectedAt ?? -Infinity) + CONNECT_HOLD_MS : -Infinity;
+      opts.target === 'hardware' ? (opts.connectedAt ?? 0) + CONNECT_HOLD_MS : -Infinity;
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -270,15 +307,20 @@ export class Governor {
 
   setSwingLimit(n: number, source: Source): Outcome {
     if (!isPerson(source)) return no('Only a person can change the swing limit.');
+    if (!Number.isInteger(n) || n < 1 || n > 3)
+      return no('The swing limit is a whole number from 1 to 3.');
     if (n > 1 && !this.unlocked.has('rate'))
       return no('Raising the swing limit needs the rate unlock.');
     this.swings = swingLimit(n);
     return OK;
   }
 
-  setOperatorCanSee(can: boolean): void {
+  setOperatorCanSee(can: boolean, source: Source): Outcome {
+    if (!isPerson(source))
+      return no('Only the operator can answer whether they can see the lights.');
     this.operatorCanSee = can;
     if (!can) this.lock('rate');
+    return OK;
   }
 
   /** Panic latches the governor. Nothing is allowed until a person resumes (SPEC S4.4). */
@@ -342,6 +384,15 @@ export class Governor {
 
     // A command behind an unlock was confirmed by a person, who was told what it does (P-ceiling).
     const confirmed = decodeFrames(candidate.frames).some((c) => CONFIRMED_RAISE.has(c.id));
+    // That exemption covers only the confirmed command, so it travels on its own (review L2).
+    if (
+      confirmed &&
+      decodeFrames(candidate.frames).some(
+        (c) => LIGHT_CHANGING.has(c.id) && !CONFIRMED_RAISE.has(c.id),
+      )
+    ) {
+      return { kind: 'refuse', reason: 'Send RESET and the other unlocked commands on their own.' };
+    }
     const fitted = confirmed
       ? { ok: true as const, tx: candidate, note: '' }
       : this.fitCeiling(candidate, now);
@@ -360,9 +411,11 @@ export class Governor {
         ...this.retryAt(candidate, now, rate),
       };
     }
-    const approval = approve(candidate);
+    // The approval holds a frozen copy, and the scheduler sends from it (security review M1).
+    const sealed = freeze(candidate);
+    const approval = approve(sealed);
     if (candidate === tx) return { kind: 'allow', approval };
-    return { kind: 'clamp', tx: candidate, note: notes.join(' '), approval };
+    return { kind: 'clamp', tx: sealed, note: notes.join(' '), approval };
   }
 
   /** True for an OFF to the gear an unlocked RESET just sent to full, within 2 s of it. */
@@ -383,6 +436,7 @@ export class Governor {
         fadeReadBack: false,
         levelKnown: this.target === 'simulator',
         colourKnown: this.target === 'simulator',
+        modelled: this.target === 'simulator',
       };
       this.info.set(n, i);
     }
@@ -723,26 +777,115 @@ export class Governor {
   }
 
   /** Extra events for commands to gear in an unknown state and, on hardware, for phantom gear (S3.1b). */
-  private extraEvents(planned: readonly Planned[]): { t: number; scope: string }[] {
-    if (this.target !== 'hardware') return [];
-    const out: { t: number; scope: string }[] = [];
+  private extraEvents(planned: readonly Planned[]): { t: number; scope: string; until: number }[] {
     const levelKnown = new Map<number, boolean>();
-    const known = (n: number) => levelKnown.get(n) ?? this.info.get(n)?.levelKnown === true;
+    const out: { t: number; scope: string; until: number }[] = [];
     for (const p of planned) {
-      if (!LIGHT_CHANGING.has(p.cmd.id) && p.cmd.id !== 'DT8_ACTIVATE') continue;
-      const a = p.cmd.address;
-      if (a === undefined) continue;
-      if (a.kind !== 'short' && (this.stale || this.unaddressedPresent))
-        out.push({ t: p.deliverAt, scope: PHANTOM });
-      for (const n of this.members(a)) {
-        const colourUnknown = this.info.get(n)?.colourKnown !== true;
-        if (!known(n) || colourUnknown) out.push({ t: p.deliverAt, scope: `a${String(n)}` });
-        if (p.cmd.id === 'DAPC' && p.cmd.value !== 255) levelKnown.set(n, true);
-        if (p.cmd.id === 'OFF') levelKnown.set(n, true);
+      // One per scope per transaction, as observe records them.
+      for (const e of this.unknownEvents(
+        p.cmd,
+        p.deliverAt,
+        (n) => levelKnown.get(n) ?? this.info.get(n)?.levelKnown === true,
+      )) {
+        const same = out.find((x) => x.scope === e.scope);
+        if (same === undefined) out.push({ ...e, until: e.t });
+        else same.until = e.t;
       }
-      if (a.kind === 'unaddressed') out.push({ t: p.deliverAt, scope: PHANTOM });
+      for (const n of p.cmd.address === undefined ? [] : this.members(p.cmd.address)) {
+        if ((p.cmd.id === 'DAPC' && p.cmd.value !== 255) || p.cmd.id === 'OFF')
+          levelKnown.set(n, true);
+        if (RECALLS_MEMORY.has(p.cmd.id)) levelKnown.set(n, false);
+      }
     }
     return out;
+  }
+
+  /**
+   * On hardware, a light change that the shadow cannot predict counts as a leg and a hard step for
+   * the address and the room. That is: gear the shadow does not model from read-backs, a level or
+   * colour not known, a recall of memory the scan does not read (scenes, the last active level), and
+   * phantom gear while the inventory is stale or unaddressed gear is present. `judge` and `observe` use
+   * this one function, so what is judged is what is remembered (security review H1).
+   */
+  private unknownEvents(
+    cmd: Command,
+    at: number,
+    levelKnown: (n: number) => boolean,
+  ): { t: number; scope: string }[] {
+    if (this.target !== 'hardware') return [];
+    if (!LIGHT_CHANGING.has(cmd.id) && cmd.id !== 'DT8_ACTIVATE') return [];
+    const a = cmd.address;
+    if (a === undefined) return [];
+    const out: { t: number; scope: string }[] = [];
+    if (
+      a.kind === 'unaddressed' ||
+      (a.kind !== 'short' && (this.stale || this.unaddressedPresent))
+    ) {
+      out.push({ t: at, scope: PHANTOM });
+    }
+    for (const n of this.members(a)) {
+      const i = this.info.get(n);
+      const unknown =
+        i === undefined ||
+        !i.modelled ||
+        !levelKnown(n) ||
+        !i.colourKnown ||
+        RECALLS_MEMORY.has(cmd.id);
+      if (unknown) out.push({ t: at, scope: `a${String(n)}` });
+    }
+    return out;
+  }
+
+  /**
+   * Build or refresh the shadow's unit for an address from what a scan read back (security review
+   * C1). On hardware the shadow starts empty. An address is modelled only once every value the
+   * prediction depends on has been read.
+   */
+  modelAddress(n: number): Outcome {
+    if (this.target !== 'hardware') return OK;
+    const i = this.addr(n);
+    i.modelled = false;
+    const types = i.deviceTypes;
+    if (i.present !== true || types === undefined) return no('The gear has not answered a scan.');
+    const needs = [
+      i.minLevel,
+      i.maxLevel,
+      i.groups,
+      i.fadeTime,
+      i.fadeRate,
+      i.extendedFade,
+      i.level,
+    ];
+    if (needs.some((x) => x === undefined)) return no('A value the model needs was not read back.');
+    if (types.includes(6) && i.linearCurve === undefined)
+      return no('The dimming curve was not read back.');
+    if (types.includes(8) && i.colour === undefined)
+      return no('The colour features were not read back.');
+    let unit = this.shadow.byShortAddress(n);
+    if (unit === undefined) {
+      unit = {
+        id: `hw${String(n)}`,
+        gear: new Da5l(profileFor(types, i.colour), { shortAddress: n, at: this.lastAt }),
+      };
+      this.shadow.add(unit);
+    }
+    unit.gear.applyFacts(
+      {
+        minLevel: i.minLevel,
+        maxLevel: i.maxLevel,
+        groups: i.groups,
+        fadeTime: i.fadeTime,
+        fadeRate: i.fadeRate,
+        extendedFade: i.extendedFade,
+        linear: i.linearCurve ?? false,
+        level: i.level,
+      },
+      this.lastAt,
+    );
+    i.modelled = true;
+    i.levelKnown = true;
+    if (!types.includes(8)) i.colourKnown = true;
+    return OK;
   }
 
   /** The rate guard: compare predicted events with and without the transaction. */
@@ -778,7 +921,14 @@ export class Governor {
     const hist = this.synthetic.filter((e) => e.t >= from);
     const base = withExtra(this.predict(this.shadow, from, to, instant), hist);
     const extra = this.extraEvents(planned);
-    if (first < this.holdUntil && planned.some((p) => LIGHT_CHANGING.has(p.cmd.id))) {
+    // Switching off is always allowed in the hold: it cannot add a flash on top of an unknown past.
+    const onlyOff = planned.every(
+      (p) =>
+        p.cmd.id === 'OFF' ||
+        (p.cmd.id === 'DAPC' && p.cmd.value === 0) ||
+        !LIGHT_CHANGING.has(p.cmd.id),
+    );
+    if (first < this.holdUntil && !onlyOff) {
       return [
         {
           scope: 'bus',
@@ -858,6 +1008,7 @@ export class Governor {
     const f = sent.frame;
     const prev = this.lastSent;
     this.lastSent = f.frame;
+    this.lastAt = sent.at;
     const fault = result.kind === 'fault';
     if (!this.shadowFedByTransport) {
       this.shadow.send(f, sent.at, this.timing.settleLaterMs + FORWARD_FRAME_MS);
@@ -873,19 +1024,19 @@ export class Governor {
       this.dtr[sp.sets] = fault || sent.at < this.deafUntil ? undefined : cmd.value;
     for (const r of sp.gearWrites) this.dtr[r] = undefined;
 
-    // Extra rate-guard events for unknown and phantom gear.
-    if (
-      this.target === 'hardware' &&
-      (LIGHT_CHANGING.has(cmd.id) || cmd.id === 'DT8_ACTIVATE') &&
-      a !== undefined
-    ) {
-      if (a.kind !== 'short' && (this.stale || this.unaddressedPresent))
-        this.synthetic.push({ t: sent.at, scope: PHANTOM });
-      if (a.kind === 'unaddressed') this.synthetic.push({ t: sent.at, scope: PHANTOM });
-      for (const n of targets) {
-        if (this.info.get(n)?.levelKnown !== true)
-          this.synthetic.push({ t: sent.at, scope: `a${String(n)}` });
-      }
+    // Extra rate-guard events for unknown and phantom gear: the same ones judge counted.
+    // One per scope per transaction, as judge counts them.
+    for (const e of this.unknownEvents(
+      cmd,
+      sent.at,
+      (n) => this.info.get(n)?.levelKnown === true,
+    )) {
+      const same =
+        sent.tx === undefined
+          ? undefined
+          : this.synthetic.find((x) => x.tx === sent.tx && x.scope === e.scope);
+      if (same === undefined) this.synthetic.push({ ...e, until: e.t, tx: sent.tx });
+      else same.until = sent.at;
     }
     this.synthetic = this.synthetic.filter((e) => e.t >= sent.at - HISTORY_MS - 1000);
 
@@ -899,13 +1050,17 @@ export class Governor {
     }
     if (STALES_INVENTORY.has(cmd.id)) this.stale = true;
     if (cmd.id === 'PROGRAM_SHORT_ADDRESS' || cmd.id === 'SET_SHORT_ADDRESS') {
-      for (const i of this.info.values()) i.verified = false;
+      for (const i of this.info.values()) {
+        i.verified = false;
+        i.modelled = this.target === 'simulator';
+      }
     }
 
     for (const n of targets) {
       const i = this.addr(n);
       if (fault) {
         i.verified = false;
+        i.modelled = this.target === 'simulator';
         i.levelKnown = this.target === 'simulator';
         i.colourKnown = this.target === 'simulator';
       }
@@ -941,6 +1096,13 @@ export class Governor {
           break;
         case 'DAPC':
           if (!fault && cmd.value !== 255) i.levelKnown = true;
+          break;
+        case 'GO_TO_SCENE':
+        case 'GO_TO_LAST_ACTIVE_LEVEL':
+          if (this.target === 'hardware') {
+            i.levelKnown = false;
+            if (cmd.id === 'GO_TO_SCENE') i.colourKnown = false;
+          }
           break;
         case 'OFF':
           if (!fault) i.levelKnown = true;
@@ -1014,7 +1176,14 @@ export class Governor {
         if (v !== undefined) i.colour = { tc: (v & 2) !== 0, channels: (v >> 5) & 7 };
         break;
       case 'QUERY_FADE_TIME_FADE_RATE':
-        if (v !== undefined) i.fadeReadBack = true;
+        if (v !== undefined) {
+          i.fadeReadBack = true;
+          i.fadeTime = (v >> 4) & 0x0f;
+          i.fadeRate = v & 0x0f;
+        }
+        break;
+      case 'QUERY_EXTENDED_FADE_TIME':
+        if (v !== undefined) i.extendedFade = v;
         break;
       case 'QUERY_GROUPS_0_7':
         if (v !== undefined) i.groups = ((i.groups ?? 0) & 0xff00) | v;
@@ -1023,7 +1192,15 @@ export class Governor {
         if (v !== undefined) i.groups = ((i.groups ?? 0) & 0x00ff) | (v << 8);
         break;
       case 'QUERY_ACTUAL_LEVEL':
-        if (v !== undefined && v !== 255) i.levelKnown = true;
+        // A level read back seeds the model. Once the model runs, the shadow is the prediction and a
+        // correction from the hardware is Both mode's job (Stage 4).
+        if (v !== undefined && v !== 255) {
+          i.level = v;
+          if (i.modelled && !i.levelKnown) {
+            this.shadow.byShortAddress(n)?.gear.applyFacts({ level: v }, this.lastAt);
+            i.levelKnown = true;
+          }
+        }
         break;
       default:
         break;

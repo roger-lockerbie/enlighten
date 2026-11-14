@@ -42,6 +42,11 @@ export class Simulator {
     return this.units;
   }
 
+  /** Add a unit: the hardware shadow grows one per address a scan finds (ADR 0011). */
+  add(unit: SimUnit): void {
+    this.units.push(unit);
+  }
+
   unit(id: string): SimUnit | undefined {
     return this.units.find((u) => u.id === id);
   }

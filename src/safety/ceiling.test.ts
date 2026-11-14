@@ -73,19 +73,25 @@ describe('panic helpers and RESET under the unlock', () => {
       new Promise<void>((r) => {
         b.clock.at(b.clock.now() + ms, r);
       });
-    const r = await b.drive(resetAndRestore(0, b.governor, asSubmit(b), wait, 'console'));
+    const r = await b.drive(
+      resetAndRestore(0, b.governor, asSubmit(b), wait, 'console', () => b.scheduler.panic()),
+    );
     expect(r.ok).toBe(true);
     const g = b.sim.unit('A')?.gear.snapshot();
     expect([g?.maxLevel, g?.powerOnLevel, g?.systemFailureLevel]).toEqual([220, 0, 255]);
     expect(b.sim.unit('A')?.gear.levelAt(b.clock.now())).toBe(0);
-    const again = await b.drive(resetAndRestore(0, b.governor, asSubmit(b), wait, 'console'));
+    const again = await b.drive(
+      resetAndRestore(0, b.governor, asSubmit(b), wait, 'console', () => b.scheduler.panic()),
+    );
     expect(again.ok).toBe(false);
   });
   it('RESET is refused without the unlock', async () => {
     const b = makeBench();
     await b.ready();
     const wait = () => Promise.resolve();
-    const r = await b.drive(resetAndRestore(0, b.governor, asSubmit(b), wait, 'console'));
+    const r = await b.drive(
+      resetAndRestore(0, b.governor, asSubmit(b), wait, 'console', () => b.scheduler.panic()),
+    );
     expect(r.ok).toBe(false);
   });
 });

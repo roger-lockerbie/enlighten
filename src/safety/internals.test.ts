@@ -36,11 +36,12 @@ const one = (cmd: Command): TxFrame => {
   const e = encode(cmd);
   return { frame: e.frame, sendTwice: e.sendTwice, expectReply: e.reply !== 'none' };
 };
+const reasonOf = (o: { ok: boolean; reason?: string }) => (o.ok ? '' : (o.reason ?? ''));
 const reason = (v: { kind: string; reason?: string }) =>
   v.kind === 'refuse' ? (v.reason ?? '') : '';
 
 function bare(target: 'simulator' | 'hardware' = 'simulator') {
-  return new Governor({ target, shadow: Simulator.bench() });
+  return new Governor({ target, shadow: Simulator.bench(), connectedAt: -10_000 });
 }
 
 function tell(g: Governor, cmd: Command, result: SendResult, at = 100) {
@@ -83,12 +84,73 @@ describe('what the governor learns from replies', () => {
     expect(g.knownAddresses()).toEqual([0]);
     tell(g, c('QUERY_MISSING_SHORT_ADDRESS', unaddressed), { kind: 'reply', byte: 255 });
   });
-  it('on hardware a QUERY ACTUAL LEVEL answer makes the level known, and 255 does not', () => {
-    const g = bare('hardware');
+  it('on hardware the shadow models an address only once every value it needs is read back', () => {
+    const g = new Governor({ target: 'hardware', shadow: new Simulator([]), connectedAt: -10_000 });
+    expect(g.modelAddress(0).ok).toBe(false);
+    tell(g, c('QUERY_CONTROL_GEAR_PRESENT', A), { kind: 'reply', byte: 255 });
+    tell(g, c('QUERY_DEVICE_TYPE', A), { kind: 'reply', byte: 6 });
+    expect(g.modelAddress(0).ok).toBe(false);
+    tell(g, c('QUERY_MIN_LEVEL', A), { kind: 'reply', byte: 90 });
+    tell(g, c('QUERY_MAX_LEVEL', A), { kind: 'reply', byte: 200 });
+    tell(g, c('QUERY_GROUPS_0_7', A), { kind: 'reply', byte: 4 });
+    tell(g, c('QUERY_GROUPS_8_15', A), { kind: 'reply', byte: 0 });
+    tell(g, c('QUERY_FADE_TIME_FADE_RATE', A), { kind: 'reply', byte: 0x47 });
+    tell(g, c('QUERY_EXTENDED_FADE_TIME', A), { kind: 'reply', byte: 0 });
     tell(g, c('QUERY_ACTUAL_LEVEL', A), { kind: 'reply', byte: 255 });
-    expect(g.addressInfo(0)?.levelKnown).toBe(false);
-    tell(g, c('QUERY_ACTUAL_LEVEL', A), { kind: 'reply', byte: 100 });
+    expect(reasonOf(g.modelAddress(0))).toMatch(/not read back/);
+    tell(g, c('QUERY_ACTUAL_LEVEL', A), { kind: 'reply', byte: 150 });
+    expect(reasonOf(g.modelAddress(0))).toMatch(/curve/);
+    tell(g, c('DT6_QUERY_DIMMING_CURVE', A), { kind: 'reply', byte: 0 });
+    expect(g.modelAddress(0).ok).toBe(true);
+    const snap = g.shadow.byShortAddress(0)?.gear.snapshot();
+    expect([snap?.minLevel, snap?.maxLevel, snap?.groups, snap?.fadeTime, snap?.fadeRate]).toEqual([
+      90, 200, 4, 4, 7,
+    ]);
+    expect(g.shadow.byShortAddress(0)?.gear.levelAt(200)).toBe(150);
     expect(g.addressInfo(0)?.levelKnown).toBe(true);
+    expect(g.addressInfo(0)?.colourKnown).toBe(true);
+    // DT8 gear needs its colour features first, and gets a matching light type.
+    tell(g, c('QUERY_CONTROL_GEAR_PRESENT', B), { kind: 'reply', byte: 255 });
+    tell(g, c('QUERY_DEVICE_TYPE', B), { kind: 'reply', byte: 8 });
+    for (const [id, v] of [
+      ['QUERY_MIN_LEVEL', 85],
+      ['QUERY_MAX_LEVEL', 220],
+      ['QUERY_GROUPS_0_7', 0],
+      ['QUERY_GROUPS_8_15', 0],
+      ['QUERY_FADE_TIME_FADE_RATE', 7],
+      ['QUERY_EXTENDED_FADE_TIME', 0],
+      ['QUERY_ACTUAL_LEVEL', 0],
+    ] as const) {
+      tell(g, c(id, B), { kind: 'reply', byte: v });
+    }
+    expect(reasonOf(g.modelAddress(1))).toMatch(/colour features/);
+    for (const [byte, light] of [
+      [0x02, 'C2'],
+      [0x40, 'C2'],
+      [0x62, 'C5'],
+      [0x60, 'C3'],
+      [0x80, 'C4'],
+      [0xa0, 'C5'],
+    ] as const) {
+      const h = new Governor({ target: 'hardware', shadow: new Simulator([]), connectedAt: 0 });
+      tell(h, c('QUERY_CONTROL_GEAR_PRESENT', B), { kind: 'reply', byte: 255 });
+      tell(h, c('QUERY_DEVICE_TYPE', B), { kind: 'reply', byte: 8 });
+      for (const [id, v] of [
+        ['QUERY_MIN_LEVEL', 85],
+        ['QUERY_MAX_LEVEL', 220],
+        ['QUERY_GROUPS_0_7', 0],
+        ['QUERY_GROUPS_8_15', 0],
+        ['QUERY_FADE_TIME_FADE_RATE', 7],
+        ['QUERY_EXTENDED_FADE_TIME', 0],
+        ['QUERY_ACTUAL_LEVEL', 0],
+      ] as const) {
+        tell(h, c(id, B), { kind: 'reply', byte: v });
+      }
+      tell(h, c('DT8_QUERY_COLOUR_TYPE_FEATURES', B), { kind: 'reply', byte });
+      expect(h.modelAddress(1).ok).toBe(true);
+      expect(h.shadow.byShortAddress(1)?.gear.profile.lightType).toBe(light);
+    }
+    expect(bare().modelAddress(0).ok).toBe(true);
   });
   it('a ceiling check skips gear whose physical minimum is unknown', () => {
     const g = bare();
@@ -119,7 +181,7 @@ describe('unlocks and settings', () => {
     g.setSwingLimit(2, 'ui');
     g.lock('expert');
     expect(g.swingLimit).toBe(2);
-    g.setOperatorCanSee(true);
+    g.setOperatorCanSee(true, 'ui');
     expect(g.isUnlocked('rate')).toBe(true);
   });
 });
@@ -182,7 +244,8 @@ describe('rules on the edges', () => {
   });
   it('light changes wait 2 s after a hardware connect', () => {
     const g = new Governor({ target: 'hardware', shadow: Simulator.bench(), connectedAt: 1000 });
-    const v = g.judge(tx([c('OFF', A)]), 1500);
+    expect(g.judge(tx([c('OFF', A)]), 1500).kind).not.toBe('refuse');
+    const v = g.judge(tx([c('DAPC', A, 100)]), 1500);
     expect(reason(v)).toMatch(/just after connecting/);
     expect(v.kind === 'refuse' ? v.retryAt : 0).toBeGreaterThanOrEqual(3000);
   });
@@ -220,7 +283,7 @@ describe('the safety profile on other light types', () => {
     const r = await b.drive(applySafetyProfile(9, b.governor, s));
     expect(r.verified).toBe(false);
     expect(r.reason).toMatch(/did not answer/);
-    expect(await b.drive(scanAddress(9, s))).toBe(false);
+    expect(await b.drive(scanAddress(9, b.governor, s))).toBe(false);
     expect(await b.drive(scan(b.governor, s, [9]))).toEqual([]);
   });
   it('a fault on a read fails the profile with the reason', async () => {
@@ -240,7 +303,9 @@ describe('the safety profile on other light types', () => {
       b.governor.latch();
       return Promise.resolve();
     };
-    const r = await b.drive(resetAndRestore(0, b.governor, asSubmit(b), wait, 'console'));
+    const r = await b.drive(
+      resetAndRestore(0, b.governor, asSubmit(b), wait, 'console', () => b.scheduler.panic()),
+    );
     expect(r.ok).toBe(false);
   });
   it('the patient submit gives up after a few refusals', async () => {

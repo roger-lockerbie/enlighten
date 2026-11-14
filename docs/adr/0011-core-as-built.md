@@ -15,7 +15,8 @@ ADR 0004 and ADR 0005 describe the governor and the rate guard in words, and `do
 - **`Governor`** (`src/safety/governor.ts`) is a class, one per target. `judge(tx, now)` changes nothing (a test compares a fingerprint of the state before and after). `observe(sent, result)` is the only way its view advances. ARCHITECTURE.md showed `observe` returning a new state. Copying a simulator on every frame would be slow, so the class holds its state and the purity of `judge` is tested instead.
 - **`Approved`** values exist only in a `WeakSet` inside `governor.ts`. `isApproved(a, tx)` checks one. Stage 4's router calls it before a transport sees a frame.
 - **`FrameSink`** (`src/bus/scheduler.ts`) is what the scheduler sends to: `send(frame, approval)` and `sendPanic(frame)`. The router implements it in Stage 4. The bench in `tests/harness/` implements it for tests.
-- **The shadow.** In the Simulator target the shadow is the simulated bench, and the transport feeds it. In the Hardware target the shadow is a separate `Simulator` with the default DA5-L profile, fed by `observe`, and a new `Governor` and shadow are made on every connect.
+- **The shadow.** In the Simulator target the shadow is the simulated bench, and the transport feeds it. In the Hardware target the shadow is a separate `Simulator`, fed by `observe`, and a new `Governor` and shadow are made on every connect. That shadow starts empty. A scan reads each address's MIN and MAX, groups, fade time, rate and extended fade, curve, colour features and level, and `modelAddress` then builds a unit for it with the matching DA5-L light type and the default profile settings. An address is "modelled" only when every one of those values was read. A hardware governor needs the time of the connect.
+- **Approvals** hold a frozen copy of the transaction, and the scheduler sends from that copy. The scheduler tags each frame with its transaction number for the governor.
 - **Time.** `Clock` and `VirtualClock` are in `src/bus/clock.ts`. The real clock waits for the worker shell in Stage 4.
 - **One departure from python-dali's decoder.** After ENABLE DEVICE TYPE, a command number below 224 decodes as the part 102 command. python-dali's decoder gives no command there, but the standard applies ENABLE DEVICE TYPE only to the application extended commands (224 to 255). Every other frame decodes as python-dali does, and `tests/golden/frames.test.ts` checks this against the decode sweep.
 - **A send-twice frame** waits the first-frame settle time before its first copy, even inside a transaction, so a pair is never under 56.7 ms (SPEC R1.7).
@@ -39,15 +40,16 @@ With swing limit N (1 by default, 2 or 3 with the `rate` unlock, never more):
 - At most one hard step starts in any 2 s per address, and in any 1 s for the room.
 - At most three small reversals in any 1 s.
 - A fast pattern stops after 5 s. A leg is fast when it and the two legs before it start within 2 s. A run of fast legs that has lasted 5 s refuses the next fast leg.
-- An unlocked RESET and the OFF that follows it 350 ms later are judged together and count as one hard step. The OFF is not judged again. At most one RESET in 10 s.
+- An unlocked RESET and the OFF that follows it 350 ms later are judged together and count as one hard step. The OFF is not judged again, goes to the head of the queue, and if it cannot go out panic's ungated OFF follows. At most one RESET in 10 s. A command behind an unlock travels on its own.
 
 ### How the guard decides
 
 - It predicts the output with and without the transaction, from 6 s before now to the end of every fade (up to 17 minutes), and refuses only breaches that involve an event the prediction without it does not have. That includes an older run that the transaction extends into a leg.
 - It decides with a margin, so differences in where a trace is sampled cannot let the real output pass a limit: ratios 1% lower, windows 40 ms longer, the 0.7 s fade test 5 ms longer, same-direction legs merged within 60 ms rather than 100 ms, and fades sampled every 10 ms.
 - On Hardware, until `FADE_BEHAVIOUR_CONFIRMED` is set by a reviewed commit, it counts the events of both an instant-step prediction and a faded one. Instant steps are the worst case for hard steps. A level and a colour fading together can make one channel rise and fall, and only the faded prediction shows that.
-- On Hardware, a light change to an address whose level or colour is not known, and a broadcast or group frame while the inventory is stale or unaddressed gear is present, also count as a leg and a hard step there and in the room. Colour becomes known when this session has set a whole temporary colour and activated it.
-- On Hardware, nothing is known about what the lights did before a connect, so light changes wait 2 s after it.
+- On Hardware, a light change counts as a leg and a hard step for the address and the room when the shadow cannot predict it: the address is not modelled, its level or colour is not known, the command recalls memory a scan does not read (GO TO SCENE, GO TO LAST ACTIVE LEVEL, which also leave the level unknown), or it is a broadcast or group frame while the inventory is stale or unaddressed gear is present. One transaction counts once per address, and that event merges with any event the trace has inside the transaction's span. `judge` and `observe` use one function for these, so what is judged is what is remembered. Colour becomes known when this session has set a whole temporary colour and activated it.
+- On Hardware, nothing is known about what the lights did before a connect, so light changes other than OFF wait 2 s after it.
+- The swing limit is 1, 2 or 3, and nothing else is accepted.
 - A refusal carries the earliest time the same transaction would pass, found by judging it again at later times.
 
 ### The ceiling

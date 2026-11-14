@@ -63,6 +63,8 @@ export interface SentFrame {
   readonly frame: TxFrame;
   readonly at: number;
   readonly source: Source;
+  /** Which transaction the frame belongs to, so events counted once per transaction stay so. */
+  readonly tx?: number;
 }
 
 export type Unlock = 'rate' | 'reset' | 'expert';

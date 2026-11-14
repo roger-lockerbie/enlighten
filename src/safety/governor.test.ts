@@ -398,9 +398,12 @@ describe('unlocks, the ceiling and the latch', () => {
     expect(b.governor.setSwingLimit(3, 'ui').ok).toBe(false);
     b.governor.unlock('rate', 'ui', true);
     expect(b.governor.setSwingLimit(2, 'script').ok).toBe(false);
-    expect(b.governor.setSwingLimit(9, 'ui').ok).toBe(true);
+    expect(b.governor.setSwingLimit(9, 'ui').ok).toBe(false);
+    expect(b.governor.setSwingLimit(Number.NaN, 'ui').ok).toBe(false);
+    expect(b.governor.setSwingLimit(2.5, 'ui').ok).toBe(false);
+    expect(b.governor.setSwingLimit(3, 'ui').ok).toBe(true);
     expect(b.governor.swingLimit).toBe(3);
-    b.governor.setOperatorCanSee(false);
+    b.governor.setOperatorCanSee(false, 'ui');
     expect(b.governor.swingLimit).toBe(1);
     expect(b.governor.unlock('rate', 'ui', true).ok).toBe(false);
   });
@@ -454,7 +457,10 @@ describe('judge and approvals', () => {
     const t = tx([c('DAPC', A, 100)]);
     const v = b.governor.judge(t, b.clock.now());
     if (v.kind === 'refuse') throw new Error(v.reason);
-    expect(isApproved(v.approval, t)).toBe(true);
+    // The approval holds a frozen copy, and that copy is what goes out.
+    expect(isApproved(v.approval, v.approval.tx)).toBe(true);
+    expect(Object.isFrozen(v.approval.tx.frames[0]?.frame)).toBe(true);
+    expect(isApproved(v.approval, t)).toBe(false);
     expect(isApproved(v.approval, tx([c('DAPC', A, 100)]))).toBe(false);
     expect(isApproved({ tx: t }, t)).toBe(false);
     expect(isApproved(null, t)).toBe(false);
@@ -466,7 +472,9 @@ describe('the hardware target', () => {
     const h = makeBench({ target: 'hardware' });
     await h.ready();
     expect(h.governor.addressInfo(0)?.verified).toBe(true);
-    expect(h.governor.addressInfo(0)?.levelKnown).toBe(false);
+    // The scan built the shadow from read-backs: modelled, with the level read, colour still unknown.
+    expect(h.governor.addressInfo(0)?.modelled).toBe(true);
+    expect(h.governor.addressInfo(0)?.colourKnown).toBe(false);
     await h.clock.advance(3000);
     const first = await h.run(tx([c('DAPC', A, 120)]));
     expect(first.kind).toBe('done');
@@ -476,7 +484,7 @@ describe('the hardware target', () => {
     expect(reason(second)).toMatch(/hard step/);
   });
   it('broadcasts count a phantom driver while the inventory is stale', () => {
-    const g = new Governor({ target: 'hardware', shadow: Simulator.bench() });
+    const g = new Governor({ target: 'hardware', shadow: Simulator.bench(), connectedAt: -10_000 });
     g.observe(
       {
         frame: framesFor(c('OFF', broadcast))[0] ?? {

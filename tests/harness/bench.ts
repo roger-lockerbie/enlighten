@@ -119,7 +119,7 @@ export function makeBench(
   const sink = new SimSink(sim, clock, timing);
   const connect = () => {
     // On hardware the shadow is a separate model that knows nothing at connect (SPEC R1.1a).
-    const shadow = target === 'hardware' ? Simulator.bench() : sim;
+    const shadow = target === 'hardware' ? new Simulator([]) : sim;
     const governor = new Governor({
       target,
       shadow,
@@ -158,8 +158,8 @@ export function makeBench(
     return st.value as T;
   };
   const submit = (tx: Transaction) => conn.scheduler.submit(tx);
-  const asSubmit: Submit = async (tx): Promise<Submitted> =>
-    toSubmitted(await conn.scheduler.submit(tx));
+  const asSubmit: Submit = async (tx, priority): Promise<Submitted> =>
+    toSubmitted(await conn.scheduler.submit(tx, priority));
   const bench: Bench = {
     clock,
     sim,
@@ -196,7 +196,7 @@ export function makeBench(
 
 /** The bench's `Submit` for the profile and ceiling runners. */
 export function asSubmit(b: Bench): Submit {
-  return async (tx) => toSubmitted(await b.scheduler.submit(tx));
+  return async (tx, priority) => toSubmitted(await b.scheduler.submit(tx, priority));
 }
 
 function toSubmitted(r: TxResult): Submitted {

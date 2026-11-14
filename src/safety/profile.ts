@@ -14,7 +14,10 @@ export type Submitted =
   | { readonly kind: 'refused'; readonly reason: string; readonly retryAt?: number }
   | { readonly kind: 'dropped' | 'fault'; readonly reason: string };
 
-export type Submit = (tx: Transaction) => Promise<Submitted>;
+/** `urgent` goes to the head of the queue: only the OFF after an unlocked RESET uses it. */
+export type SubmitPriority = 'urgent' | 'interactive' | 'background';
+
+export type Submit = (tx: Transaction, priority?: SubmitPriority) => Promise<Submitted>;
 
 /**
  * Wrap a `Submit` so a transaction the rate guard refused is sent again at the time it gives, a few
@@ -26,9 +29,9 @@ export function patient(
   wait: (ms: number) => Promise<void>,
   now: () => number,
 ): Submit {
-  return async (tx) => {
+  return async (tx, priority) => {
     for (let i = 0; ; i++) {
-      const r = await submit(tx);
+      const r = await submit(tx, priority);
       if (r.kind !== 'refused' || i >= 5 || r.retryAt === undefined) return r;
       await wait(Math.max(1, r.retryAt - now()));
     }
@@ -63,6 +66,19 @@ async function send(
   if (r.kind !== 'done') throw new ProfileError(`${label}: ${r.reason}`);
 }
 
+/** True when anything answered the last frame: a reply or a framing error from several at once. */
+async function answered(
+  submit: Submit,
+  cmds: readonly Command[],
+  source: Source,
+  label: string,
+): Promise<boolean> {
+  const r = await submit(tx(cmds, source, label));
+  if (r.kind !== 'done') throw new ProfileError(`${label}: ${r.reason}`);
+  const last = r.results[r.results.length - 1];
+  return last?.kind === 'reply' || last?.kind === 'framing-error';
+}
+
 export class ProfileError extends Error {}
 
 const q = (id: string, a: Address): Command => ({ id, address: a });
@@ -70,17 +86,19 @@ const q = (id: string, a: Address): Command => ({ id, address: a });
 /** Read what the governor needs about one address. Returns false when nothing answers. */
 export async function scanAddress(
   n: number,
+  governor: Governor,
   submit: Submit,
   source: Source = 'internal',
 ): Promise<boolean> {
   const a = short(n);
-  const present = await ask(
+  // Two gear sharing an address answer at once: a framing error still means gear is there.
+  const present = await answered(
     submit,
     [q('QUERY_CONTROL_GEAR_PRESENT', a)],
     source,
     `scan A${String(n)}`,
   );
-  if (present === undefined) return false;
+  if (!present) return false;
   let dt = await ask(submit, [q('QUERY_DEVICE_TYPE', a)], source, 'device type');
   const types: number[] = [];
   if (dt === 255) {
@@ -95,6 +113,7 @@ export async function scanAddress(
     'QUERY_MIN_LEVEL',
     'QUERY_MAX_LEVEL',
     'QUERY_FADE_TIME_FADE_RATE',
+    'QUERY_EXTENDED_FADE_TIME',
     'QUERY_GROUPS_0_7',
     'QUERY_GROUPS_8_15',
   ];
@@ -103,6 +122,9 @@ export async function scanAddress(
     await ask(submit, [q('DT6_QUERY_DIMMING_CURVE', a)], source, 'dimming curve');
   if (types.includes(8))
     await ask(submit, [q('DT8_QUERY_COLOUR_TYPE_FEATURES', a)], source, 'colour type features');
+  // The level last, so the hardware shadow starts where the gear is.
+  await ask(submit, [q('QUERY_ACTUAL_LEVEL', a)], source, 'actual level');
+  governor.modelAddress(n);
   return true;
 }
 
@@ -113,14 +135,15 @@ export async function scan(
   addresses: readonly number[] = range64(),
 ): Promise<number[]> {
   const found: number[] = [];
-  for (const n of addresses) if (await scanAddress(n, submit)) found.push(n);
-  const unaddressed = await ask(
+  for (const n of addresses) if (await scanAddress(n, governor, submit)) found.push(n);
+  // Several unaddressed gear answer at once: a framing error means they are there (review H3).
+  const unaddressed = await answered(
     submit,
     [q('QUERY_MISSING_SHORT_ADDRESS', broadcast)],
     'internal',
     'unaddressed gear',
   );
-  governor.markInventoryFresh(unaddressed !== undefined);
+  governor.markInventoryFresh(unaddressed);
   return found;
 }
 
@@ -267,14 +290,20 @@ export async function resetAndRestore(
   submit: Submit,
   wait: (ms: number) => Promise<void>,
   source: Source,
+  emergencyOff: () => Promise<void>,
 ): Promise<Outcome & { profile?: ProfileResult }> {
   const a = short(n);
   const r = await submit(tx([q('RESET', a)], source, 'RESET'));
   if (r.kind !== 'done') return { ok: false, reason: r.reason };
   await wait(RESET_OFF_AFTER_MS);
-  const off = await submit(tx([q('OFF', a)], source, 'OFF after RESET'));
-  if (off.kind !== 'done') return { ok: false, reason: `OFF after RESET: ${off.reason}` };
-  await scanAddress(n, submit);
+  // The tape is at full output: the OFF goes ahead of anything queued, and if it fails, panic's
+  // ungated OFF follows (security review M2).
+  const off = await submit(tx([q('OFF', a)], source, 'OFF after RESET'), 'urgent');
+  if (off.kind !== 'done') {
+    await emergencyOff();
+    return { ok: false, reason: `OFF after RESET: ${off.reason}. Panic sent OFF instead.` };
+  }
+  await scanAddress(n, governor, submit);
   const profile = await applySafetyProfile(n, governor, submit);
   return profile.verified
     ? { ok: true, profile }

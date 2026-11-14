@@ -46,6 +46,8 @@ function windowViolations(ev: readonly Tagged[], span: number, max: number): num
 }
 
 export function swingLimit(n: number): number {
+  // Anything that is not a finite number is the default (security review H2).
+  if (!Number.isFinite(n)) return 1;
   return Math.max(1, Math.min(MAX_SWINGS, Math.floor(n)));
 }
 
@@ -122,10 +124,14 @@ export function violations(
   return out;
 }
 
-/** Add extra events (unknown state, phantom gear) to a scope and to the room. */
+/**
+ * Add extra events (unknown state, phantom gear) to a scope and to the room. Each covers one
+ * transaction, from `t` to `until`. It merges with an event the trace already has inside that span,
+ * so one transaction is not counted twice, and never with another transaction's.
+ */
 export function withExtra(
   m: ReadonlyMap<string, TraceEvents>,
-  extra: readonly { t: number; scope: string }[],
+  extra: readonly { t: number; scope: string; until?: number | undefined }[],
 ): Map<string, TraceEvents> {
   const out = new Map<string, TraceEvents>();
   for (const [k, v] of m)
@@ -134,7 +140,8 @@ export function withExtra(
     for (const scope of [e.scope, ROOM]) {
       const cur = out.get(scope) ?? { legs: [], hard: [], reversals: [] };
       const add = (xs: number[]) => {
-        if (!xs.some((x) => Math.abs(x - e.t) <= 5)) xs.push(e.t);
+        const until = e.until ?? e.t;
+        if (!xs.some((x) => x >= e.t - 5 && x <= until + 5)) xs.push(e.t);
         xs.sort((a, b) => a - b);
       };
       add(cur.legs);

@@ -419,6 +419,43 @@ export class Da5l {
     return [...out].sort((a, b) => a - b);
   }
 
+  /**
+   * Set what a scan read back, for a shadow that models real gear (ADR 0011). Values not given are
+   * left as they are. The level takes effect at once.
+   */
+  applyFacts(
+    f: {
+      minLevel?: number | undefined;
+      maxLevel?: number | undefined;
+      groups?: number | undefined;
+      fadeTime?: number | undefined;
+      fadeRate?: number | undefined;
+      extendedFade?: number | undefined;
+      linear?: boolean | undefined;
+      level?: number | undefined;
+    },
+    at: number,
+  ): void {
+    const s = this.s;
+    if (f.minLevel !== undefined) s.minLevel = f.minLevel;
+    if (f.maxLevel !== undefined) s.maxLevel = f.maxLevel;
+    if (f.groups !== undefined) s.groups = f.groups;
+    if (f.fadeTime !== undefined) s.fadeTime = f.fadeTime;
+    if (f.fadeRate !== undefined) s.fadeRate = f.fadeRate;
+    if (f.extendedFade !== undefined) s.extendedFade = f.extendedFade;
+    if (f.linear !== undefined) {
+      s.linearCurve = f.linear;
+      this.pushPlan(at, { linear: f.linear });
+    }
+    if (f.level !== undefined) {
+      const l = f.level;
+      this.pushPlan(at, {
+        level: { from: l, to: l, start: at, end: at, offAtEnd: false },
+        identifyUntil: -Infinity,
+      });
+    }
+  }
+
   /** The level the latest plan ends at: the target of a running fade, 0 for off. */
   finalLevel(): number {
     const p = this.planAt(Infinity);

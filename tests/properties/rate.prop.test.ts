@@ -6,7 +6,11 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { makeBench } from '../harness/bench.ts';
 import { rateProblems } from '../harness/checker.ts';
-import { play, steps, type GenOptions } from '../harness/gen.ts';
+import { play, steps, type GenOptions, type Step } from '../harness/gen.ts';
+import { broadcast, group } from '../../src/dali/address.ts';
+import { da5l } from '../../src/sim/profile.ts';
+import { Rig } from '../../src/sim/rig.ts';
+import { Simulator } from '../../src/sim/simulator.ts';
 
 const RUNS = Number(process.env['PROP_RUNS'] ?? 25);
 
@@ -54,4 +58,65 @@ describe('P-rate on the hardware target', () => {
       { numRuns: RUNS },
     );
   }, 240_000);
+});
+
+/** Real gear set up by hand before the app connects: addresses, groups, scenes, limits and levels the governor does not know. */
+const realBench = fc.record({
+  units: fc.uniqueArray(fc.integer({ min: 0, max: 3 }), { minLength: 1, maxLength: 3 }),
+  light: fc.array(fc.constantFrom<'C1' | 'C2' | 'C5'>('C1', 'C2', 'C5'), {
+    minLength: 3,
+    maxLength: 3,
+  }),
+  groups: fc.array(fc.integer({ min: 0, max: 15 }), { minLength: 3, maxLength: 3 }),
+  scene: fc.array(fc.integer({ min: 0, max: 254 }), { minLength: 3, maxLength: 3 }),
+  min: fc.array(fc.integer({ min: 85, max: 160 }), { minLength: 3, maxLength: 3 }),
+  level: fc.array(fc.integer({ min: 0, max: 254 }), { minLength: 3, maxLength: 3 }),
+  fade: fc.array(fc.integer({ min: 0, max: 6 }), { minLength: 3, maxLength: 3 }),
+});
+
+describe('P-rate on hardware the governor has never seen', () => {
+  it('holds when the real gear differs from anything the shadow starts with', async () => {
+    await fc.assert(
+      fc.asyncProperty(realBench, steps({ fades: true }), async (cfg, stream) => {
+        const real = Simulator.of(
+          cfg.units.map((n, i) => ({
+            id: `R${String(n)}`,
+            profile: da5l(cfg.light[i] ?? 'C2'),
+            opts: { shortAddress: n },
+          })),
+        );
+        const r = new Rig(real, 0);
+        cfg.units.forEach((n, i) => {
+          for (let g = 0; g < 4; g++)
+            if (((cfg.groups[i] ?? 0) >> g) & 1) r.to('ADD_TO_GROUP', n, g);
+          r.set('SET_SCENE', n, cfg.scene[i] ?? 0, 0);
+          r.set('SET_SCENE', n, cfg.scene[i] ?? 0, 3);
+          r.set('SET_MIN_LEVEL', n, cfg.min[i] ?? 85);
+          r.set('SET_FADE_TIME', n, cfg.fade[i] ?? 0);
+          r.to('DAPC', n, cfg.level[i] ?? 0);
+        });
+        const b = makeBench({ sim: real, target: 'hardware', start: r.t + 100 });
+        const extra: Step[] = [
+          {
+            kind: 'tx',
+            dt: 0,
+            source: 'script',
+            cmds: [{ id: 'GO_TO_SCENE', address: group(3), value: 3 }],
+          },
+          {
+            kind: 'tx',
+            dt: 50,
+            source: 'script',
+            cmds: [{ id: 'GO_TO_SCENE', address: broadcast, value: 0 }],
+          },
+          { kind: 'tx', dt: 50, source: 'script', cmds: [{ id: 'OFF', address: group(1) }] },
+        ];
+        // The trace is checked from the connect: what the gear did before is not the app's doing.
+        await b.ready();
+        const { rec } = await play(b, [...extra, ...stream]);
+        expect(rateProblems(rec, 1)).toEqual([]);
+      }),
+      { numRuns: RUNS },
+    );
+  }, 600_000);
 });

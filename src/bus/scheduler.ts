@@ -40,7 +40,8 @@ export interface Gate {
   latch(): void;
 }
 
-export type Priority = 'interactive' | 'background';
+/** `urgent` goes to the head of the queue (the OFF after an unlocked RESET). */
+export type Priority = 'urgent' | 'interactive' | 'background';
 
 export type TxResult =
   | {
@@ -52,6 +53,9 @@ export type TxResult =
   | { readonly kind: 'refused'; readonly reason: string; readonly retryAt?: number }
   | { readonly kind: 'dropped'; readonly reason: string; readonly results: readonly SendResult[] }
   | { readonly kind: 'fault'; readonly reason: string; readonly results: readonly SendResult[] };
+
+/** The longest panic waits for a frame already on the wire: a send-twice pair with its reply window. */
+export const PANIC_WAIT_MS = 100;
 
 /** Panic's transaction: TERMINATE, then broadcast OFF (SPEC S4.3). */
 export const PANIC_FRAMES: readonly TxFrame[] = framesForAll([
@@ -97,6 +101,10 @@ export class Scheduler {
   private wake: Cancel | undefined;
   private current: { abort: () => void } | undefined;
   private panicking: Promise<void> | undefined;
+  /** Transactions started, to tag their frames for the governor. */
+  private txCount = 0;
+  /** How many times panic has run. */
+  private panics = 0;
   /** The frame on the wire, if any. Panic waits for it and nothing else. */
   private inFlight: Promise<unknown> | undefined;
   private readonly busyLog: { from: number; to: number }[] = [];
@@ -116,7 +124,8 @@ export class Scheduler {
   /** Queue a transaction. It is judged when it reaches the head of the queue. */
   submit(tx: Transaction, priority: Priority = 'interactive'): Promise<TxResult> {
     return new Promise((resolve) => {
-      (priority === 'interactive' ? this.interactive : this.background).push({ tx, resolve });
+      if (priority === 'urgent') this.interactive.unshift({ tx, resolve });
+      else (priority === 'interactive' ? this.interactive : this.background).push({ tx, resolve });
       this.pump();
     });
   }
@@ -178,7 +187,11 @@ export class Scheduler {
       });
       return;
     }
-    const tx = verdict.kind === 'clamp' ? verdict.tx : q.tx;
+    // Send exactly what was approved: the governor's frozen copy (security review M1).
+    const tx = verdict.approval.tx;
+    // A panic during this transaction drops the rest of it, however its timers fall (review L1).
+    const epoch = this.panics;
+    const txId = ++this.txCount;
     const times = planFrames(tx.frames, start, this.timing);
     const results: SendResult[] = [];
     for (let k = 0; k < tx.frames.length; k++) {
@@ -189,7 +202,7 @@ export class Scheduler {
       const go = await this.waitUntil(
         Math.max(at.wireStart, this.freeAt + settleMs(f, k === 0, this.timing)),
       );
-      if (!go || this.panicking !== undefined) {
+      if (!go || this.panics !== epoch) {
         q.resolve({ kind: 'dropped', reason: 'Panic dropped this transaction.', results });
         return;
       }
@@ -203,7 +216,7 @@ export class Scheduler {
       this.freeAt = end;
       this.record(wireStart - settle, end);
       const deliverAt = wireStart + FORWARD_FRAME_MS;
-      this.gate.observe({ frame: f, at: deliverAt, source: tx.source }, result);
+      this.gate.observe({ frame: f, at: deliverAt, source: tx.source, tx: txId }, result);
       this.onFrame?.({ frame: f, source: tx.source, wireStart, deliverAt, end, settle, result });
       results.push(result);
       if (result.kind === 'fault' || result.kind === 'refused') {
@@ -225,6 +238,7 @@ export class Scheduler {
    */
   panic(): Promise<void> {
     if (this.panicking !== undefined) return this.panicking;
+    this.panics++;
     this.gate.latch();
     this.wake?.();
     this.current?.abort();
@@ -239,8 +253,15 @@ export class Scheduler {
   }
 
   private async sendPanic(): Promise<void> {
-    // Let a frame already on the wire finish (the sink resolves when the bus is free).
-    if (this.inFlight !== undefined) await this.inFlight.catch(() => undefined);
+    // Let a frame already on the wire finish (the sink resolves when the bus is free), but do not wait
+    // on a transport that has stopped answering (review L1).
+    const inFlight = this.inFlight;
+    if (inFlight !== undefined) {
+      await Promise.race([
+        inFlight.catch(() => undefined),
+        this.waitFor(this.clock.now() + PANIC_WAIT_MS),
+      ]);
+    }
     for (let k = 0; k < PANIC_FRAMES.length; k++) {
       const f = PANIC_FRAMES[k];
       if (f === undefined) continue;

@@ -18,6 +18,8 @@ const restrictedGlobals = [
     'cancelAnimationFrame',
     'requestIdleCallback',
     'performance',
+    'Date',
+    'queueMicrotask',
   ].map((name) => ({ name, message: timeMessage })),
   ...[
     'window',
@@ -36,6 +38,9 @@ const restrictedGlobals = [
     'HTMLElement',
     'Element',
     'Node',
+    'MessageChannel',
+    'BroadcastChannel',
+    'crypto',
   ].map((name) => ({ name, message: domMessage })),
 ];
 

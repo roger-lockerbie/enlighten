@@ -71,9 +71,12 @@ const B = short(1);
 const address: fc.Arbitrary<Address> = fc.constantFrom(
   A,
   B,
+  short(2),
+  short(3),
   broadcast,
   group(0),
   group(1),
+  group(3),
   short(5),
   unaddressed,
 );
@@ -321,7 +324,9 @@ export async function play(
         break;
       case 'reset': {
         const before = b.sink.log.length;
-        await b.drive(resetAndRestore(s.n, b.governor, submit, wait, 'console'));
+        await b.drive(
+          resetAndRestore(s.n, b.governor, submit, wait, 'console', () => b.scheduler.panic()),
+        );
         for (const l of b.sink.log.slice(before)) {
           if (decode(l.frame.frame)?.id === 'RESET')
             rec.resets.push({ t: l.at, id: s.n === 0 ? 'A' : 'B' });
