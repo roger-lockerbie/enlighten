@@ -1,13 +1,13 @@
 /**
- * The bench for tests: the simulator, the governor and the scheduler on a virtual clock, with a sink
- * that plays the part of the Stage 4 router and SimTransport.
+ * The bench for tests: the simulator, the governor, the scheduler, the router and `SimTransport` on a
+ * virtual clock.
  */
 import { flushMicrotasks, VirtualClock } from '../../src/bus/clock.ts';
 import { Scheduler, type FrameSink, type TxResult } from '../../src/bus/scheduler.ts';
-import { FORWARD_FRAME_MS, wireMs, withFloors, type BusTiming } from '../../src/bus/timing.ts';
-import { frameEquals } from '../../src/dali/codec.ts';
+import { withFloors, type BusTiming } from '../../src/bus/timing.ts';
 import type { TxFrame } from '../../src/dali/sequences.ts';
-import { Governor, isApproved } from '../../src/safety/governor.ts';
+import { Router } from '../../src/engine/router.ts';
+import { Governor } from '../../src/safety/governor.ts';
 import {
   applySafetyProfile,
   patient,
@@ -17,69 +17,48 @@ import {
 } from '../../src/safety/profile.ts';
 import type { Approved, SendResult, Target, Transaction } from '../../src/safety/types.ts';
 import { Simulator } from '../../src/sim/simulator.ts';
+import { SimTransport, type SimLog } from '../../src/transport/sim.ts';
 
-export interface SinkLog {
-  readonly frame: TxFrame;
-  readonly at: number;
-  readonly panic: boolean;
-}
-
-export class SimSink implements FrameSink {
-  readonly log: SinkLog[] = [];
-  /** Return true to make a frame end in a transport fault. `reached` says whether it still hit the bus. */
-  fault: ((f: TxFrame) => { reached: boolean } | undefined) | undefined;
-  /** Set when a frame arrived without a valid approval. Tests assert it stays false. */
+/**
+ * The bench's sink: the real router over a `SimTransport`, with the transport's test hooks in reach.
+ * A frame the router refuses sets `unapproved`, which tests assert stays false.
+ */
+export class BenchSink implements FrameSink {
   unapproved = false;
-  /** Called as each frame starts on the wire, before the bus sees it. */
-  onSend: ((frame: TxFrame) => void) | undefined;
+  readonly transport: SimTransport;
+  private readonly router: () => Router;
 
-  constructor(
-    private readonly sim: Simulator,
-    private readonly clock: VirtualClock,
-    private readonly timing: BusTiming,
-  ) {}
+  constructor(transport: SimTransport, router: () => Router) {
+    this.transport = transport;
+    this.router = router;
+  }
+
+  get log(): readonly SimLog[] {
+    return this.transport.log;
+  }
+
+  get fault(): SimTransport['fault'] {
+    return this.transport.fault;
+  }
+
+  set fault(f: SimTransport['fault']) {
+    this.transport.fault = f;
+  }
+
+  get onSend(): SimTransport['onSend'] {
+    return this.transport.onSend;
+  }
+
+  set onSend(f: SimTransport['onSend']) {
+    this.transport.onSend = f;
+  }
 
   send(frame: TxFrame, approval: Approved): Promise<SendResult> {
-    if (
-      !isApproved(approval, approval.tx) ||
-      !approval.tx.frames.some((f) => f === frame || frameEquals(f.frame, frame.frame))
-    ) {
-      this.unapproved = true;
-    }
-    return this.transmit(frame, false);
+    return this.router().send(frame, approval);
   }
 
   sendPanic(frame: TxFrame): Promise<SendResult> {
-    return this.transmit(frame, true);
-  }
-
-  private transmit(frame: TxFrame, panic: boolean): Promise<SendResult> {
-    this.onSend?.(frame);
-    const start = this.clock.now();
-    const deliverAt = start + FORWARD_FRAME_MS;
-    const end = start + wireMs(frame, this.timing);
-    const fault = panic ? undefined : this.fault?.(frame);
-    return new Promise((resolve) => {
-      let result: SendResult = { kind: 'sent' };
-      this.clock.at(deliverAt, () => {
-        if (fault !== undefined && !fault.reached) return;
-        this.log.push({ frame, at: deliverAt, panic });
-        const r = this.sim.send(frame, deliverAt, this.timing.settleLaterMs + FORWARD_FRAME_MS);
-        if (frame.expectReply) {
-          result =
-            r.kind === 'value'
-              ? { kind: 'reply', byte: r.byte }
-              : r.kind === 'collision'
-                ? { kind: 'framing-error' }
-                : { kind: 'no-reply' };
-        }
-      });
-      this.clock.at(end, () => {
-        resolve(
-          fault !== undefined ? { kind: 'fault', reason: 'the transport did not answer' } : result,
-        );
-      });
-    });
+    return this.router().sendPanic(frame);
   }
 }
 
@@ -90,7 +69,7 @@ export interface Bench {
   readonly sim: Simulator;
   readonly governor: Governor;
   readonly scheduler: Scheduler;
-  readonly sink: SimSink;
+  readonly sink: BenchSink;
   readonly timing: BusTiming;
   submit(tx: Transaction): Promise<TxResult>;
   /** Run the clock until a promise settles. */
@@ -116,8 +95,21 @@ export function makeBench(
   const sim = opts.sim ?? Simulator.bench();
   const timing = withFloors(opts.timing ?? {});
   const target = opts.target ?? 'simulator';
-  const sink = new SimSink(sim, clock, timing);
+  const transport = new SimTransport(sim, clock, timing);
+  // A new router per connection, as the engine makes one per hardware connect.
+  let router: Router | undefined;
+  const sink = new BenchSink(transport, () => {
+    if (router === undefined) throw new Error('The bench has no connection.');
+    return router;
+  });
   const connect = () => {
+    router = new Router({
+      transport,
+      clock,
+      onRefused: () => {
+        sink.unapproved = true;
+      },
+    });
     // On hardware the shadow is a separate model that knows nothing at connect (SPEC R1.1a).
     const shadow = target === 'hardware' ? new Simulator([]) : sim;
     const governor = new Governor({
