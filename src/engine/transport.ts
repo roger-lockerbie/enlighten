@@ -22,3 +22,15 @@ export interface Transport {
    */
   sendPanic(frame: TxFrame): Promise<SendResult>;
 }
+
+/** What the hardware server said about the hasseb. */
+export interface HardwareInfo {
+  readonly fwMajor: number;
+  readonly fwMinor: number;
+  readonly attached: boolean;
+}
+
+/** A transport to real hardware: the server today, WebHID perhaps after hardware day (ADR 0003). */
+export interface HardwareTransport extends Transport {
+  info(): HardwareInfo | undefined;
+}
