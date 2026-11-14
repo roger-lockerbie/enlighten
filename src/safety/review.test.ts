@@ -190,6 +190,22 @@ describe('L2 and L3', () => {
       b.clock.now(),
     );
     expect(v.kind === 'refuse' ? v.reason : '').toMatch(/on their own/);
+    // So do the expert commands that can raise output past the ceiling.
+    b.governor.unlock('expert', 'console', true);
+    const dtrs = [c('DTR0', undefined, 1), c('DTR1', undefined, 1), c('DTR2', undefined, 1)];
+    for (const [id, a] of [
+      ['DT6_SELECT_DIMMING_CURVE', short(0)],
+      ['DT8_STORE_TC_LIMIT', short(1)],
+      ['DT8_STORE_GEAR_FEATURES', short(1)],
+    ] as const) {
+      const w = b.governor.judge(
+        { frames: framesForAll([...dtrs, c(id, a), c('DAPC', short(0), 100)]), source: 'console' },
+        b.clock.now() + 5000,
+      );
+      expect(w.kind === 'refuse' ? w.reason : '').toBe(
+        'Send RESET and the other unlocked commands on their own.',
+      );
+    }
   });
   it('a hardware governor needs the time of the connect', async () => {
     const { Governor } = await import('./governor.ts');

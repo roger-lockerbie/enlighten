@@ -73,6 +73,23 @@ describe('replies to more than one address', () => {
   });
 });
 
+describe('the ceiling measure inside a fade', () => {
+  it('finds a peak between breakpoints, where the level fades up as the colour mix fades down', async () => {
+    const b = makeBench();
+    await b.ready();
+    await b.clock.advance(3000);
+    const r = new Rig(b.sim, b.clock.now());
+    r.run(rgbwafCommands(B, [254, 254, 254, 254, 254, 254]));
+    r.to('DAPC', B, 158);
+    r.set('SET_FADE_TIME', 1, 7);
+    r.wait(100);
+    const at = r.t;
+    // At every breakpoint the measure is at most 0.92 of the ceiling. Part way through it is 1.07.
+    r.run([...rgbwafCommands(B, [0, 0, 0, 0, 0, 0]), { id: 'DAPC', address: B, value: 220 }]);
+    expect(b.governor.overCeiling(1, at)).toBe(true);
+  });
+});
+
 describe('the ceiling setting', () => {
   it('takes whole arc levels from 1 to 254 only', () => {
     const g = bare();
