@@ -358,13 +358,18 @@ Server to client:
 | 0x81 | WELCOME | Protocol version, hasseb firmware major and minor, whether a hasseb is attached, and a fresh session token (32 bytes) |
 | 0x82 | RESULT  | Sequence (2 bytes), status (1 byte), data (1 byte)                                                                    |
 | 0x83 | DEVICE  | 1 when the hasseb is attached, 0 when it is not                                                                       |
+| 0x84 | STOPPED | TERMINATE's status, then OFF's status (RESULT status codes). Sent after every stop while the client is connected      |
 | 0x8F | CLOSE   | A reason code, then the server closes                                                                                 |
+
+Encoding: integers are big-endian. Message lengths are HELLO 34, SEND 6, PING 1, PANIC 1, WELCOME 37, RESULT 5, DEVICE 2, STOPPED 3 and CLOSE 2 bytes. The protocol version is 1. The client picks the SEND sequence (0 to 65535, wrapping) and RESULT echoes it. RESULT data is 0 unless the status is 2. A SEND with any flag bit but bits 0 and 1 set is a protocol error. The token is 32 random bytes: the printed URL carries it as 64 lowercase hex characters, and HELLO and WELCOME carry the raw bytes. WELCOME gives firmware 0.0 when no hasseb is attached.
+
+CLOSE reasons: 1 silence for 3 seconds, 2 protocol error (wrong length, unknown type, bad flags, wrong version, a second HELLO), 3 the server is stopping, 4 not authorised (a bad or reused token, or no HELLO within 1 second), 5 another client holds the session.
 
 RESULT status: 0 sent with no reply expected, 1 no reply from gear, 2 reply (data is the byte), 3 framing error, 4 the hasseb did not answer in time, 5 refused (flags did not match the server's own decoding, or the frame is not a known command), 6 dropped (queued when a stop happened, and not sent).
 
 The server sends one frame at a time and waits for its report or a timeout before the next. It accepts at most 8 queued SEND messages and refuses more. The hasseb timeout is 250 ms.
 
-The stop is the same in every case: drop the queue, answering each queued SEND with status 6, then send TERMINATE and broadcast OFF. It happens on PANIC, on close, on 3 seconds without a message, and on exit (SIGINT, SIGTERM and SIGHUP). After a stop for silence the server sends CLOSE with the reason and closes. The app keeps sending PING while it is latched after panic.
+The stop is the same in every case: drop the queue, answering each queued SEND with status 6, let the frame already on the hasseb finish (its report or the timeout) so frames stay in order, then send TERMINATE and broadcast OFF, then STOPPED. After a PANIC the session stays open. It happens on PANIC, on close, on 3 seconds without a message, and on exit (SIGINT, SIGTERM and SIGHUP). After a stop for silence the server sends CLOSE with the reason and closes. The app keeps sending PING while it is latched after panic.
 
 The token in the printed URL works once. WELCOME carries a fresh token for reconnects in the same page, held in the bus worker's memory, and the server refuses the URL token from then on. A reload needs the server's URL printed again, which the server does on request from its terminal.
 
