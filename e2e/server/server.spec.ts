@@ -35,7 +35,11 @@ test('refuses a page from another origin', async ({ page }) => {
     await expect(page).toHaveTitle('refused');
     expect(server.lines.some((l) => l.includes('client connected'))).toBe(false);
   } finally {
-    await new Promise<void>((r) => other.close(() => { r(); }));
+    await new Promise<void>((r) =>
+      other.close(() => {
+        r();
+      }),
+    );
   }
 });
 
