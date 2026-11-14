@@ -91,6 +91,7 @@ export async function scanAddress(
   source: Source = 'internal',
 ): Promise<boolean> {
   const a = short(n);
+  governor.beginScan(n);
   // Two gear sharing an address answer at once: a framing error still means gear is there.
   const present = await answered(
     submit,
@@ -125,7 +126,8 @@ export async function scanAddress(
   for (let k = 0; k < 16; k++) {
     await ask(submit, [{ id: 'QUERY_SCENE_LEVEL', address: a, value: k }], source, 'scene level');
   }
-  // The level last, so the hardware shadow starts where the gear is.
+  // Whether a fade is running, then the level last, so the hardware shadow starts where the gear is.
+  await ask(submit, [q('QUERY_STATUS', a)], source, 'status');
   await ask(submit, [q('QUERY_ACTUAL_LEVEL', a)], source, 'actual level');
   governor.modelAddress(n);
   return true;

@@ -198,3 +198,33 @@ describe('L2 and L3', () => {
     );
   });
 });
+
+describe('N1 (re-review): writes during a rescan', () => {
+  it('a SET SCENE during a rescan leaves the address unmodelled, so the scene cannot be strobed', async () => {
+    const real = Simulator.of([{ id: 'X', profile: da5l('C1'), opts: { shortAddress: 0 } }]);
+    const b = makeBench({ sim: real, target: 'hardware' });
+    await b.ready();
+    await b.clock.advance(3000);
+    const { scan } = await import('./profile.ts');
+    // The write lands part way through the scan's queries.
+    const write = new Promise((resolve) => {
+      b.clock.at(b.clock.now() + 400, () => {
+        resolve(b.submit(tx([c('DTR0', undefined, 220), c('SET_SCENE', short(0), 3)])));
+      });
+    });
+    await b.drive(Promise.all([scan(b.governor, asSubmit(b), [0]), write]));
+    expect(b.governor.addressInfo(0)?.modelled).toBe(false);
+    await b.clock.advance(3000);
+    const sent = await strobe(b, tx([c('GO_TO_SCENE', short(0), 3)]), tx([c('OFF', short(0))]), 91);
+    expect(sent).toBeLessThanOrEqual(3);
+  });
+  it('a scan of gear that is fading does not model it', async () => {
+    const real = Simulator.of([{ id: 'X', profile: da5l('C1'), opts: { shortAddress: 0 } }]);
+    const r = new Rig(real, 0);
+    r.set('SET_FADE_TIME', 0, 15);
+    r.to('DAPC', 0, 200);
+    const b = makeBench({ sim: real, target: 'hardware', start: r.t + 100 });
+    await b.ready();
+    expect(b.governor.addressInfo(0)?.modelled).toBe(false);
+  });
+});

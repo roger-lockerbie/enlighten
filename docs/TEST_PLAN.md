@@ -161,6 +161,7 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Store a warm power-on colour, power-cycle, raise the level. Record the colour.
 - [ ] Lower MAX LEVEL below the present level. Record whether the output drops by itself.
 - [ ] Panic from the app, from Escape and by closing the tab. Time each to dark.
+- [ ] Panic while a send-twice frame with a reply is in flight: check the hasseb keeps frames in order when panic stops waiting after 100 ms (`PANIC_WAIT_MS`).
 - [ ] Stop the server with Ctrl-C. The tapes go off.
 
 ### Part 5: behaviour (`dali.md` section 16)

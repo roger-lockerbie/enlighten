@@ -42,7 +42,8 @@ export type Step =
   | { readonly kind: 'lower'; readonly dt: number; readonly arc: number }
   | { readonly kind: 'panic'; readonly dt: number }
   | { readonly kind: 'resume'; readonly dt: number }
-  | { readonly kind: 'reconnect'; readonly dt: number };
+  | { readonly kind: 'reconnect'; readonly dt: number }
+  | { readonly kind: 'rescanRace'; readonly dt: number; readonly cmds: readonly Command[] };
 
 export interface GenOptions {
   /** Include RESET under the unlock. */
@@ -251,6 +252,12 @@ export function steps(o: GenOptions = {}, max = 30): fc.Arbitrary<Step[]> {
         .map(([d, reached]) => ({ kind: 'fault', dt: d, reached })),
     },
     { weight: 1, arbitrary: dt.map((d) => ({ kind: 'rescan', dt: d })) },
+    {
+      weight: 1,
+      arbitrary: fc
+        .tuple(dt, commands(o))
+        .map(([d, cmds]) => ({ kind: 'rescanRace', dt: d, cmds })),
+    },
   ];
   if (o.reset === true)
     step.push({
@@ -346,6 +353,12 @@ export async function play(
       case 'resume':
         b.governor.resume('ui');
         break;
+      case 'rescanRace': {
+        // A rescan with other work going on at the same time.
+        const write = b.submit({ frames: framesForAll(s.cmds), source: 'script' });
+        await b.drive(Promise.all([scan(b.governor, submit, [0, 1]).catch(() => []), write]));
+        break;
+      }
       case 'reconnect':
         b.reconnect();
         // A fault mid-scan leaves the gear unverified; the stream carries on.

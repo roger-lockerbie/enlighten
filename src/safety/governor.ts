@@ -46,6 +46,8 @@ import {
  * after hardware day, every level or colour command on hardware counts as an instant step (SPEC S3.7).
  */
 export const FADE_BEHAVIOUR_CONFIRMED = false;
+// When this becomes true, SPEC S3.7 still needs the address's fade time read back this session
+// (`AddressInfo.fadeReadBack`) before a command to it counts as faded. That check comes with the change.
 
 /** Recalls of gear memory that a scan does not read: on hardware their result is unknown. */
 const RECALLS_MEMORY: ReadonlySet<string> = new Set(['GO_TO_LAST_ACTIVE_LEVEL']);
@@ -125,6 +127,10 @@ export interface AddressInfo {
   level?: number | undefined;
   /** The 16 scene levels read back. */
   scenes?: (number | undefined)[] | undefined;
+  /** A command other than a query reached the gear since its scan began, so read-backs may be stale. */
+  dirty?: boolean | undefined;
+  /** QUERY STATUS said a fade was running when last read. */
+  fading?: boolean | undefined;
   /** On hardware: whether the shadow's last active level matches the gear's (a level command this session set it). */
   lastActiveKnown?: boolean | undefined;
 }
@@ -389,7 +395,9 @@ export class Governor {
    * Judge a transaction that would start once the bus is free at `now`. Returns allow, clamp (the same
    * transaction with lower levels) or refuse with a reason and, where waiting helps, a time to retry.
    */
-  judge(tx: Transaction, now: number): Verdict {
+  judge(input: Transaction, now: number): Verdict {
+    // Judge a frozen copy, so what is judged is exactly what is approved and sent (review L2).
+    const tx = freeze(input);
     if (this.latched) return { kind: 'refuse', reason: 'Panic is latched. Choose Resume first.' };
     if (tx.frames.length === 0) return { kind: 'refuse', reason: 'The transaction is empty.' };
     if (tx.source === 'panic')
@@ -868,10 +876,22 @@ export class Governor {
    * C1). On hardware the shadow starts empty. An address is modelled only once every value the
    * prediction depends on has been read.
    */
+  /** A scan of this address starts: read-backs from now on describe the gear until something is sent to it. */
+  beginScan(n: number): void {
+    const i = this.addr(n);
+    i.dirty = false;
+    i.fading = undefined;
+  }
+
   modelAddress(n: number): Outcome {
     if (this.target !== 'hardware') return OK;
     const i = this.addr(n);
     i.modelled = false;
+    // Read-backs taken before a later write, or during a fade, would seed a wrong model (review N1).
+    if (i.dirty === true)
+      return no('Something was sent to the gear during the scan. Scan it again.');
+    if (i.fading === true)
+      return no('The gear was fading during the scan. Scan it again when it settles.');
     const types = i.deviceTypes;
     if (i.present !== true || types === undefined) return no('The gear has not answered a scan.');
     const needs = [
@@ -1090,6 +1110,8 @@ export class Governor {
 
     for (const n of targets) {
       const i = this.addr(n);
+      // Anything but a query can change what a scan read, so a scan in progress cannot model it.
+      if (sp.reply === 'none') i.dirty = true;
       if (fault) {
         i.verified = false;
         i.modelled = this.target === 'simulator';
@@ -1123,6 +1145,14 @@ export class Governor {
         case 'SET_FADE_RATE':
         case 'SET_EXTENDED_FADE_TIME':
           i.fadeReadBack = false;
+          // The value is known again only when read back.
+          i.fadeTime = undefined;
+          i.fadeRate = undefined;
+          i.extendedFade = undefined;
+          break;
+        case 'SET_SCENE':
+        case 'REMOVE_FROM_SCENE':
+          if (i.scenes !== undefined) i.scenes[cmd.value ?? 0] = undefined;
           break;
         case 'ADD_TO_GROUP':
           if (i.groups !== undefined) i.groups |= 1 << (cmd.value ?? 0);
@@ -1220,6 +1250,9 @@ export class Governor {
         break;
       case 'QUERY_EXTENDED_FADE_TIME':
         if (v !== undefined) i.extendedFade = v;
+        break;
+      case 'QUERY_STATUS':
+        if (v !== undefined) i.fading = (v & 0x10) !== 0;
         break;
       case 'QUERY_SCENE_LEVEL': {
         const scenes = i.scenes ?? Array<number | undefined>(16).fill(undefined);
