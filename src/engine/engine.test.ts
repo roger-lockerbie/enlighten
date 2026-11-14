@@ -533,9 +533,10 @@ describe('the hardware check', () => {
     await drive(engine.setTarget('hardware', 'ui'));
     await settle();
     expect((await engine.runCheck('p2-store-tc-limit', 'ui')).ok).toBe(false);
-    expect((await engine.runCheck('p2-store-tc-limit', 'ui', { confirmed: true })).reason).toBe(
-      'This step needs the expert unlock.',
-    );
+    expect(await engine.runCheck('p2-store-tc-limit', 'ui', { confirmed: true })).toEqual({
+      ok: false,
+      reason: 'This step needs the expert unlock.',
+    });
     engine.unlock('expert', 'ui', true);
     expect(await drive(engine.runCheck('p2-store-tc-limit', 'ui', { confirmed: true }))).toEqual({
       ok: true,
