@@ -433,6 +433,40 @@ describe('the fingerprint', () => {
 });
 
 describe('the ceiling measure', () => {
+  const fullB = async () => {
+    const b = makeBench();
+    await b.ready();
+    await b.run(tx(rgbwafCommands(B, [254, 254, 254, 254, 254, 255])));
+    await b.clock.advance(3000);
+    return b;
+  };
+  it('lowers only the DAPCs to gear that is over, each to what its own mix allows', async () => {
+    const b = await fullB();
+    const v = b.governor.judge(tx([c('DAPC', A, 200), c('DAPC', B, 200)]), b.clock.now());
+    expect(v.kind).toBe('clamp');
+    const levels = v.kind === 'clamp' ? v.tx.frames.map((f) => f.frame.b) : [];
+    expect(levels[0]).toBe(200);
+    expect(levels[1]).toBeLessThan(200);
+  });
+  it('leaves a DAPC 255 alone, and refuses when only it could bring a mix under the ceiling', async () => {
+    const b = makeBench();
+    await b.ready();
+    await b.run(tx(rgbwafCommands(B, [30, 0, 0, 0, 0, 0])));
+    await b.run(tx([c('DAPC', B, 200)]));
+    await b.clock.advance(3000);
+    const full = rgbwafCommands(B, [254, 254, 254, 254, 254, 255]);
+    expect(reason(b.governor.judge(tx([...full, c('DAPC', B, 255)]), b.clock.now()))).toBe(
+      'This would take the light above the ceiling.',
+    );
+  });
+  it('does not lower a DAPC to off when even level 1 is over the ceiling', () => {
+    // No colour read back: every channel counts as full, so level 1 measures 7 times the ceiling.
+    const g = bare();
+    expect(g.setCeiling(1, 'ui')).toEqual(OK);
+    expect(reason(g.judge(tx([c('DAPC', B, 100)]), 5000))).toBe(
+      'This would take the light above the ceiling.',
+    );
+  });
   it('a pending Tc on gear with Tc and RGB is not judged as an RGBWAF mix', async () => {
     const real = Simulator.of([{ id: 'X', profile: da5l('C5', 'tc'), opts: { shortAddress: 0 } }]);
     const b = makeBench({ sim: real });

@@ -118,6 +118,11 @@ const fp = (g: Governor) =>
   };
 
 describe('events for gear in an unknown state', () => {
+  it('one for an address the governor has heard nothing from', () => {
+    expect(inner(hw()).unknownEvents(c('DAPC', short(5), 100), 5, () => true)).toEqual([
+      { t: 5, scope: 'a5' },
+    ]);
+  });
   it('none in the Simulator target', () => {
     expect(inner(sim()).unknownEvents(c('DAPC', broadcast, 1), 5, () => false)).toEqual([]);
   });
