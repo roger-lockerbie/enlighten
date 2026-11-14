@@ -140,13 +140,12 @@ describe('lowering the ceiling', () => {
     await fadeTo(b, 100);
     await b.clock.advance(1000);
     expect(b.sim.unit('A')?.gear.levelAt(b.clock.now())).toBeGreaterThan(150);
-    // Only the hold is checked here. The fade down is still above the new ceiling when the colour
-    // check runs, so an OFF follows it (logged in docs/STATUS.md as a question).
-    expect(
-      levelCommands((await lower(b, 150)).log, 0).filter(
-        (x) => x[0] === 'hold under the new ceiling',
-      ),
-    ).toEqual([['hold under the new ceiling', 'profile', 'DAPC', 100]]);
+    // The fade down is still above the new ceiling when the colour check runs, so an OFF follows
+    // the hold. The owner chose to keep this: off is the safe choice (docs/STATUS.md).
+    expect(levelCommands((await lower(b, 150)).log, 0)).toEqual([
+      ['hold under the new ceiling', 'profile', 'DAPC', 100],
+      ['off: the colour mix cannot fit under the new ceiling', 'profile', 'OFF', undefined],
+    ]);
     b = await bench(unpulled());
     await b.run({ frames: framesForAll([{ id: 'DAPC', address: A, value: 100 }]), source: 'ui' });
     await b.clock.advance(3000);
