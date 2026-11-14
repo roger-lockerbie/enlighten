@@ -32,8 +32,11 @@ export interface CheckContext {
   applyProfile(n: number): Promise<ProfileResult>;
   /** Panic, as the button does. */
   panic(): Promise<void>;
-  /** Resolves when a frame matching `match` is handed to the transport on this connection. */
-  whenStarted(match: (f: TxFrame) => boolean): Promise<void>;
+  /**
+   * Resolves when a frame matching `match` is handed to the transport on this connection. Call
+   * `cancel` when no longer waiting, so the listener does not outlive the step.
+   */
+  whenStarted(match: (f: TxFrame) => boolean): { readonly started: Promise<void>; cancel(): void };
 }
 
 export interface CheckStep {
@@ -285,9 +288,13 @@ export const CHECK_STEPS: readonly CheckStep[] = [
       const after = await colourValue(ctx.submit, n, 128, true, ctx.source);
       await store(before);
       const restored = await colourValue(ctx.submit, n, 128, true, ctx.source);
+      // The warmest limit too: a coolest limit at the warmest cannot move warmer, which would read
+      // as a store that did not take.
+      const warmest = await colourValue(ctx.submit, n, 130, true, ctx.source);
       return {
         address: n,
         before,
+        warmest: v(warmest),
         stored: trial,
         after: v(after),
         changed: after === trial,
@@ -562,7 +569,7 @@ export const CHECK_STEPS: readonly CheckStep[] = [
       if (n === undefined) return { skipped: 'No driver was found.' };
       const fade = await one(ctx, 'QUERY_FADE_TIME_FADE_RATE', n);
       const time = fade === undefined ? 0 : (fade >> 4) & 0x0f;
-      const started = ctx.whenStarted((f) => f.sendTwice);
+      const watch = ctx.whenStarted((f) => f.sendTwice);
       const sending = send(
         ctx.submit,
         [{ id: 'DTR0', value: time }, q('SET_FADE_TIME', n)],
@@ -572,7 +579,15 @@ export const CHECK_STEPS: readonly CheckStep[] = [
         () => 'sent',
         (e: unknown) => (e instanceof Error ? e.message : String(e)),
       );
-      await started;
+      // If the frame is refused or dropped before it starts, there is nothing to panic over.
+      const first = await Promise.race([
+        watch.started.then(() => 'started' as const),
+        sending.then(() => 'ended' as const),
+      ]).finally(() => {
+        watch.cancel();
+      });
+      if (first === 'ended')
+        return { address: n, configuration: await sending, inFlight: false, panicked: false };
       // A moment for the server to take the frame onto the hasseb, then panic.
       await ctx.wait(5);
       await ctx.panic();

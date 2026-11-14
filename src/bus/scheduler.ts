@@ -213,7 +213,8 @@ export class Scheduler {
         Math.max(at.wireStart, this.freeAt + settleMs(f, k === 0, this.timing)),
       );
       if (!go || this.panics !== epoch || this.closed) {
-        q.resolve({ kind: 'dropped', reason: 'Panic dropped this transaction.', results });
+        const reason = this.closed ? CLOSED_REASON : 'Panic dropped this transaction.';
+        q.resolve({ kind: 'dropped', reason, results });
         return;
       }
       const wireStart = this.clock.now();

@@ -357,12 +357,47 @@ describe('replaced connections (security review H1)', () => {
       await clock.advance(5000);
       for (const q of queued) await q;
       expect(nonPanicAfterPanic(hw, from)).toEqual([]);
+      // Panic still reaches the real lights, whatever the target (DALI re-review).
+      if (change !== 'drop' && change !== 'unplug') {
+        const panics = hw.inner.log
+          .slice(from)
+          .filter((l) => l.panic)
+          .map((l) => l.frame.frame);
+        expect(panics.slice(-2)).toEqual([
+          { a: 0xa1, b: 0x00 },
+          { a: 0xff, b: 0x00 },
+        ]);
+      }
       const sent = hw.inner.log.slice(from).filter((l) => !l.panic);
       // At most the frame already on the wire went out; the rest were dropped.
       expect(sent.length).toBeLessThanOrEqual(1);
       engine.dispose();
     });
   }
+});
+
+describe('panic reaches the idle server connection (re-review R1)', () => {
+  it('turns the real lights off after a change to Simulator', async () => {
+    const { engine, settle, drive, hw, hwSim, clock } = setup();
+    if (hw === undefined) throw new Error('hardware');
+    await settle();
+    await drive(engine.setTarget('hardware', 'ui'));
+    await settle();
+    engine.answerCanSee(true, 'ui');
+    await clock.advance(3000);
+    const on = await drive(
+      engine.request(
+        { kind: 'commands', commands: [{ id: 'DAPC', address: short(0), value: 120 }] },
+        'ui',
+      ),
+    );
+    expect(on.ok).toBe(true);
+    expect(levelOf(hwSim, 0)).toBe(120);
+    await drive(engine.setTarget('simulator', 'ui'));
+    await drive(engine.panic());
+    expect(levelOf(hwSim, 0)).toBe(0);
+    engine.dispose();
+  });
 });
 
 describe('panic and the latch (SPEC S4)', () => {

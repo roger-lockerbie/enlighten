@@ -242,6 +242,8 @@ export class Engine {
   private connCount = 0;
   private readonly simConn: Conn;
   private hwConn: Conn | undefined;
+  /** Panic only, for the hardware transport while no hardware connection is in use. */
+  private readonly standby: Scheduler | undefined;
   private readonly jobs = new Set<Job>();
   private readonly coalescer: Coalescer<LevelValue>;
   private readonly divergences: Divergence[] = [];
@@ -270,6 +272,7 @@ export class Engine {
     this.ceiling = o.ceilingArc ?? DEFAULT_CEILING_ARC;
     this.lastBeat = this.clock.now();
     this.simConn = this.makeConn('simulator');
+    if (this.hardware !== undefined) this.standby = this.makeStandby(this.hardware);
     this.coalescer = new Coalescer(this.clock, (_key, v) => this.sendLevel(v));
     this.scheduleTick();
     if (o.startScan !== false) void this.inventory(this.simConn);
@@ -354,6 +357,21 @@ export class Engine {
     };
     ref.conn = conn;
     return conn;
+  }
+
+  /**
+   * A scheduler for the hardware transport that can only panic. Its gate refuses every transaction
+   * and its router's governor has issued no approval, so panic's TERMINATE and OFF are the only
+   * frames it can send. Panic uses it when no hardware connection is in use.
+   */
+  private makeStandby(transport: HardwareTransport): Scheduler {
+    const refuseAll: Gate = {
+      judge: () => ({ kind: 'refuse', reason: 'The hardware is not in use.' }),
+      observe: () => undefined,
+      latch: () => undefined,
+    };
+    const router = new Router({ transport, clock: this.clock, issuer: { issued: () => false } });
+    return new Scheduler({ clock: this.clock, sink: router, gate: refuseAll, timing: this.timing });
   }
 
   /**
@@ -483,7 +501,16 @@ export class Engine {
     const all = this.conns();
     for (const c of all) c.governor.latch();
     this.emit();
-    await Promise.all(all.map((c) => c.scheduler.panic()));
+    const stops = all.map((c) => c.scheduler.panic());
+    // The server may be connected with no hardware connection in use: after a change to Simulator,
+    // or while a connect is under way. Its lights still get panic (DALI re-review).
+    if (
+      this.hwConn === undefined &&
+      this.standby !== undefined &&
+      this.hardware?.state() === 'ready'
+    )
+      stops.push(this.standby.panic());
+    await Promise.all(stops);
     this.emit();
   }
 
@@ -898,15 +925,24 @@ export class Engine {
           return p;
         },
         panic: () => this.panic(),
-        whenStarted: (match) =>
-          new Promise<void>((resolve) => {
-            const l = (f: TxFrame, c: Conn | undefined) => {
+        whenStarted: (match) => {
+          let l: ((f: TxFrame, c: Conn | undefined) => void) | undefined;
+          const started = new Promise<void>((resolve) => {
+            const listener = (f: TxFrame, c: Conn | undefined) => {
               if (c !== conn || !match(f)) return;
-              this.startListeners.delete(l);
+              this.startListeners.delete(listener);
               resolve();
             };
-            this.startListeners.add(l);
-          }),
+            l = listener;
+            this.startListeners.add(listener);
+          });
+          return {
+            started,
+            cancel: () => {
+              if (l !== undefined) this.startListeners.delete(l);
+            },
+          };
+        },
       };
       return run(ctx);
     });
