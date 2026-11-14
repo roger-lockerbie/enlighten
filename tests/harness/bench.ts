@@ -95,7 +95,7 @@ export function makeBench(
   const sim = opts.sim ?? Simulator.bench();
   const timing = withFloors(opts.timing ?? {});
   const target = opts.target ?? 'simulator';
-  const transport = new SimTransport(sim, clock, timing);
+  const transport = new SimTransport(sim, clock, timing, { keepLog: true });
   // A new router per connection, as the engine makes one per hardware connect.
   let router: Router | undefined;
   const sink = new BenchSink(transport, () => {
@@ -103,13 +103,6 @@ export function makeBench(
     return router;
   });
   const connect = () => {
-    router = new Router({
-      transport,
-      clock,
-      onRefused: () => {
-        sink.unapproved = true;
-      },
-    });
     // On hardware the shadow is a separate model that knows nothing at connect (SPEC R1.1a).
     const shadow = target === 'hardware' ? new Simulator([]) : sim;
     const governor = new Governor({
@@ -118,6 +111,14 @@ export function makeBench(
       timing,
       connectedAt: clock.now(),
       ...(opts.ceilingArc === undefined ? {} : { ceilingArc: opts.ceilingArc }),
+    });
+    router = new Router({
+      transport,
+      clock,
+      issuer: governor,
+      onRefused: () => {
+        sink.unapproved = true;
+      },
     });
     const scheduler = new Scheduler({ clock, sink, gate: governor, timing });
     return { governor, scheduler };

@@ -38,13 +38,18 @@ function setup() {
   const governor = new Governor({ target: 'simulator', shadow: Simulator.bench() });
   const transport = new Recorder();
   const refused: string[] = [];
-  const router = new Router({ transport, clock, onRefused: (r) => refused.push(r) });
+  const router = new Router({
+    transport,
+    clock,
+    issuer: governor,
+    onRefused: (r) => refused.push(r),
+  });
   const approve = (tx: Transaction): Approved => {
     const v = governor.judge(tx, clock.now());
     if (v.kind === 'refuse') throw new Error(v.reason);
     return v.approval;
   };
-  return { clock, transport, router, refused, approve };
+  return { clock, transport, router, refused, approve, governor };
 }
 
 const query: Transaction = {
@@ -56,6 +61,24 @@ const query: Transaction = {
 };
 
 describe('router', () => {
+  it("refuses another connection's approval, and everything once closed", async () => {
+    const { clock, transport, router, refused } = setup();
+    const other = new Governor({ target: 'simulator', shadow: Simulator.bench() });
+    const v = other.judge(query, clock.now());
+    if (v.kind === 'refuse') throw new Error(v.reason);
+    const f0 = v.approval.tx.frames[0];
+    if (f0 === undefined) throw new Error('one frame');
+    expect(await router.send(f0, v.approval)).toEqual({
+      kind: 'refused',
+      reason: "The approval is from another connection's governor.",
+    });
+    router.close();
+    for (const f of PANIC_FRAMES) expect((await router.sendPanic(f)).kind).toBe('refused');
+    expect(transport.sent).toEqual([]);
+    expect(transport.panics).toEqual([]);
+    expect(refused).toHaveLength(3);
+  });
+
   it('sends the frames of an approval once each, in order', async () => {
     const { transport, router, refused, approve } = setup();
     const a = approve(query);

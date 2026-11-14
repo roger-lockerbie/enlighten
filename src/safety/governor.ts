@@ -242,6 +242,8 @@ export class Governor {
   private readonly holdUntil: number;
   /** Addresses with a temporary colour set since their last ACTIVATE: 'tc', 'rgb', 'waf' parts seen. */
   private readonly tempSeen = new Map<number, Set<string>>();
+  /** Approvals this governor issued, so a router can refuse another connection's (ADR 0012). */
+  private readonly approvals = new WeakSet<object>();
 
   constructor(opts: GovernorOptions) {
     this.target = opts.target;
@@ -360,6 +362,11 @@ export class Governor {
     return OK;
   }
 
+  /** True when this governor issued the approval: a router accepts only its own governor's. */
+  issued(a: unknown): boolean {
+    return typeof a === 'object' && a !== null && this.approvals.has(a);
+  }
+
   /** Panic latches the governor. Nothing is allowed until a person resumes (SPEC S4.4). */
   latch(): void {
     this.latched = true;
@@ -453,6 +460,7 @@ export class Governor {
     // The approval holds a frozen copy, and the scheduler sends from it (security review M1).
     const sealed = freeze(candidate);
     const approval = approve(sealed, now);
+    this.approvals.add(approval);
     if (candidate === tx) return { kind: 'allow', approval };
     return { kind: 'clamp', tx: sealed, note: notes.join(' '), approval };
   }
