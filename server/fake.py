@@ -389,6 +389,9 @@ class FakeBus:
         answers: list[int] = []
         for g in self.gear:
             special = 0xA0 <= a <= 0xCB and a & 1
+            if not special and not g.hears(a):
+                # Any frame on the bus breaks the QUERY NEXT DEVICE TYPE chain, heard or not.
+                g.walk_ok = False
             r = g.special(n, b) if special else (g.handle(n, a, b) if g.hears(a) else None)
             if r is not None:
                 answers.append(r)

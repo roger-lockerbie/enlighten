@@ -28,7 +28,7 @@ def decode(a: int, b: int, previous: Command | None) -> Command | None:
     device_type = previous.param if isinstance(previous, EnableDeviceType) else 0
     frame = ForwardFrame(16, [a, b])
     cmd = _known(Command.from_frame(frame, devicetype=device_type))
-    standard = a & 1 == 1 and not 0xA0 <= a <= 0xCB
+    standard = (a & 1) == 1 and not 0xA0 <= a <= 0xCB
     if cmd is None and device_type != 0 and standard and b < 224:
         cmd = _known(Command.from_frame(frame, devicetype=0))
     return cmd

@@ -110,7 +110,9 @@ class Hub:
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - if the pump fails, the lights go off
-            self.log(f"the frame pump failed: {e!r}")
+            self.log(f"the frame pump failed: {e!r}. The server takes no more clients.")
+            # No frame would be relayed from now on, so no client may connect and think it can.
+            self.closing = True
             ws = self.client
             self.client = None
             t, o = await self.stop()

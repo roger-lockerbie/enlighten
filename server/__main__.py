@@ -33,8 +33,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--gap-ms",
         type=int,
         default=20,
-        choices=range(0, 201),
-        metavar="0..200",
+        choices=range(10, 201),
+        metavar="10..200",
         help="least time from one frame's report to the next frame (default 20, as python-dali)",
     )
     ap.add_argument(
