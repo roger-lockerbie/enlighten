@@ -246,7 +246,11 @@ export class Governor {
     this.target = opts.target;
     this.shadow = opts.shadow;
     this.timing = opts.timing ?? DEFAULT_TIMING;
-    this.ceiling = opts.ceilingArc ?? DEFAULT_CEILING_ARC;
+    const ceiling = opts.ceilingArc ?? DEFAULT_CEILING_ARC;
+    if (!Number.isInteger(ceiling) || ceiling < 1 || ceiling > 254) {
+      throw new RangeError('The ceiling must be an arc level from 1 to 254.');
+    }
+    this.ceiling = ceiling;
     this.shadowFedByTransport = opts.shadowFedByTransport ?? opts.target === 'simulator';
     if (opts.target === 'hardware' && opts.connectedAt === undefined) {
       throw new Error('A hardware governor needs the time of the connect.');

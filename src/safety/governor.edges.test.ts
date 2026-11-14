@@ -69,6 +69,15 @@ describe('the ceiling setting', () => {
     expect(g.setCeiling(1, 'ui')).toEqual(OK);
     expect(g.ceilingArc).toBe(1);
   });
+  it('a governor cannot start with a ceiling outside 1 to 254', () => {
+    const make = (ceilingArc: number) => () =>
+      new Governor({ target: 'simulator', shadow: Simulator.bench(), ceilingArc });
+    for (const bad of [0, 255, 1.5, Number.NaN]) {
+      expect(make(bad)).toThrow('The ceiling must be an arc level from 1 to 254.');
+    }
+    expect(make(1)().ceilingArc).toBe(1);
+    expect(make(254)().ceilingArc).toBe(254);
+  });
   it('raising needs a confirmed person, and setting the same value does not', () => {
     const g = bare();
     const raise = no('Raising the ceiling needs a confirmation from a person.');
