@@ -71,6 +71,23 @@ describe('transports, sending and workers', () => {
     }
     expect(await ruleIds('self.postMessage(m);', 'src/workers/bus.worker.ts')).toEqual([]);
   });
+  it('stops the engine reaching a transport around the router (security review M2)', async () => {
+    for (const code of [
+      'void this.hardware.send(f);',
+      'void t.sendPanic(f);',
+      "void t['send'](f);",
+      'const { send } = t;',
+    ]) {
+      expect([code, await ruleIds(code, 'src/engine/engine.ts')]).toEqual([code, [syntax]]);
+      expect(await ruleIds(code, 'src/workers/bus.worker.ts')).toContain(syntax);
+    }
+    expect(await ruleIds('void this.transport.send(frame);', 'src/engine/router.ts')).toEqual([]);
+    expect(await ruleIds('void scheduler.submit(tx);', 'src/engine/engine.ts')).toEqual([]);
+  });
+  it('keeps sockets out of the page', async () => {
+    expect(await ruleIds('const s = new WebSocket(u);', 'src/ui/bus.ts')).toContain(syntax);
+    expect(await ruleIds('const s = new WebSocket(u);', 'src/workers/bus.worker.ts')).toEqual([]);
+  });
   it('keeps createPolicy and new Worker in the policy file', async () => {
     const policy = 'trustedTypes.createPolicy("enlighten-worker", {});';
     const worker = 'const w = new Worker(url, { type: "module" });';

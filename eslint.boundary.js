@@ -106,11 +106,24 @@ const blobSyntax = [
   },
 ];
 
-/** The worker shell constructs transports and hands them to the router. It never sends. */
+const sendMessage =
+  'Only src/engine/router.ts sends frames (SPEC S2.1). The engine submits to a scheduler; the worker shell never sends.';
+
+/** The worker shell and the engine never call a transport's send, by name, by key or by destructuring. */
 const sendSyntax = [
+  { selector: 'CallExpression[callee.property.name=/^(send|sendPanic)$/]', message: sendMessage },
   {
-    selector: 'CallExpression[callee.property.name=/^(send|sendPanic)$/]',
-    message: 'Only src/engine/router.ts sends frames (SPEC S2.1). The worker shell never sends.',
+    selector: 'MemberExpression[computed=true][property.value=/^(send|sendPanic)$/]',
+    message: sendMessage,
+  },
+  { selector: 'ObjectPattern > Property[key.name=/^(send|sendPanic)$/]', message: sendMessage },
+];
+
+/** The page never opens a socket: the token goes to the bus worker, which does (ADR 0003). */
+const socketSyntax = [
+  {
+    selector: 'NewExpression[callee.name=/^(WebSocket|EventSource)$/]',
+    message: 'Only the bus worker opens the server socket (ADR 0003).',
   },
 ];
 
@@ -138,12 +151,18 @@ export const boundaryConfig = [
     rules: { ...boundaryRules, 'no-restricted-syntax': syntax(workerSyntax, blobSyntax) },
   },
   {
+    // The engine, but the router: it submits to schedulers and never reaches a transport itself.
+    files: ['src/engine/*.ts'],
+    ignores: ['src/engine/router.ts', ...tests],
+    rules: { 'no-restricted-syntax': syntax(workerSyntax, blobSyntax, sendSyntax) },
+  },
+  {
     // The page: components, stores and the entry point.
     files: ['src/**/*.ts', 'src/**/*.svelte'],
     ignores: [...PURE_FOLDERS, 'src/workers/**', ...tests],
     rules: {
       'no-restricted-imports': transportImports,
-      'no-restricted-syntax': syntax(workerSyntax, blobSyntax),
+      'no-restricted-syntax': syntax(workerSyntax, blobSyntax, socketSyntax),
     },
   },
   {
