@@ -11,7 +11,15 @@ import {
   unaddressed,
 } from './address.ts';
 import { COMMANDS, hasSpec, spec } from './commands.ts';
-import { commandText, decode, encode, enabledDeviceType, frameText } from './codec.ts';
+import {
+  commandText,
+  decode,
+  decodeSpec,
+  encode,
+  enabledDeviceType,
+  frameEquals,
+  frameText,
+} from './codec.ts';
 import { arcToFraction, fractionToArcFloor, percentToArcFloor, STEP_RATIO } from './curve.ts';
 import { extendedFadeMs, fadeRateStepsPerSecond, fadeTimeMs, fastFadeMs } from './fade.ts';
 import {
@@ -102,6 +110,9 @@ describe('codec', () => {
     expect(() => encode({ id: 'DAPC', address: short(0), value: 256 })).toThrow(/level/);
     expect(() => encode({ id: 'GO_TO_SCENE', address: short(0), value: 16 })).toThrow(/0 to 15/);
     expect(() => encode({ id: 'GO_TO_SCENE', address: short(0) })).toThrow(/0 to 15/);
+    expect(() => encode({ id: 'GO_TO_SCENE', address: short(0), value: 1.5 })).toThrow(/0 to 15/);
+    expect(() => encode({ id: 'GO_TO_SCENE', address: short(0), value: -1 })).toThrow(/0 to 15/);
+    expect(() => encode({ id: 'DAPC', address: short(0), value: 2.5 })).toThrow(/level/);
     expect(() => encode({ id: 'OFF', address: short(0), value: 1 })).toThrow(/no value/);
     expect(() => encode({ id: 'TERMINATE', value: 1 })).toThrow(/data byte/);
     expect(() => encode({ id: 'DTR0', value: 256 })).toThrow(/data byte/);
@@ -119,6 +130,16 @@ describe('codec', () => {
     expect(enabledDeviceType({ a: 0xc1, b: 8 })).toBe(8);
     expect(enabledDeviceType({ a: 0xc3, b: 8 })).toBeUndefined();
     expect(enabledDeviceType(undefined)).toBeUndefined();
+  });
+  it('compares frames by both bytes', () => {
+    expect(frameEquals({ a: 1, b: 2 }, { a: 1, b: 2 })).toBe(true);
+    expect(frameEquals({ a: 1, b: 2 }, { a: 1, b: 3 })).toBe(false);
+    expect(frameEquals({ a: 1, b: 2 }, { a: 0, b: 2 })).toBe(false);
+  });
+  it('decodes a frame to its table row', () => {
+    expect(decodeSpec({ a: 0x01, b: 0x00 })?.id).toBe('OFF');
+    expect(decodeSpec({ a: 0x03, b: 226 }, { a: 0xc1, b: 8 })?.id).toBe('DT8_ACTIVATE');
+    expect(decodeSpec({ a: 0x03, b: 226 })).toBeUndefined();
   });
   it('refuses frames that are not bytes', () => {
     expect(decode({ a: 256, b: 0 })).toBeUndefined();
