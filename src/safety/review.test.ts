@@ -228,3 +228,13 @@ describe('N1 (re-review): writes during a rescan', () => {
     expect(b.governor.addressInfo(0)?.modelled).toBe(false);
   });
 });
+
+describe('second re-review follow-ups', () => {
+  it('single-colour gear is held to the ceiling, not to a seven-channel mix', async () => {
+    const real = Simulator.of([{ id: 'X', profile: da5l('C1'), opts: { shortAddress: 0 } }]);
+    const b = makeBench({ sim: real });
+    await b.ready();
+    const v = b.governor.judge(tx([c('DAPC', short(0), 220)]), b.clock.now());
+    expect(v.kind).toBe('allow');
+  });
+});

@@ -679,8 +679,13 @@ export class Governor {
 
   private factsFor(u: SimUnit): ColourFacts {
     const n = u.gear.shortAddress;
-    const f = n === null ? undefined : this.info.get(n)?.colour;
-    return f ?? WORST_FACTS;
+    const i = n === null ? undefined : this.info.get(n);
+    if (i?.colour !== undefined) return i.colour;
+    // Gear that reported its device types without 8 has no colour: one channel (SPEC R6.6).
+    if (i?.deviceTypes !== undefined && i.deviceTypes.length > 0 && !i.deviceTypes.includes(8)) {
+      return { tc: false, channels: 0 };
+    }
+    return WORST_FACTS;
   }
 
   private colourOf(u: SimUnit, t: number): readonly number[] {
@@ -890,8 +895,8 @@ export class Governor {
     // Read-backs taken before a later write, or during a fade, would seed a wrong model (review N1).
     if (i.dirty === true)
       return no('Something was sent to the gear during the scan. Scan it again.');
-    if (i.fading === true)
-      return no('The gear was fading during the scan. Scan it again when it settles.');
+    if (i.fading === undefined) return no('QUERY STATUS was not read back.');
+    if (i.fading) return no('The gear was fading during the scan. Scan it again when it settles.');
     const types = i.deviceTypes;
     if (i.present !== true || types === undefined) return no('The gear has not answered a scan.');
     const needs = [

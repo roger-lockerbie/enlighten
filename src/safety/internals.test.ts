@@ -89,7 +89,10 @@ describe('what the governor learns from replies', () => {
     expect(g.modelAddress(0).ok).toBe(false);
     tell(g, c('QUERY_CONTROL_GEAR_PRESENT', A), { kind: 'reply', byte: 255 });
     tell(g, c('QUERY_DEVICE_TYPE', A), { kind: 'reply', byte: 6 });
-    expect(g.modelAddress(0).ok).toBe(false);
+    expect(reasonOf(g.modelAddress(0))).toMatch(/STATUS/);
+    tell(g, c('QUERY_STATUS', A), { kind: 'reply', byte: 0x10 });
+    expect(reasonOf(g.modelAddress(0))).toMatch(/fading/);
+    tell(g, c('QUERY_STATUS', A), { kind: 'reply', byte: 0 });
     tell(g, c('QUERY_MIN_LEVEL', A), { kind: 'reply', byte: 90 });
     tell(g, c('QUERY_MAX_LEVEL', A), { kind: 'reply', byte: 200 });
     tell(g, c('QUERY_GROUPS_0_7', A), { kind: 'reply', byte: 4 });
@@ -124,6 +127,7 @@ describe('what the governor learns from replies', () => {
       ['QUERY_FADE_TIME_FADE_RATE', 7],
       ['QUERY_EXTENDED_FADE_TIME', 0],
       ['QUERY_ACTUAL_LEVEL', 0],
+      ['QUERY_STATUS', 0],
     ] as const) {
       tell(g, c(id, B), { kind: 'reply', byte: v });
     }
@@ -147,6 +151,7 @@ describe('what the governor learns from replies', () => {
         ['QUERY_FADE_TIME_FADE_RATE', 7],
         ['QUERY_EXTENDED_FADE_TIME', 0],
         ['QUERY_ACTUAL_LEVEL', 0],
+        ['QUERY_STATUS', 0],
       ] as const) {
         tell(h, c(id, B), { kind: 'reply', byte: v });
       }
