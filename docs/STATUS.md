@@ -47,10 +47,13 @@ Decisions the owner made during this stage: panic's safe level is off, the serve
 
 Order of work: golden fixtures, `src/dali`, `src/sim`, `src/bus` clock and timing, `src/safety`, the scheduler, the property tests, then lint, coverage, Stryker and the stage close.
 
-- Done: `tools/golden/generate.py` and the fixtures in `tests/golden/` (frames, a decode sweep, sequences, hasseb reports, fake-gear streams). Run it with `pnpm golden`.
-- Done: `src/dali` (command table, codec, replies, curve, fades, sequences), byte-equal to python-dali.
-- Done: `src/sim` (the DA5-L profile with every unknown as a setting, the gear model, the simulated bus), with behaviour tests per section of `dali.md` and the differential check against python-dali's fake gear.
-- Next: `src/bus` clock and timing, then `src/safety`.
+- Done: `tools/golden/generate.py` and the fixtures in `tests/golden/`. Run it with `pnpm golden`.
+- Done: `src/dali`, byte-equal to python-dali for every supported command and a decode sweep.
+- Done: `src/sim`, with behaviour tests per section of `dali.md` and the differential check against python-dali's fake gear.
+- Done: `src/bus` (clock, timing with floors, scheduler with panic) and `src/safety` (governor, rule table, mix rule, rate guard, safety profile, ceiling, panic).
+- Done: the property tests on a virtual-clock bench, passing at 1,000 runs each. They found gaps in a plain reading of ADR 0005; ADR 0011 records the exact rules the guard and the checker now share.
+- Done: the pure-core lint boundary, `pnpm coverage` in `verify` (98.9% of lines on the pure core, 95.7% of branches on `src/safety`), and Stryker (`pnpm mutate`).
+- Next: the mutation score and `docs/MUTATION.md`, `pnpm verify`, the two reviewers, then the PR.
 
 ## Next
 
