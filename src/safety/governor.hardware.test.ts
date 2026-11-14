@@ -6,11 +6,12 @@
 import { describe, expect, it } from 'vitest';
 import { broadcast, group, short, unaddressed, type Address } from '../dali/address.ts';
 import type { Command } from '../dali/codec.ts';
-import { framesFor, framesForAll, tcCommands } from '../dali/sequences.ts';
+import { framesFor, framesForAll, rgbwafCommands, tcCommands } from '../dali/sequences.ts';
 import { DEFAULT_TIMING, FORWARD_FRAME_MS } from '../bus/timing.ts';
 import { makeBench } from '../../tests/harness/bench.ts';
 import { Simulator } from '../sim/simulator.ts';
 import { Governor } from './governor.ts';
+import { maxArcForMix } from './mix.ts';
 import { PHANTOM, ROOM } from './rate/trace.ts';
 import type { SendResult, Source, Transaction, Verdict } from './types.ts';
 
@@ -650,6 +651,13 @@ describe('the rate guard on hardware', () => {
     expect(reason(g.judge(tx([c('OFF', A), c('DAPC', A, 100)]), 100))).toBe(
       'Rate guard: nothing is known about the lights just after connecting (bus).',
     );
+    // Only a level of 0 is OFF: scene 0 is a light change like any other.
+    tell(g, c('QUERY_MAX_LEVEL', A), reply(220), 10);
+    tell(g, c('QUERY_MIN_LEVEL', A), reply(85), 10);
+    expect(
+      g.markVerified(0, { max: 220, min: 85, powerOn: 0, systemFailure: 255, linear: false }),
+    ).toEqual({ ok: true });
+    expect(reason(g.judge(tx([c('GO_TO_SCENE', A, 0)]), 100))).toMatch(/just after connecting/);
     // The first frame reaches the gear 0.5 ms after the hold ends.
     const now = 2000 - DEFAULT_TIMING.settleFirstMs - FORWARD_FRAME_MS + 0.5;
     expect(reason(g.judge(tx([c('DAPC', A, 100)]), now))).not.toMatch(/connecting/);
@@ -688,6 +696,37 @@ describe('the rate guard on hardware', () => {
     tell(g, c('QUERY_CONTROL_GEAR_PRESENT', A), reply(255));
     g.unlock('reset', 'ui', true);
     expect(() => g.judge(tx([c('RESET', A)], 'console'), 5000)).not.toThrow();
+  });
+});
+
+describe('small changes and colour on hardware', () => {
+  it('holds small reversals to three in a second', () => {
+    const g = hw();
+    scanInto(g, 0, { level: 100 });
+    g.markInventoryFresh(false);
+    // Arc 100 and 102 are 6% apart: not a leg and not a hard step, but each change turns back.
+    [102, 100, 102, 100].forEach((v, k) => {
+      tell(g, c('DAPC', A, v), undefined, 1000 + k * 150);
+    });
+    expect(reason(g.judge(tx([c('DAPC', A, 102)]), 1600))).toMatch(
+      /more than three small reversals in a second/,
+    );
+  });
+  it('reads an unknown colour as every channel full, with the facts the gear reported', () => {
+    const g = hw();
+    // Three RGBWAF channels and no Tc.
+    expect(scanInto(g, 0, { types: [6, 8], colour: 0x60, level: 100 }).ok).toBe(true);
+    g.markInventoryFresh(false);
+    for (const cmd of rgbwafCommands(A, [30, 0, 0, 0, 0, 0])) tell(g, cmd, undefined, 1000);
+    expect(g.addressInfo(0)?.colourKnown).toBe(true);
+    // A dim known mix keeps DAPC 220 under the ceiling.
+    expect(g.judge(tx([c('DAPC', A, 220)]), 6000).kind).toBe('allow');
+    // A fault leaves the colour unknown. The shadow still holds the dim mix, but it no longer counts.
+    tell(g, c('DAPC', A, 150), { kind: 'fault', reason: 'x' }, 7000);
+    expect(g.addressInfo(0)?.colourKnown).toBe(false);
+    const v = g.judge(tx([c('DAPC', A, 220)]), 12_000);
+    expect(v.kind).toBe('clamp');
+    expect(v.kind === 'clamp' ? v.tx.frames[0]?.frame.b : 0).toBe(maxArcForMix(220, 3));
   });
 });
 

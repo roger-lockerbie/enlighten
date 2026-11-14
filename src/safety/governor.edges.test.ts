@@ -274,6 +274,9 @@ describe('rules, to the exact outcome', () => {
     );
     expect(reason(g.judge(tx([c('DOWN', A)]), 0))).toBe('DOWN: Address 0 is not verified.');
     expect(reason(g.judge(tx([c('RESET', A)], 'console'), 0))).not.toMatch(/not verified/);
+    expect(
+      reason(g.judge(tx([c('DTR0', undefined, 5), c('SET_SHORT_ADDRESS', A)], 'console'), 0)),
+    ).not.toMatch(/not verified/);
   });
   it('SET MAX LEVEL counts 255 as 254, and limits equal to the ceiling pass', () => {
     const g = bare();
@@ -381,6 +384,51 @@ describe('the OFF that follows an unlocked RESET', () => {
       targets: [],
       until: expect.any(Number) as number,
     });
+  });
+  it('a group OFF is not the follow-up, and does not end it', async () => {
+    const b = makeBench();
+    await b.ready();
+    await b.clock.advance(3000);
+    await b.run(tx([c('ADD_TO_GROUP', B, 0)]));
+    await b.clock.advance(3000);
+    // B comes on from off: a hard step for B.
+    expect((await b.run(tx([c('DAPC', B, 150)]))).kind).toBe('done');
+    await b.clock.advance(1100);
+    b.governor.unlock('reset', 'console', true);
+    expect((await b.run(tx([c('RESET', A)], 'console'))).kind).toBe('done');
+    const at = b.clock.now() + 400;
+    // Group 0 holds B, not the reset gear, so its OFF is judged: B's second hard step in 2 s.
+    expect(reason(b.governor.judge(tx([c('OFF', group(0))]), at))).toMatch(/hard step/);
+    tell(b.governor, c('OFF', group(0)), { kind: 'sent' }, at);
+    const fp = JSON.parse(b.governor.fingerprint()) as { resetOff: { targets: number[] } };
+    expect(fp.resetOff.targets).toEqual([0]);
+  });
+  it('after 2 s, an OFF to the reset gear is judged like any other', async () => {
+    const b = makeBench();
+    await b.ready();
+    await b.clock.advance(3000);
+    b.governor.unlock('reset', 'console', true);
+    expect((await b.run(tx([c('RESET', A)], 'console'))).kind).toBe('done');
+    const { until } = (JSON.parse(b.governor.fingerprint()) as { resetOff: { until: number } })
+      .resetOff;
+    expect(b.governor.setCeiling(254, 'ui', true)).toEqual(OK);
+    // Two legs that are not hard steps: down to 230 and back to full.
+    await b.clock.advance(1200);
+    expect((await b.run(tx([c('DAPC', A, 230)]))).kind).toBe('done');
+    await b.clock.advance(400);
+    expect((await b.run(tx([c('DAPC', A, 254)]))).kind).toBe('done');
+    // Inside the 2 s the OFF is the RESET's follow-up. After them it is a third leg in a second.
+    expect(b.governor.judge(tx([c('OFF', A)]), until - 100).kind).toBe('allow');
+    expect(reason(b.governor.judge(tx([c('OFF', A)]), until + 1))).toMatch(/swing/);
+  });
+});
+
+describe('the fingerprint', () => {
+  it('shows the unlocks', () => {
+    const g = bare();
+    const before = g.fingerprint();
+    g.unlock('expert', 'console', true);
+    expect(g.fingerprint()).not.toBe(before);
   });
 });
 
