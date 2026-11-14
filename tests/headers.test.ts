@@ -70,8 +70,8 @@ describe('meta fallback', () => {
 
 describe('dev headers', () => {
   it('grant no device features', () => {
-    expect(permissionsPolicy('dev')).toContain('hid=()');
-    expect(permissionsPolicy('dev')).not.toContain('hid=(self)');
+    expect(permissionsPolicy()).toContain('hid=()');
+    expect(permissionsPolicy()).not.toContain('hid=(self)');
   });
 
   it('name one Trusted Types policy in production, the worker policy', () => {
