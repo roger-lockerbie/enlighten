@@ -7,7 +7,7 @@
  * Every frame goes through the engine, the scheduler and the governor like any other source.
  */
 import { short } from '../dali/address.ts';
-import { rgbwafCommands, tcCommands } from '../dali/sequences.ts';
+import { rgbwafCommands, tcCommands, type TxFrame } from '../dali/sequences.ts';
 import type { Command } from '../dali/codec.ts';
 import type { Governor } from '../safety/governor.ts';
 import { WARM_MIREK, type ProfileResult, type Submit } from '../safety/profile.ts';
@@ -32,6 +32,8 @@ export interface CheckContext {
   applyProfile(n: number): Promise<ProfileResult>;
   /** Panic, as the button does. */
   panic(): Promise<void>;
+  /** Resolves when a frame matching `match` is handed to the transport on this connection. */
+  whenStarted(match: (f: TxFrame) => boolean): Promise<void>;
 }
 
 export interface CheckStep {
@@ -256,28 +258,41 @@ export const CHECK_STEPS: readonly CheckStep[] = [
     id: 'p2-store-tc-limit',
     part: 2,
     title: 'Whether colour temperature limits can be stored',
-    how: 'On the first driver: read the coolest limit, store the same value back with STORE COLOUR TEMPERATURE Tc LIMIT, and read it again. Nothing changes if storing works.',
+    how: 'On the first driver: read the coolest limit, store it one mirek warmer with STORE COLOUR TEMPERATURE Tc LIMIT, read it back, then store the original and read it again. A store that does not take shows as no change.',
     kind: 'confirm',
     unlock: 'expert',
     run: async (ctx) => {
       const n = ctx.addresses[0];
       if (n === undefined) return { skipped: 'No driver was found.' };
+      const store = (value: number) =>
+        send(
+          ctx.submit,
+          [
+            { id: 'DTR0', value: value & 0xff },
+            { id: 'DTR1', value: (value >> 8) & 0xff },
+            // DTR2 0 is the coolest limit (IEC 62386-209).
+            { id: 'DTR2', value: 0 },
+            q('DT8_STORE_TC_LIMIT', n),
+          ],
+          ctx.source,
+          'STORE COLOUR TEMPERATURE Tc LIMIT',
+        );
       const before = await colourValue(ctx.submit, n, 128, true, ctx.source);
       if (before === undefined)
         return { address: n, before: null, skipped: 'The driver has no coolest limit.' };
-      await send(
-        ctx.submit,
-        [
-          { id: 'DTR0', value: before & 0xff },
-          { id: 'DTR1', value: (before >> 8) & 0xff },
-          { id: 'DTR2', value: 0 },
-          q('DT8_STORE_TC_LIMIT', n),
-        ],
-        ctx.source,
-        'STORE COLOUR TEMPERATURE Tc LIMIT',
-      );
+      const trial = before + 1;
+      await store(trial);
       const after = await colourValue(ctx.submit, n, 128, true, ctx.source);
-      return { address: n, before, after: v(after), same: after === before };
+      await store(before);
+      const restored = await colourValue(ctx.submit, n, 128, true, ctx.source);
+      return {
+        address: n,
+        before,
+        stored: trial,
+        after: v(after),
+        changed: after === trial,
+        restored: restored === before,
+      };
     },
   },
   {
@@ -342,26 +357,19 @@ export const CHECK_STEPS: readonly CheckStep[] = [
     id: 'p3-throughput',
     part: 3,
     title: 'Throughput',
-    how: 'One hundred level commands to the first driver at its present level, so nothing changes, then one hundred queries. Each goes when the last result arrives.',
+    how: 'One hundred commands, then one hundred queries, each sent when the last result arrives. The commands are DTR0 loads: the same 16-bit frame with no reply as a level command, and no light changes, so the rate guard does not slow them.',
     kind: 'auto',
     run: async (ctx) => {
       const n = ctx.addresses[0];
       if (n === undefined) return { skipped: 'No driver was found.' };
-      const level = (await one(ctx, 'QUERY_ACTUAL_LEVEL', n)) ?? 0;
       const t0 = ctx.now();
       for (let i = 0; i < 100; i++)
-        await send(
-          ctx.submit,
-          [{ id: 'DAPC', address: short(n), value: level }],
-          ctx.source,
-          'DAPC',
-        );
+        await send(ctx.submit, [{ id: 'DTR0', value: i }], ctx.source, 'DTR0');
       const t1 = ctx.now();
       for (let i = 0; i < 100; i++) await one(ctx, 'QUERY_ACTUAL_LEVEL', n);
       const t2 = ctx.now();
       return {
         address: n,
-        level,
         commandsPerSecond: Math.round((100 * 1000) / Math.max(1, t1 - t0)),
         queriesPerSecond: Math.round((100 * 1000) / Math.max(1, t2 - t1)),
       };
@@ -378,22 +386,34 @@ export const CHECK_STEPS: readonly CheckStep[] = [
     id: 'p3-store-gear-features',
     part: 3,
     title: 'STORE GEAR FEATURES/STATUS and read back',
-    how: 'On the first driver: read gear features, store the same value back, and read again. Settles ENABLE DEVICE TYPE with send-twice commands.',
+    how: 'On the first driver: read gear features, store it with automatic activation turned the other way, read it back, then store the original and read it again. Settles ENABLE DEVICE TYPE with send-twice commands: a store that does not take shows as no change.',
     kind: 'confirm',
     unlock: 'expert',
     run: async (ctx) => {
       const n = ctx.addresses[0];
       if (n === undefined) return { skipped: 'No driver was found.' };
+      const store = (value: number) =>
+        send(
+          ctx.submit,
+          [{ id: 'DTR0', value }, q('DT8_STORE_GEAR_FEATURES', n)],
+          ctx.source,
+          'STORE GEAR FEATURES/STATUS',
+        );
       const before = await one(ctx, 'DT8_QUERY_GEAR_FEATURES', n);
       if (before === undefined) return { address: n, before: null, skipped: 'No answer.' };
-      await send(
-        ctx.submit,
-        [{ id: 'DTR0', value: before & 1 }, q('DT8_STORE_GEAR_FEATURES', n)],
-        ctx.source,
-        'STORE GEAR FEATURES/STATUS',
-      );
+      const trial = (before & 1) ^ 1;
+      await store(trial);
       const after = await one(ctx, 'DT8_QUERY_GEAR_FEATURES', n);
-      return { address: n, before, after: v(after), same: after === before };
+      await store(before & 1);
+      const restored = await one(ctx, 'DT8_QUERY_GEAR_FEATURES', n);
+      return {
+        address: n,
+        before,
+        stored: trial,
+        after: v(after),
+        changed: after !== undefined && (after & 1) === trial,
+        restored: restored !== undefined && (restored & 1) === (before & 1),
+      };
     },
   },
   {
@@ -451,7 +471,7 @@ export const CHECK_STEPS: readonly CheckStep[] = [
       if (n === undefined) return { skipped: 'No driver was found.' };
       const physMin = (await one(ctx, 'QUERY_PHYSICAL_MINIMUM', n)) ?? 1;
       const fade = await one(ctx, 'QUERY_FADE_TIME_FADE_RATE', n);
-      // Fade time 6 is 4.0 s (dali.md section 4).
+      // Fade time 6 is 4.0 s (dali.md section 7).
       await send(
         ctx.submit,
         [{ id: 'DTR0', value: 6 }, q('SET_FADE_TIME', n)],
@@ -535,13 +555,14 @@ export const CHECK_STEPS: readonly CheckStep[] = [
     id: 'p4-panic-in-flight',
     part: 4,
     title: 'Panic while a send-twice frame is in flight',
-    how: 'The app sends a configuration command (sent twice) and panics while it is on the bus. Check in the server --trace output that TERMINATE and OFF came after the configuration frame, never between its two copies. Resume afterwards.',
+    how: 'The app sends a configuration command (sent twice) and panics as soon as that frame is handed to the transport. Check in the server --trace output that TERMINATE and OFF came after the configuration frame, never between its two copies. The result records whether the frame went out or was dropped. Resume afterwards.',
     kind: 'confirm',
     run: async (ctx) => {
       const n = ctx.addresses[0];
       if (n === undefined) return { skipped: 'No driver was found.' };
       const fade = await one(ctx, 'QUERY_FADE_TIME_FADE_RATE', n);
       const time = fade === undefined ? 0 : (fade >> 4) & 0x0f;
+      const started = ctx.whenStarted((f) => f.sendTwice);
       const sending = send(
         ctx.submit,
         [{ id: 'DTR0', value: time }, q('SET_FADE_TIME', n)],
@@ -551,10 +572,17 @@ export const CHECK_STEPS: readonly CheckStep[] = [
         () => 'sent',
         (e: unknown) => (e instanceof Error ? e.message : String(e)),
       );
-      // Panic once the DTR0 frame has gone and the send-twice frame is on its way.
-      await ctx.wait(40);
+      await started;
+      // A moment for the server to take the frame onto the hasseb, then panic.
+      await ctx.wait(5);
       await ctx.panic();
-      return { address: n, configuration: await sending, latched: ctx.governor.isLatched };
+      const configuration = await sending;
+      return {
+        address: n,
+        configuration,
+        inFlight: configuration === 'sent',
+        latched: ctx.governor.isLatched,
+      };
     },
   },
   {
