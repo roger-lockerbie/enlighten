@@ -148,7 +148,14 @@ class Link:
         return self.hasseb is not None
 
     def poll(self) -> bool:
-        """Open the device if it is not open. Returns whether it is attached."""
+        """Open the device if it is not open, or check it is still there. Returns whether it is attached."""
+        if self.hasseb is not None:
+            # Between frames only stale reports can be waiting, so a short read is safe. It fails once
+            # the device has gone, which is how an idle session notices an unplug.
+            try:
+                self.hasseb.device.read(1)
+            except (OSError, ValueError):
+                self.drop()
         if self.hasseb is None:
             try:
                 device = self.opener()

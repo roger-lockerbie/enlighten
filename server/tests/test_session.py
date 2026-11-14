@@ -357,3 +357,18 @@ def test_a_hasseb_that_never_answers_is_a_timeout(dist: Path) -> None:
                 assert await recv(ws) == p.result(1, p.HASSEB_TIMEOUT)
 
     asyncio.run(go())
+
+
+def test_an_idle_session_notices_an_unplug(dist: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(session, "DEVICE_POLL_S", 0.05)
+
+    async def go() -> None:
+        async with server(dist) as s:
+            async with s.client() as ws:
+                await welcomed(ws)
+                s.device.plugged = False
+                assert await recv(ws) == p.device(False)
+                s.device.plugged = True
+                assert await recv(ws) == p.device(True)
+
+    asyncio.run(go())

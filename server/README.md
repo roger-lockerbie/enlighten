@@ -54,7 +54,7 @@ colour temperature, address 1 presenting five RGBWAF channels. It prints each fr
 fake bus. Type `unplug` or `plug` in its terminal to take the fake hasseb away and bring it back. The
 fake changes levels at once, with no fades, so a fade set on it shows as a divergence in Both.
 
-`--demo-quirk level-offset` makes the fake answer QUERY ACTUAL LEVEL one step high, to see the
+`--demo-quirk level-offset` makes the fake answer QUERY ACTUAL LEVEL one step high while a driver is lit, to see the
 divergence log at work. `--demo-unaddressed` adds a driver with no short address, for commissioning.
 
 ### Trace

@@ -213,7 +213,8 @@ class Gear:
         elif n == "general.QueryPhysicalMinimum":
             return self.physical_minimum
         elif n == "general.QueryActualLevel":
-            return min(254, self.level + 1) if self.level_offset else self.level
+            # The quirk answers one step high while the driver is lit, as a miscalibrated driver might.
+            return min(254, self.level + 1) if self.level_offset and self.level > 0 else self.level
         elif n == "general.QueryMaxLevel":
             return self.max_level
         elif n == "general.QueryMinLevel":
