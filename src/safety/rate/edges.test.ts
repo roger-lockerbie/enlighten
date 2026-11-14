@@ -165,6 +165,12 @@ describe('the limits at their edges', () => {
     expect(
       scopeViolations('a0', ev({ legs: [0, 1000, 2040, 3000, 4000, 5000] }), EMPTY, 1),
     ).toEqual([]);
+    // Legs 990 ms apart: each leg and the one two before it are 1980 ms apart, inside the 2 s window
+    // less the margin, so they are one pattern.
+    const slow = Array.from({ length: 7 }, (_, i) => i * 990);
+    expect(scopeViolations('a0', ev({ legs: slow }), EMPTY, 1)).toEqual([
+      { scope: 'a0', rule: 'a fast repeating pattern ran for 5 s', retryAt: 4950 + 2040 },
+    ]);
     // A pattern that pauses for more than 2 s counts its 5 s again from the restart.
     const twice = [0, 500, 1000, 1500, ...Array.from({ length: 10 }, (_, i) => 4000 + i * 500)];
     expect(scopeViolations('a0', ev({ legs: twice }), EMPTY, 3)).toEqual([]);
