@@ -8,7 +8,13 @@ import { FORWARD_FRAME_MS, wireMs, withFloors, type BusTiming } from '../../src/
 import { frameEquals } from '../../src/dali/codec.ts';
 import type { TxFrame } from '../../src/dali/sequences.ts';
 import { Governor, isApproved } from '../../src/safety/governor.ts';
-import { applySafetyProfile, scan, type Submit, type Submitted } from '../../src/safety/profile.ts';
+import {
+  applySafetyProfile,
+  patient,
+  scan,
+  type Submit,
+  type Submitted,
+} from '../../src/safety/profile.ts';
 import type { Approved, SendResult, Target, Transaction } from '../../src/safety/types.ts';
 import { Simulator } from '../../src/sim/simulator.ts';
 
@@ -24,6 +30,8 @@ export class SimSink implements FrameSink {
   fault: ((f: TxFrame) => { reached: boolean } | undefined) | undefined;
   /** Set when a frame arrived without a valid approval. Tests assert it stays false. */
   unapproved = false;
+  /** Called as each frame starts on the wire, before the bus sees it. */
+  onSend: ((frame: TxFrame) => void) | undefined;
 
   constructor(
     private readonly sim: Simulator,
@@ -46,6 +54,7 @@ export class SimSink implements FrameSink {
   }
 
   private transmit(frame: TxFrame, panic: boolean): Promise<SendResult> {
+    this.onSend?.(frame);
     const start = this.clock.now();
     const deliverAt = start + FORWARD_FRAME_MS;
     const end = start + wireMs(frame, this.timing);
@@ -90,6 +99,8 @@ export interface Bench {
   run(tx: Transaction): Promise<TxResult>;
   /** Scan and apply the safety profile to every address found. */
   ready(): Promise<void>;
+  /** A new connection: a fresh governor and scheduler, as Stage 4's router makes on reconnect. */
+  reconnect(): void;
 }
 
 export function makeBench(
@@ -105,16 +116,21 @@ export function makeBench(
   const sim = opts.sim ?? Simulator.bench();
   const timing = withFloors(opts.timing ?? {});
   const target = opts.target ?? 'simulator';
-  // On hardware the shadow is a separate model; here the sink drives `sim` as if it were the bus.
-  const shadow = target === 'hardware' ? Simulator.bench() : sim;
-  const governor = new Governor({
-    target,
-    shadow,
-    timing,
-    ...(opts.ceilingArc === undefined ? {} : { ceilingArc: opts.ceilingArc }),
-  });
   const sink = new SimSink(sim, clock, timing);
-  const scheduler = new Scheduler({ clock, sink, gate: governor, timing });
+  const connect = () => {
+    // On hardware the shadow is a separate model that knows nothing at connect (SPEC R1.1a).
+    const shadow = target === 'hardware' ? Simulator.bench() : sim;
+    const governor = new Governor({
+      target,
+      shadow,
+      timing,
+      connectedAt: clock.now(),
+      ...(opts.ceilingArc === undefined ? {} : { ceilingArc: opts.ceilingArc }),
+    });
+    const scheduler = new Scheduler({ clock, sink, gate: governor, timing });
+    return { governor, scheduler };
+  };
+  let conn = connect();
   const drive = async <T>(p: Promise<T>): Promise<T> => {
     const st: { done: boolean; failed: boolean; value?: T; error?: unknown } = {
       done: false,
@@ -141,20 +157,18 @@ export function makeBench(
     if (st.failed) throw st.error;
     return st.value as T;
   };
-  const submit = (tx: Transaction) => scheduler.submit(tx);
-  const asSubmit: Submit = async (tx): Promise<Submitted> => {
-    const r = await scheduler.submit(tx);
-    return r.kind === 'done'
-      ? { kind: 'done', results: r.results }
-      : r.kind === 'refused'
-        ? { kind: 'refused', reason: r.reason }
-        : { kind: r.kind, reason: r.reason };
-  };
-  return {
+  const submit = (tx: Transaction) => conn.scheduler.submit(tx);
+  const asSubmit: Submit = async (tx): Promise<Submitted> =>
+    toSubmitted(await conn.scheduler.submit(tx));
+  const bench: Bench = {
     clock,
     sim,
-    governor,
-    scheduler,
+    get governor() {
+      return conn.governor;
+    },
+    get scheduler() {
+      return conn.scheduler;
+    },
     sink,
     timing,
     submit,
@@ -163,20 +177,35 @@ export function makeBench(
     ready: async () => {
       await drive(
         (async () => {
-          const found = await scan(governor, asSubmit, [0, 1, 2, 3]);
-          for (const n of found) await applySafetyProfile(n, governor, asSubmit);
+          const wait = (ms: number) =>
+            new Promise<void>((r) => {
+              clock.at(clock.now() + ms, r);
+            });
+          const s = patient(asSubmit, wait, () => clock.now());
+          const found = await scan(conn.governor, s, [0, 1, 2, 3]);
+          for (const n of found) await applySafetyProfile(n, conn.governor, s);
         })(),
       );
     },
+    reconnect: () => {
+      conn = connect();
+    },
   };
+  return bench;
 }
 
 /** The bench's `Submit` for the profile and ceiling runners. */
 export function asSubmit(b: Bench): Submit {
-  return async (tx) => {
-    const r = await b.scheduler.submit(tx);
-    return r.kind === 'done'
-      ? { kind: 'done', results: r.results }
-      : { kind: r.kind, reason: r.reason };
-  };
+  return async (tx) => toSubmitted(await b.scheduler.submit(tx));
+}
+
+function toSubmitted(r: TxResult): Submitted {
+  if (r.kind === 'done') return { kind: 'done', results: r.results };
+  if (r.kind === 'refused')
+    return {
+      kind: 'refused',
+      reason: r.reason,
+      ...(r.retryAt === undefined ? {} : { retryAt: r.retryAt }),
+    };
+  return { kind: r.kind, reason: r.reason };
 }

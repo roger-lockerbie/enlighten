@@ -151,12 +151,12 @@ describe('guard checks in isolation', () => {
   });
   it('counts only breaches that involve a new event', () => {
     const old = { legs: [0, 100, 200], hard: [], reversals: [] };
-    expect(scopeViolations('a0', old, old, 1000, 1)).toEqual([]);
+    expect(scopeViolations('a0', old, old, 1)).toEqual([]);
     const cand = { legs: [0, 100, 200, 1250], hard: [], reversals: [] };
-    expect(scopeViolations('a0', cand, old, 1000, 1)).toEqual([]);
+    expect(scopeViolations('a0', cand, old, 1)).toEqual([]);
     const close = { legs: [600, 700, 1001], hard: [], reversals: [] };
     expect(
-      scopeViolations('a0', close, { legs: [600, 700], hard: [], reversals: [] }, 1000, 1),
+      scopeViolations('a0', close, { legs: [600, 700], hard: [], reversals: [] }, 1),
     ).not.toEqual([]);
   });
   it('adds unknown and phantom events to their scope and to the room', () => {

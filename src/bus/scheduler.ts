@@ -185,7 +185,10 @@ export class Scheduler {
       const f = tx.frames[k];
       const at = times[k];
       if (f === undefined || at === undefined) break;
-      const go = await this.waitUntil(at.wireStart);
+      // Never closer than the settle time to the end of the frame before, whatever the transport took.
+      const go = await this.waitUntil(
+        Math.max(at.wireStart, this.freeAt + settleMs(k === 0, this.timing)),
+      );
       if (!go || this.panicking !== undefined) {
         q.resolve({ kind: 'dropped', reason: 'Panic dropped this transaction.', results });
         return;

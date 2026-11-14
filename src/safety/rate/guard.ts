@@ -27,11 +27,12 @@ interface Tagged {
   readonly isNew: boolean;
 }
 
-function tag(times: readonly number[], baseline: readonly number[], newFrom: number): Tagged[] {
-  return times.map((t) => ({
-    t,
-    isNew: t >= newFrom - 1 && !baseline.some((b) => Math.abs(b - t) <= 2),
-  }));
+/**
+ * An event is new when the prediction without the transaction does not have it. That includes an old
+ * run that the transaction extends into a leg or a hard step, whose start lies in the past.
+ */
+function tag(times: readonly number[], baseline: readonly number[]): Tagged[] {
+  return times.map((t) => ({ t, isNew: !baseline.some((b) => Math.abs(b - t) <= 2) }));
 }
 
 /** Windows [t_i, t_i + span) holding more than `max` events, at least one of them new. */
@@ -60,12 +61,11 @@ export function scopeViolations(
   scope: string,
   cand: TraceEvents,
   base: TraceEvents,
-  newFrom: number,
   swings: number,
 ): Violation[] {
   const out: Violation[] = [];
   const n = swingLimit(swings);
-  const legs = tag(cand.legs, base.legs, newFrom);
+  const legs = tag(cand.legs, base.legs);
   for (const r of windowViolations(legs, 1000, 2 * n))
     out.push({ scope, rule: `more than ${String(n)} swing(s) in a second`, retryAt: r });
   if (n > 1) {
@@ -79,7 +79,7 @@ export function scopeViolations(
     }
   }
   const hardSpan = scope === ROOM ? HARD_WINDOW_ROOM_MS : HARD_WINDOW_MS;
-  for (const r of windowViolations(tag(cand.hard, base.hard, newFrom), hardSpan, 1)) {
+  for (const r of windowViolations(tag(cand.hard, base.hard), hardSpan, 1)) {
     out.push({
       scope,
       rule: `more than one hard step in ${String(hardSpan / 1000)} s`,
@@ -87,7 +87,7 @@ export function scopeViolations(
     });
   }
   for (const r of windowViolations(
-    tag(cand.reversals, base.reversals, newFrom),
+    tag(cand.reversals, base.reversals),
     1000,
     REVERSALS_PER_SECOND,
   )) {
@@ -122,12 +122,11 @@ const EMPTY: TraceEvents = { legs: [], hard: [], reversals: [] };
 export function violations(
   cand: ReadonlyMap<string, TraceEvents>,
   base: ReadonlyMap<string, TraceEvents>,
-  newFrom: number,
   swings: number,
 ): Violation[] {
   const out: Violation[] = [];
   for (const [scope, ev] of cand)
-    out.push(...scopeViolations(scope, ev, base.get(scope) ?? EMPTY, newFrom, swings));
+    out.push(...scopeViolations(scope, ev, base.get(scope) ?? EMPTY, swings));
   return out;
 }
 

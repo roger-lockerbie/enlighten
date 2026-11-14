@@ -4,7 +4,7 @@
 import { short } from '../dali/address.ts';
 import { framesForAll } from '../dali/sequences.ts';
 import type { Governor, Outcome } from './governor.ts';
-import { applySafetyProfile, type ProfileResult, type Submit } from './profile.ts';
+import { applySafetyProfile, patient, type ProfileResult, type Submit } from './profile.ts';
 import type { Source } from './types.ts';
 
 export type CeilingChange = Outcome & { readonly profiles?: readonly ProfileResult[] };
@@ -20,9 +20,12 @@ export async function lowerCeiling(
   submit: Submit,
   source: Source,
   now: () => number,
+  wait: (ms: number) => Promise<void>,
 ): Promise<CeilingChange> {
   if (arc > governor.ceilingArc)
     return { ok: false, reason: 'That is not lower than the ceiling.' };
+  // The rate guard can hold a pull-down back for a moment. The writes wait for it rather than fail.
+  submit = patient(submit, wait, now);
   const set = governor.setCeiling(arc, source);
   if (!set.ok) return set;
   const profiles: ProfileResult[] = [];
@@ -45,6 +48,14 @@ export async function lowerCeiling(
           frames: framesForAll([{ id: 'DAPC', address: short(n), value: arc }]),
           source: 'profile',
           label: 'hold under the new ceiling',
+        });
+      }
+      // A colour mix can keep the light above the ceiling even at the lowest level the driver holds.
+      if (governor.overCeiling(n, now())) {
+        await submit({
+          frames: framesForAll([{ id: 'OFF', address: short(n) }]),
+          source: 'profile',
+          label: 'off: the colour mix cannot fit under the new ceiling',
         });
       }
     }

@@ -5,15 +5,35 @@
 import { broadcast, short, type Address } from '../dali/address.ts';
 import type { Command } from '../dali/codec.ts';
 import { framesForAll, rgbwafCommands, tcCommands } from '../dali/sequences.ts';
-import type { Governor, Outcome } from './governor.ts';
+import { RESET_OFF_AFTER_MS, type Governor, type Outcome } from './governor.ts';
 import type { SendResult, Source, Transaction } from './types.ts';
 
 /** The scheduler's answer to a transaction, as much of it as these runners need. */
 export type Submitted =
   | { readonly kind: 'done'; readonly results: readonly SendResult[] }
-  | { readonly kind: 'refused' | 'dropped' | 'fault'; readonly reason: string };
+  | { readonly kind: 'refused'; readonly reason: string; readonly retryAt?: number }
+  | { readonly kind: 'dropped' | 'fault'; readonly reason: string };
 
 export type Submit = (tx: Transaction) => Promise<Submitted>;
+
+/**
+ * Wrap a `Submit` so a transaction the rate guard refused is sent again at the time it gives, a few
+ * times. Used by the internal runners (the profile, the ceiling), which must not give up at the first
+ * refusal: after a hardware connect, for example, light-changing writes wait 2 s.
+ */
+export function patient(
+  submit: Submit,
+  wait: (ms: number) => Promise<void>,
+  now: () => number,
+): Submit {
+  return async (tx) => {
+    for (let i = 0; ; i++) {
+      const r = await submit(tx);
+      if (r.kind !== 'refused' || i >= 5 || r.retryAt === undefined) return r;
+      await wait(Math.max(1, r.retryAt - now()));
+    }
+  };
+}
 
 function tx(cmds: readonly Command[], source: Source, label: string): Transaction {
   return { frames: framesForAll(cmds), source, label };
@@ -251,7 +271,7 @@ export async function resetAndRestore(
   const a = short(n);
   const r = await submit(tx([q('RESET', a)], source, 'RESET'));
   if (r.kind !== 'done') return { ok: false, reason: r.reason };
-  await wait(350);
+  await wait(RESET_OFF_AFTER_MS);
   const off = await submit(tx([q('OFF', a)], source, 'OFF after RESET'));
   if (off.kind !== 'done') return { ok: false, reason: `OFF after RESET: ${off.reason}` };
   await scanAddress(n, submit);

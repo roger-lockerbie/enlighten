@@ -2,16 +2,16 @@
  * The governor (ADR 0004, ADR 0005, ADR 0011). Every transaction from every source is judged here just
  * before it is sent. `judge` changes nothing. `observe` is the only way the governor's view advances.
  */
-import type { Address } from '../dali/address.ts';
+import { short, type Address } from '../dali/address.ts';
 import { decode, enabledDeviceType, frameText, type Command, type Frame } from '../dali/codec.ts';
 import { spec, type CommandSpec } from '../dali/commands.ts';
 import { arcToFraction } from '../dali/curve.ts';
-import type { TxFrame } from '../dali/sequences.ts';
+import { framesFor, type TxFrame } from '../dali/sequences.ts';
 import { DEFAULT_TIMING, FORWARD_FRAME_MS, planFrames, type BusTiming } from '../bus/timing.ts';
 import type { Simulator, SimUnit } from '../sim/simulator.ts';
 import { RESET_DEAF_MS } from '../sim/gear.ts';
 import { maxArcForMix, measure, mixSum, WORST_FACTS, type ColourFacts } from './mix.ts';
-import { PHANTOM, predictEvents, scopeOf } from './rate/trace.ts';
+import { PHANTOM, predictEvents, ROOM, scopeOf } from './rate/trace.ts';
 import { swingLimit, violations, withExtra, type Violation } from './rate/guard.ts';
 import {
   LIGHT_CHANGING,
@@ -51,10 +51,17 @@ const CONFIRMED_RAISE: ReadonlySet<string> = new Set([
 export const DEFAULT_CEILING_ARC = 220;
 /** An unlocked RESET at most once in this time (SPEC S3.10). */
 export const RESET_INTERVAL_MS = 10_000;
+/** After an unlocked RESET, OFF goes out this long after it: the gear's 300 ms and a margin. */
+export const RESET_OFF_AFTER_MS = 350;
+/** The OFF that follows an unlocked RESET is part of the RESET's swing for this long. */
+export const RESET_FOLLOW_UP_MS = 2000;
 /** How far back the rate guard looks. */
 export const HISTORY_MS = 6000;
-/** How far ahead the rate guard predicts. */
-export const HORIZON_MS = 10_000;
+/**
+ * How far ahead the rate guard predicts at most: past the longest fade (16 minutes). A slow fade is
+ * one long leg, and whether it reaches the leg ratio can depend on its far end.
+ */
+export const HORIZON_MS = 17 * 60_000;
 
 export interface AddressInfo {
   present?: boolean | undefined;
@@ -84,7 +91,15 @@ export interface GovernorOptions {
    * shadow is the bench). `observe` then does not feed it again.
    */
   readonly shadowFedByTransport?: boolean;
+  /**
+   * When the connection was made. On hardware nothing is known about what the lights did before, so
+   * light-changing commands wait `CONNECT_HOLD_MS` from this time (ADR 0011).
+   */
+  readonly connectedAt?: number;
 }
+
+/** After a hardware connect, light-changing commands wait this long: the longest rate guard window but the pattern rule's. */
+export const CONNECT_HOLD_MS = 2000;
 
 export type Outcome = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
@@ -138,6 +153,9 @@ export class Governor {
   private synthetic: { t: number; scope: string }[] = [];
   /** The OFF that follows an unlocked RESET is part of the RESET's one swing (SPEC S3.10). */
   private resetOff: { targets: Set<number>; until: number } | undefined;
+  private readonly holdUntil: number;
+  /** Addresses with a temporary colour set since their last ACTIVATE: 'tc', 'rgb', 'waf' parts seen. */
+  private readonly tempSeen = new Map<number, Set<string>>();
 
   constructor(opts: GovernorOptions) {
     this.target = opts.target;
@@ -145,6 +163,8 @@ export class Governor {
     this.timing = opts.timing ?? DEFAULT_TIMING;
     this.ceiling = opts.ceilingArc ?? DEFAULT_CEILING_ARC;
     this.shadowFedByTransport = opts.shadowFedByTransport ?? opts.target === 'simulator';
+    this.holdUntil =
+      opts.target === 'hardware' ? (opts.connectedAt ?? -Infinity) + CONNECT_HOLD_MS : -Infinity;
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -592,7 +612,15 @@ export class Governor {
     const u = sim.unit(id);
     if (u === undefined) return 0;
     const facts = this.factsFor(u);
-    const times = new Set<number>([from, to, ...u.gear.breakpoints(from, to)]);
+    const bps = [...new Set([from, to, ...u.gear.breakpoints(from, to)])].sort((a, b) => a - b);
+    const times = new Set<number>(bps);
+    // A level fading up while the mix fades down can peak between breakpoints, so look inside too.
+    for (let i = 0; i + 1 < bps.length; i++) {
+      const a = bps[i] ?? 0;
+      const b = bps[i + 1] ?? a;
+      const n = Math.min(100, Math.floor((b - a) / 20));
+      for (let k = 1; k < n; k++) times.add(a + ((b - a) * k) / n);
+    }
     let max = 0;
     for (const t of times) {
       if (t < from || t > to) continue;
@@ -615,16 +643,15 @@ export class Governor {
       const planned = this.plan(current, now);
       const from = planned[0]?.deliverAt ?? now;
       const fork = this.simulate(planned);
-      const to = Math.min(
-        Math.max(fork.settlesAt(), this.shadow.settlesAt(), from) + 1,
-        from + HORIZON_MS,
-      );
+      // Up to where every fade ends: a fade moves one way, so its end is its highest point.
+      const to = Math.max(fork.settlesAt(), this.shadow.settlesAt(), from) + 1;
       const over: SimUnit[] = [];
+      let worse = false;
       for (const u of fork.all) {
         const after = this.maxMeasure(fork, u.id, from, to);
         if (after <= limit) continue;
-        const before = this.maxMeasure(this.shadow, u.id, from, to);
-        if (after > before + 1e-9) over.push(u);
+        over.push(u);
+        if (after > this.maxMeasure(this.shadow, u.id, from, to) + 1e-9) worse = true;
       }
       if (over.length === 0) {
         return {
@@ -648,8 +675,15 @@ export class Governor {
         if (cap >= value || cap < 1) return f;
         return { ...f, frame: { a: f.frame.a, b: cap } };
       });
-      if (frames.every((f, k) => f === current.frames[k]))
-        return { ok: false, reason: 'This would take the light above the ceiling.' };
+      if (frames.every((f, k) => f === current.frames[k])) {
+        // Nothing left to lower. Refuse only what makes things worse, so lowering commands still go out.
+        if (worse) return { ok: false, reason: 'This would take the light above the ceiling.' };
+        return {
+          ok: true,
+          tx: current,
+          note: current === tx ? '' : 'Level lowered as far as it goes.',
+        };
+      }
       current = { ...current, frames };
     }
     return { ok: false, reason: 'This would take the light above the ceiling.' };
@@ -668,7 +702,8 @@ export class Governor {
       if (a.kind !== 'short' && (this.stale || this.unaddressedPresent))
         out.push({ t: p.deliverAt, scope: PHANTOM });
       for (const n of this.members(a)) {
-        if (!known(n)) out.push({ t: p.deliverAt, scope: `a${String(n)}` });
+        const colourUnknown = this.info.get(n)?.colourKnown !== true;
+        if (!known(n) || colourUnknown) out.push({ t: p.deliverAt, scope: `a${String(n)}` });
         if (p.cmd.id === 'DAPC' && p.cmd.value !== 255) levelKnown.set(n, true);
         if (p.cmd.id === 'OFF') levelKnown.set(n, true);
       }
@@ -682,6 +717,17 @@ export class Governor {
     const planned = this.plan(tx, now);
     const first = planned[0]?.deliverAt ?? now;
     const fork = this.simulate(planned);
+    // An unlocked RESET is judged with the OFF that follows it: together they are one swing and one
+    // hard step (SPEC S3.10). That OFF is then not judged again.
+    const resets: { t: number; scopes: string[] }[] = [];
+    for (const p of planned) {
+      if (p.cmd.id !== 'RESET' || p.cmd.address === undefined) continue;
+      const targets = this.members(p.cmd.address);
+      const at = p.deliverAt + RESET_OFF_AFTER_MS;
+      for (const n of targets)
+        fork.send(framesFor({ id: 'OFF', address: short(n) })[0] ?? p.frame, at);
+      resets.push({ t: p.deliverAt, scopes: [...targets.map((n) => `a${String(n)}`), ROOM] });
+    }
     const instant = this.target === 'hardware' && !FADE_BEHAVIOUR_CONFIRMED;
     const from = now - HISTORY_MS;
     const to = Math.min(
@@ -691,8 +737,24 @@ export class Governor {
     const hist = this.synthetic.filter((e) => e.t >= from);
     const base = withExtra(predictEvents(this.shadow, from, to, instant), hist);
     const extra = this.extraEvents(planned);
+    if (first < this.holdUntil && planned.some((p) => LIGHT_CHANGING.has(p.cmd.id))) {
+      return [
+        {
+          scope: 'bus',
+          rule: 'nothing is known about the lights just after connecting',
+          retryAt: this.holdUntil,
+        },
+      ];
+    }
     const cand = withExtra(predictEvents(fork, from, to, instant), [...hist, ...extra]);
-    const v = violations(cand, base, first, this.swingLimit);
+    for (const r of resets) {
+      for (const scope of r.scopes) {
+        const ev = cand.get(scope);
+        const i = ev?.hard.findIndex((t) => t > r.t + 1 && t <= r.t + RESET_FOLLOW_UP_MS) ?? -1;
+        if (ev !== undefined && i >= 0) ev.hard.splice(i, 1);
+      }
+    }
+    const v = violations(cand, base, this.swingLimit);
     if (planned.some((p) => p.cmd.id === 'RESET') && first - this.lastResetAt < RESET_INTERVAL_MS) {
       v.push({
         scope: 'bus',
@@ -706,10 +768,12 @@ export class Governor {
   /** The earliest time the same transaction would pass, checked by judging it again then. */
   private retryAt(tx: Transaction, now: number, v: readonly Violation[]): { retryAt?: number } {
     let t = Math.max(now + 1, ...v.map((x) => x.retryAt));
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 16; i++) {
       const again = this.rateCheck(tx, t);
       if (again.length === 0) return { retryAt: Math.ceil(t) };
-      t = Math.max(t + 1, ...again.map((x) => x.retryAt));
+      // A hint can lag behind when the change would extend an older run, so widen the step then.
+      const hint = Math.max(...again.map((x) => x.retryAt));
+      t = hint > t ? hint : t + Math.max(20, (t - now) / 4);
     }
     return {};
   }
@@ -761,7 +825,7 @@ export class Governor {
       this.deafUntil = sent.at + RESET_DEAF_MS + 50;
     if (cmd.id === 'RESET') {
       this.lastResetAt = sent.at;
-      this.resetOff = { targets: new Set(targets), until: sent.at + 2000 };
+      this.resetOff = { targets: new Set(targets), until: sent.at + RESET_FOLLOW_UP_MS };
     } else if (cmd.id === 'OFF' && this.resetOff !== undefined && a?.kind === 'short') {
       this.resetOff.targets.delete(a.n);
     }
@@ -813,9 +877,28 @@ export class Governor {
         case 'OFF':
           if (!fault) i.levelKnown = true;
           break;
-        case 'DT8_ACTIVATE':
-          if (!fault) i.colourKnown = true;
+        case 'DT8_SET_TEMPORARY_TC':
+          this.tempSeen.set(n, new Set(['tc']));
           break;
+        case 'DT8_SET_TEMPORARY_RGB':
+        case 'DT8_SET_TEMPORARY_WAF': {
+          const seen = this.tempSeen.get(n) ?? new Set<string>();
+          seen.add(cmd.id === 'DT8_SET_TEMPORARY_RGB' ? 'rgb' : 'waf');
+          this.tempSeen.set(n, seen);
+          break;
+        }
+        case 'DT8_ACTIVATE': {
+          // The colour is known only when this session set all of it before activating.
+          const seen = this.tempSeen.get(n);
+          if (
+            !fault &&
+            seen !== undefined &&
+            (seen.has('tc') || (seen.has('rgb') && seen.has('waf')))
+          )
+            i.colourKnown = true;
+          this.tempSeen.delete(n);
+          break;
+        }
         default:
           break;
       }
@@ -853,6 +936,8 @@ export class Governor {
         break;
       case 'QUERY_DEVICE_TYPE':
         i.deviceTypes = v === undefined || v === 255 ? [] : v === 254 ? [] : [v];
+        // Gear with no colour has no colour to be unknown.
+        if (v !== undefined && v !== 255 && v !== 8) i.colourKnown = true;
         break;
       case 'QUERY_NEXT_DEVICE_TYPE':
         if (v !== undefined && v !== 254) i.deviceTypes = [...(i.deviceTypes ?? []), v];
@@ -883,6 +968,14 @@ export class Governor {
    */
   observePanic(sent: SentFrame, result: SendResult): void {
     this.observe(sent, result);
+  }
+
+  /** True when an address's light, by the ceiling's measure, is above the ceiling at a time. */
+  overCeiling(n: number, at: number): boolean {
+    const u = this.shadow.byShortAddress(n);
+    if (u === undefined) return false;
+    const m = measure(u.gear.arcFractionAt(at), this.factsFor(u), this.colourOf(u, at));
+    return m > arcToFraction(this.ceiling) + 1e-9;
   }
 
   /** Gear facts as a person would see them: for the UI and the tests. */
