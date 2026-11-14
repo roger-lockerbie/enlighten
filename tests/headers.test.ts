@@ -41,12 +41,13 @@ describe('strict headers', () => {
     expect(csp).not.toMatch(/https?:|wss?:|\*/);
   });
 
-  it('allows only hid, screen-wake-lock and fullscreen, for self', () => {
+  it('allows only screen-wake-lock, for self, and turns hid and fullscreen off', () => {
     const policy = permissionsPolicy();
-    for (const feature of ['hid', 'screen-wake-lock', 'fullscreen']) {
-      expect(policy).toContain(`${feature}=(self)`);
-    }
+    expect(policy.match(/=\(self\)/g)).toEqual(['=(self)']);
+    expect(policy).toContain('screen-wake-lock=(self)');
     for (const feature of [
+      'hid',
+      'fullscreen',
       'camera',
       'microphone',
       'geolocation',
@@ -71,6 +72,12 @@ describe('dev headers', () => {
   it('grant no device features', () => {
     expect(permissionsPolicy('dev')).toContain('hid=()');
     expect(permissionsPolicy('dev')).not.toContain('hid=(self)');
+  });
+
+  it('name one Trusted Types policy in production, the worker policy', () => {
+    const csp = securityHeaders('strict')['Content-Security-Policy'] ?? '';
+    expect(csp).toMatch(/(^|; )trusted-types enlighten-worker(;|$)/);
+    expect(csp).not.toContain('svelte-trusted-html');
   });
 
   it('relax only what hot reload needs', () => {
