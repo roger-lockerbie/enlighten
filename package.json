@@ -38,7 +38,7 @@
     "start": "pnpm build && pnpm preview",
     "test": "vitest run --project unit",
     "test:prop": "vitest run --project prop",
-    "e2e": "playwright test",
+    "e2e": "playwright test && playwright test -c playwright.server.config.ts",
     "e2e:server": "playwright test -c playwright.server.config.ts",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",

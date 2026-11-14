@@ -164,7 +164,7 @@
   <p class="muted">An unlock lasts until the page reloads. Type its name to confirm.</p>
   <label
     >Unlock
-    <select bind:value={unlockName}>
+    <select bind:value={unlockName} data-testid="unlock-name">
       <option value="reset">reset</option>
       <option value="expert">expert</option>
       <option value="rate">rate</option>
