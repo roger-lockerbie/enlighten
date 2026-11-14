@@ -130,6 +130,8 @@ describe('lowering the ceiling', () => {
     await b.clock.advance(3000);
     const { log } = await lower(b, 150);
     expect(levelCommands(log, 0)).toEqual([['hold under the new ceiling', 'profile', 'DAPC', 150]]);
+    // B sits exactly at the new ceiling, so it needs nothing.
+    expect(levelCommands(log, 1)).toEqual([]);
   });
   it('sends gear fading down the level it is heading for, and gear fading up the ceiling', async () => {
     let b = await bench(unpulled());
@@ -181,6 +183,42 @@ describe('lowering the ceiling', () => {
     expect(levelCommands((await lower(b, 150)).log, 1)).toEqual([
       ['hold under the new ceiling', 'profile', 'DAPC', 100],
     ]);
+    // Fading up from under the new ceiling to above it: held at the ceiling.
+    b = await dim();
+    await b.run({ frames: framesForAll([{ id: 'DAPC', address: B, value: 100 }]), source: 'ui' });
+    await b.clock.advance(3000);
+    const up = new Rig(b.sim, b.clock.now());
+    up.set('SET_FADE_TIME', 1, 7);
+    await b.clock.advance(up.t - b.clock.now() + 10);
+    await b.run({ frames: framesForAll([{ id: 'DAPC', address: B, value: 200 }]), source: 'ui' });
+    await b.clock.advance(500);
+    expect(b.sim.unit('B')?.gear.levelAt(b.clock.now())).toBeLessThan(150);
+    expect(b.governor.overCeiling(1, b.clock.now())).toBe(false);
+    expect(levelCommands((await lower(b, 150)).log, 1)).toEqual([
+      ['hold under the new ceiling', 'profile', 'DAPC', 150],
+    ]);
+  });
+  it('holds gear whose colour mix is over the new ceiling though its level is under it', async () => {
+    const b = await bench(unpulled());
+    await b.run({
+      frames: framesForAll(rgbwafCommands(B, [254, 254, 254, 254, 254, 255])),
+      source: 'ui',
+    });
+    await b.clock.advance(3000);
+    // The governor lowers DAPC 254 to the most the full mix allows under 220.
+    await b.run({ frames: framesForAll([{ id: 'DAPC', address: B, value: 254 }]), source: 'ui' });
+    await b.clock.advance(3000);
+    const level = Math.round(b.sim.unit('B')?.gear.levelAt(b.clock.now()) ?? 0);
+    expect(level).toBeLessThan(200);
+    const arc = level + 10;
+    expect(b.governor.overCeiling(1, b.clock.now())).toBe(false);
+    const { log } = await lower(b, arc);
+    // The hold is lowered again by the governor to fit the mix, so no OFF is needed.
+    expect(levelCommands(log, 1)).toEqual([
+      ['hold under the new ceiling', 'profile', 'DAPC', level],
+    ]);
+    expect(b.sim.unit('B')?.gear.levelAt(b.clock.now())).toBeLessThan(level);
+    expect(b.governor.overCeiling(1, b.clock.now())).toBe(false);
   });
   it('ends a fade to off with OFF', async () => {
     const b = await bench();
