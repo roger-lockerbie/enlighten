@@ -18,8 +18,9 @@ export interface SimLog {
 
 export class SimTransport implements Transport {
   readonly kind = 'sim';
-  /** Every frame that reached the simulated bus, with the time it arrived. */
+  /** Every frame that reached the simulated bus, with the time it arrived. Kept for tests only. */
   readonly log: SimLog[] = [];
+  private readonly keepLog: boolean;
   /** For tests: make a frame end in a transport fault. `reached` says whether it still hit the bus. */
   fault: ((f: TxFrame) => { reached: boolean } | undefined) | undefined;
   /** For tests: called as each frame starts on the wire. */
@@ -28,10 +29,11 @@ export class SimTransport implements Transport {
   private readonly clock: Clock;
   private readonly timing: BusTiming;
 
-  constructor(sim: Simulator, clock: Clock, timing: BusTiming) {
+  constructor(sim: Simulator, clock: Clock, timing: BusTiming, opts: { keepLog?: boolean } = {}) {
     this.sim = sim;
     this.clock = clock;
     this.timing = timing;
+    this.keepLog = opts.keepLog === true;
   }
 
   state(): TransportState {
@@ -64,7 +66,7 @@ export class SimTransport implements Transport {
       let result: SendResult = { kind: 'sent' };
       this.clock.at(deliverAt, () => {
         if (fault !== undefined && !fault.reached) return;
-        this.log.push({ frame, at: deliverAt, panic });
+        if (this.keepLog) this.log.push({ frame, at: deliverAt, panic });
         const r = this.sim.send(frame, deliverAt, this.timing.settleLaterMs + FORWARD_FRAME_MS);
         if (frame.expectReply) {
           result =
