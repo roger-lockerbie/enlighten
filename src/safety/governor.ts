@@ -7,6 +7,7 @@ import { decode, encode, frameText, type Command, type Frame } from '../dali/cod
 import { spec, type CommandSpec } from '../dali/commands.ts';
 import { arcToFraction } from '../dali/curve.ts';
 import type { TxFrame } from '../dali/sequences.ts';
+import type { BusReply } from '../dali/reply.ts';
 import {
   DEFAULT_TIMING,
   FORWARD_FRAME_MS,
@@ -197,8 +198,8 @@ function freeze(tx: Transaction): Transaction {
   return Object.freeze({ ...tx, frames: Object.freeze(frames) });
 }
 
-function approve(tx: Transaction): Approved {
-  const a = Object.freeze({ tx }) as unknown as Approved;
+function approve(tx: Transaction, issuedAt: number): Approved {
+  const a = Object.freeze({ tx, issuedAt }) as unknown as Approved;
   issued.add(a);
   return a;
 }
@@ -451,7 +452,7 @@ export class Governor {
     }
     // The approval holds a frozen copy, and the scheduler sends from it (security review M1).
     const sealed = freeze(candidate);
-    const approval = approve(sealed);
+    const approval = approve(sealed, now);
     if (candidate === tx) return { kind: 'allow', approval };
     return { kind: 'clamp', tx: sealed, note: notes.join(' '), approval };
   }
@@ -1076,18 +1077,19 @@ export class Governor {
    * Record a frame that went to a transport, with what came back. A refused frame never reached the
    * bus. A fault may have, so everything it could change becomes unknown (SPEC R1.9).
    */
-  observe(sent: SentFrame, result: SendResult): void {
-    if (result.kind === 'refused') return;
+  observe(sent: SentFrame, result: SendResult): BusReply | undefined {
+    if (result.kind === 'refused') return undefined;
     const f = sent.frame;
     const prev = this.lastSent;
     this.lastSent = f.frame;
     this.lastAt = sent.at;
     const fault = result.kind === 'fault';
-    if (!this.shadowFedByTransport) {
-      this.shadow.send(f, sent.at, this.timing.settleLaterMs + FORWARD_FRAME_MS);
-    }
+    // The shadow's own answer, before anything is learned from the hardware's (SPEC R1.5).
+    const shadowReply = this.shadowFedByTransport
+      ? undefined
+      : this.shadow.send(f, sent.at, this.timing.settleLaterMs + FORWARD_FRAME_MS);
     const cmd = decode(f.frame, prev);
-    if (cmd === undefined) return;
+    if (cmd === undefined) return shadowReply;
     const sp = spec(cmd.id);
     const a = cmd.address;
     const targets = a === undefined ? [] : this.members(a);
@@ -1230,6 +1232,7 @@ export class Governor {
     ) {
       this.unaddressedPresent = result.kind !== 'no-reply';
     }
+    return shadowReply;
   }
 
   private learn(n: number, cmd: Command, result: SendResult): void {
