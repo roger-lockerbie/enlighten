@@ -343,6 +343,18 @@ describe('the safety profile', () => {
     });
     expect((await applySafetyProfile(0, h, hb.submit)).verified).toBe(true);
     expect(hb.log.map((l) => l.label)).toContain('lower MIN LEVEL');
+    // A MIN LEVEL under or at the ceiling stays as it is, and the read-back expects it.
+    for (const ceiling of [220, 100]) {
+      const k = gov();
+      if (ceiling !== 220) k.setCeiling(ceiling, 'ui');
+      const kb = fakeBus(k, {
+        ...DT6,
+        QUERY_MIN_LEVEL: reply(100),
+        QUERY_MAX_LEVEL: reply(ceiling),
+      });
+      expect((await applySafetyProfile(0, k, kb.submit)).verified).toBe(true);
+      expect(kb.log.map((l) => l.label)).not.toContain('lower MIN LEVEL');
+    }
   });
   it('lists each read-back that does not match', async () => {
     const g = gov();
@@ -423,10 +435,13 @@ describe('the safety profile', () => {
       labelled: true,
     });
     // Three channels: red. Four or more: white.
-    expect((await writes(8, 0x60)).writes).toEqual([
-      ['DT8_SET_TEMPORARY_RGB', 254, 0, 0],
-      ['DT8_SET_TEMPORARY_WAF', 0, 0, 0],
-    ]);
+    expect(await writes(8, 0x60)).toEqual({
+      writes: [
+        ['DT8_SET_TEMPORARY_RGB', 254, 0, 0],
+        ['DT8_SET_TEMPORARY_WAF', 0, 0, 0],
+      ],
+      labelled: true,
+    });
     expect((await writes(8, 0x80)).writes).toEqual([
       ['DT8_SET_TEMPORARY_RGB', 0, 0, 0],
       ['DT8_SET_TEMPORARY_WAF', 254, 0, 0],

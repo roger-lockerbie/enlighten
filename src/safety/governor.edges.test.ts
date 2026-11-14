@@ -58,6 +58,21 @@ const present = (g: Governor, a: Address) => {
   tell(g, c('QUERY_CONTROL_GEAR_PRESENT', a), reply(255));
 };
 
+describe('replies to more than one address', () => {
+  it('teach nothing about one address, and only QUERY MISSING SHORT ADDRESS finds unaddressed gear', () => {
+    const g = bare('hardware', new Simulator([]));
+    const unaddressedPresent = () =>
+      (JSON.parse(g.fingerprint()) as { unaddressedPresent: boolean }).unaddressedPresent;
+    expect(unaddressedPresent()).toBe(false);
+    tell(g, c('QUERY_CONTROL_GEAR_PRESENT', broadcast), reply(255));
+    tell(g, c('QUERY_STATUS', unaddressed), reply(0));
+    expect(g.knownAddresses()).toEqual([]);
+    expect(unaddressedPresent()).toBe(false);
+    tell(g, c('QUERY_MISSING_SHORT_ADDRESS', broadcast), reply(255));
+    expect(unaddressedPresent()).toBe(true);
+  });
+});
+
 describe('the ceiling setting', () => {
   it('takes whole arc levels from 1 to 254 only', () => {
     const g = bare();
@@ -211,6 +226,10 @@ describe('rules, to the exact outcome', () => {
     const v = b.governor.judge(tx([c('DAPC', A, 254)]), b.clock.now() + 5000);
     expect(v.kind === 'clamp' ? v.note : v.kind).toBe('DAPC 254 clamped to the ceiling, 220.');
     expect(b.governor.judge(tx([c('DTR0', undefined, 254)]), b.clock.now()).kind).toBe('allow');
+    const two = b.governor.judge(tx([c('DAPC', A, 254), c('DAPC', B, 230)]), b.clock.now() + 5000);
+    expect(two.kind === 'clamp' ? two.note : two.kind).toBe(
+      'DAPC 254 clamped to the ceiling, 220. DAPC 230 clamped to the ceiling, 220.',
+    );
   });
   it('a frame whose flags do not match its command is refused with the reason', () => {
     const g = bare();
@@ -237,6 +256,7 @@ describe('rules, to the exact outcome', () => {
       'RESET: accepted only from a person at the console or the UI.',
     );
     expect(reason(g.judge(tx([c('DOWN', A)]), 0))).toBe('DOWN: Address 0 is not verified.');
+    expect(reason(g.judge(tx([c('RESET', A)], 'console'), 0))).not.toMatch(/not verified/);
   });
   it('SET MAX LEVEL counts 255 as 254, and limits equal to the ceiling pass', () => {
     const g = bare();

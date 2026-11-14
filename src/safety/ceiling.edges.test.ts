@@ -42,11 +42,11 @@ function logging(b: Bench): { submit: Submit; log: Logged[] } {
   };
 }
 
-/** The bench, with A's output not pulled down by a lower MAX LEVEL, so a fade keeps its target. */
+/** The bench, with output not pulled down by a lower MAX LEVEL, so a fade keeps its target. */
 const unpulled = () =>
   Simulator.of([
     { id: 'A', profile: benchA({ maxLowerPullsDown: false }), opts: { shortAddress: 0 } },
-    { id: 'B', profile: benchB(), opts: { shortAddress: 1 } },
+    { id: 'B', profile: benchB({ maxLowerPullsDown: false }), opts: { shortAddress: 1 } },
   ]);
 
 const waiter = (b: Bench) => (ms: number) =>
@@ -153,6 +153,33 @@ describe('lowering the ceiling', () => {
     expect(b.sim.unit('A')?.gear.levelAt(b.clock.now())).toBeLessThan(150);
     expect(levelCommands((await lower(b, 150)).log, 0)).toEqual([
       ['hold under the new ceiling', 'profile', 'DAPC', 150],
+    ]);
+  });
+  it('holds gear above the new ceiling by level, even when its dim colour mix keeps it under', async () => {
+    // A mix this dim keeps the measure under the new ceiling, so only the level shows it is above.
+    const dim = async () => {
+      const b = await bench(unpulled());
+      await b.run({ frames: framesForAll(rgbwafCommands(B, [30, 0, 0, 0, 0, 0])), source: 'ui' });
+      await b.clock.advance(3000);
+      await b.run({ frames: framesForAll([{ id: 'DAPC', address: B, value: 200 }]), source: 'ui' });
+      await b.clock.advance(3000);
+      return b;
+    };
+    let b = await dim();
+    expect(b.governor.overCeiling(1, b.clock.now())).toBe(false);
+    expect(levelCommands((await lower(b, 150)).log, 1)).toEqual([
+      ['hold under the new ceiling', 'profile', 'DAPC', 150],
+    ]);
+    // Fading down from above the new ceiling to under it: held at the level it is heading for.
+    b = await dim();
+    const r = new Rig(b.sim, b.clock.now());
+    r.set('SET_FADE_TIME', 1, 7);
+    await b.clock.advance(r.t - b.clock.now() + 10);
+    await b.run({ frames: framesForAll([{ id: 'DAPC', address: B, value: 100 }]), source: 'ui' });
+    await b.clock.advance(500);
+    expect(b.sim.unit('B')?.gear.levelAt(b.clock.now())).toBeGreaterThan(150);
+    expect(levelCommands((await lower(b, 150)).log, 1)).toEqual([
+      ['hold under the new ceiling', 'profile', 'DAPC', 100],
     ]);
   });
   it('ends a fade to off with OFF', async () => {

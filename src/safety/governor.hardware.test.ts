@@ -241,6 +241,24 @@ describe('what observe remembers', () => {
     tell(g, c('QUERY_STATUS', A), reply(0), 8001);
     expect(fp(g).synthetic[0]?.t).toBe(1060);
   });
+  it('an event for modelled gear only while its level is unknown', () => {
+    const g = hw();
+    scanInto(g, 0);
+    tell(g, c('DAPC', A, 100), undefined, 1000);
+    expect(fp(g).synthetic).toEqual([]);
+    const g2 = hw();
+    scanInto(g2, 0);
+    // A recall the scan did not read leaves the level unknown, so the change after it is unknown too,
+    // and so is the room total until then.
+    tell(g2, c('GO_TO_LAST_ACTIVE_LEVEL', A), undefined, 1000);
+    tell(g2, c('DAPC', A, 120), undefined, 3000);
+    tell(g2, c('DAPC', A, 130), undefined, 5000);
+    expect(fp(g2).synthetic.map((e) => [e.t, e.scope])).toEqual([
+      [1000, 'a0'],
+      [3000, 'a0'],
+      [3000, ROOM],
+    ]);
+  });
   it('a RESET or SAVE PERSISTENT VARIABLES makes the gear deaf to registers for 350 ms', () => {
     for (const id of ['RESET', 'SAVE_PERSISTENT_VARIABLES']) {
       const g = hw();
@@ -644,6 +662,17 @@ describe('the rate guard on hardware', () => {
     tell(g, c('DAPC', A, 200), undefined, 1000);
     const v = g.judge(tx([c('DAPC', A, 0)]), 2000);
     expect(reason(v)).toMatch(/hard step/);
+    // A slow fade up, then a change back down 1.5 s later. Faded, neither is a hard step. As instant
+    // steps, they are two hard steps in 2 s.
+    const upAndBack = (target: 'hardware' | 'simulator') => {
+      const h = new Governor({ target, shadow: new Simulator([]), connectedAt: -10_000 });
+      scanInto(h, 0, { fade: 0x77, level: 100 });
+      h.markInventoryFresh(false);
+      tell(h, c('DAPC', A, 200), undefined, 1000);
+      return reason(h.judge(tx([c('DAPC', A, 100)]), 2500));
+    };
+    expect(upAndBack('simulator')).toBe('');
+    expect(upAndBack('hardware')).toMatch(/hard step/);
   });
   it('counts legs from both predictions', () => {
     const g = hw();
