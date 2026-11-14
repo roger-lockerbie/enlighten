@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 2 are merged. Stage 3 (DALI core, simulator and safety governor) is done on `stage-3-core` and waiting for review. Stage 4 (transports and the hasseb) is next, on Opus, in plan mode.
+Stages 0 to 3 are merged. Stage 4 (transports and the hasseb) is in progress on `stage-4-transports`, on Opus. The approved plan's parts: A core plumbing, B engine, C workers and the page, D the Python server, E e2e and CI, F docs and stage close.
 
 ## Done in Stage 0
 
@@ -59,6 +59,18 @@ Branch `stage-3-core`. What is in it:
 Owner decision on the ceiling. When the ceiling is lowered while a driver is fading down from above the new ceiling, and that driver does not pull its output down to a lower MAX LEVEL, `lowerCeiling` sends the hold DAPC and then an OFF, because the light is still above the new ceiling while it fades. The owner chose to keep the OFF as the safe choice. With the profile default (`maxLowerPullsDown: true`, a hardware-day item) the case does not arise. `src/safety/ceiling.edges.test.ts` pins it.
 
 Carried to Stage 4: the router with single-use, time-bound approvals; `RealClock`; the hasseb report builder and its G-hasseb test; the transport keeping frames in order when panic stops waiting after 100 ms.
+
+## Stage 4 (transports and the hasseb), in progress
+
+Done and committed:
+
+- Part A: `TimerClock` (the real clock, `src/bus/clock.ts`); the `Transport` interface (`src/engine/transport.ts`); `SimTransport`, the wire codec and `ServerTransport` (`src/transport/`, pure through an injected socket); the router with single-use, time-bound approvals (`src/engine/router.ts`); the governor's approvals carry their judgement time and `observe` returns the shadow's own answer; the test bench now runs on the real router; lint keeps transports, sending, policies and workers in their places.
+- SPEC section 9 now fixes the encoding (big-endian, hex token in the URL, message lengths, close reasons) and adds `0x84 STOPPED`.
+- Part B: the engine (`src/engine/engine.ts`) with target changes, fresh hardware state on every connect, drops, panic, the heartbeat watchdog, the ceiling, unlocks, requests, discovery (`inventory.ts`), the divergence gate and background check for Both (`divergence.ts`), the coalescer, commissioning (`commission.ts`), the hardware check (`hwcheck.ts`) and the page and worker protocol (`protocol.ts`).
+
+Found while building: on hardware, while any DT8 driver's colour is unknown this session, lowering MAX LEVEL below a lit driver's level is refused with no retry time (the rate guard predicts two hard steps in one transaction). The hardware check sets a known colour on every driver first. To raise at stage close.
+
+Next: Part C (workers, the page, the interim UI), Part D (the Python server in `server/`), Part E (e2e against the fake device, CI), Part F (docs, then the stage close).
 
 ## Next
 
