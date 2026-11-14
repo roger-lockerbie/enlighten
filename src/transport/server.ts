@@ -25,7 +25,7 @@ import {
 /** The part of a WebSocket the transport uses. The worker passes a real one. */
 export interface WebSocketLike {
   binaryType: string;
-  send(data: Uint8Array): void;
+  send(data: Uint8Array<ArrayBuffer>): void;
   close(): void;
   onopen: (() => void) | null;
   onmessage: ((ev: { data: unknown }) => void) | null;

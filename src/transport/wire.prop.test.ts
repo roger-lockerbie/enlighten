@@ -1,12 +1,12 @@
 /** The server protocol's codec: every message round-trips, and nothing else decodes. */
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { parseToken } from '../engine/protocol.ts';
 import {
   decodeClient,
   decodeServer,
   encodeClient,
   encodeServer,
-  parseToken,
   PROTOCOL_VERSION,
   TOKEN_BYTES,
   type ClientMessage,

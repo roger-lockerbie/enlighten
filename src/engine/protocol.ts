@@ -5,6 +5,7 @@
  *
  * Everything the page asks for comes from a person at the UI, so the worker gives it the source `ui`.
  */
+import type { Address } from '../dali/address.ts';
 import type { Command } from '../dali/codec.ts';
 import type { Outcome } from '../safety/governor.ts';
 import type { Unlock } from '../safety/types.ts';
@@ -66,7 +67,7 @@ export const MAX_COMMANDS = 16;
 
 function parseCommand(x: unknown): Command | undefined {
   if (!isObj(x) || !isStr(x['id'], 64) || !/^[A-Z0-9_]+$/.test(x['id'])) return undefined;
-  const out: { id: string; address?: Command['address']; value?: number } = { id: x['id'] };
+  const out: { id: string; address?: Address; value?: number } = { id: x['id'] };
   const a = x['address'];
   if (a !== undefined) {
     if (!isObj(a)) return undefined;
@@ -220,4 +221,12 @@ export function parseFromWorker(x: unknown): FromWorker | undefined {
     default:
       return undefined;
   }
+}
+
+/** The session token from the URL fragment: exactly 64 lowercase hex characters. */
+export function parseToken(hex: string): Uint8Array | undefined {
+  if (!/^[0-9a-f]{64}$/.test(hex)) return undefined;
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) out[i] = parseInt(hex.slice(2 * i, 2 * i + 2), 16);
+  return out;
 }

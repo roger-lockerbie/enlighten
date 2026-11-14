@@ -81,7 +81,7 @@ function check(cond: boolean, what: string): void {
   if (!cond) throw new RangeError(`Cannot encode ${what}.`);
 }
 
-export function encodeClient(m: ClientMessage): Uint8Array {
+export function encodeClient(m: ClientMessage): Uint8Array<ArrayBuffer> {
   switch (m.type) {
     case 'hello': {
       check(byte(m.version) && m.token.length === TOKEN_BYTES, 'HELLO');
@@ -137,7 +137,7 @@ export function decodeClient(b: Uint8Array): ClientMessage | undefined {
   }
 }
 
-export function encodeServer(m: ServerMessage): Uint8Array {
+export function encodeServer(m: ServerMessage): Uint8Array<ArrayBuffer> {
   switch (m.type) {
     case 'welcome': {
       check(
@@ -204,12 +204,4 @@ export function decodeServer(b: Uint8Array): ServerMessage | undefined {
     default:
       return undefined;
   }
-}
-
-/** The session token from the URL fragment: exactly 64 lowercase hex characters. */
-export function parseToken(hex: string): Uint8Array | undefined {
-  if (!/^[0-9a-f]{64}$/.test(hex)) return undefined;
-  const out = new Uint8Array(TOKEN_BYTES);
-  for (let i = 0; i < TOKEN_BYTES; i++) out[i] = parseInt(hex.slice(2 * i, 2 * i + 2), 16);
-  return out;
 }
