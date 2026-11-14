@@ -48,8 +48,8 @@ async function ask(
 ): Promise<number | undefined> {
   const r = await submit(tx(cmds, source, label));
   if (r.kind !== 'done') throw new ProfileError(`${label}: ${r.reason}`);
+  // A fault ends the transaction as 'fault', not 'done', so the last result here is a real answer.
   const last = r.results[r.results.length - 1];
-  if (last?.kind === 'fault') throw new ProfileError(`${label}: ${last.reason}`);
   return last?.kind === 'reply' ? last.byte : undefined;
 }
 
@@ -65,8 +65,7 @@ async function send(
 
 export class ProfileError extends Error {}
 
-const q = (id: string, a: Address, value?: number): Command =>
-  value === undefined ? { id, address: a } : { id, address: a, value };
+const q = (id: string, a: Address): Command => ({ id, address: a });
 
 /** Read what the governor needs about one address. Returns false when nothing answers. */
 export async function scanAddress(
@@ -242,12 +241,13 @@ export async function applySafetyProfile(
     check('SYSTEM FAILURE LEVEL', 255, rb.systemFailure);
     check('dimming curve', 0, rb.curve);
     if (mismatches.length > 0) return { address: n, verified: false, mismatches, unconfirmed };
+    // Every read-back matched, so it equals what was expected.
     const marked = governor.markVerified(n, {
-      max: rb.max ?? 255,
-      min: rb.min ?? 255,
-      powerOn: rb.powerOn ?? 255,
-      systemFailure: rb.systemFailure ?? 0,
-      linear: rb.curve !== 0,
+      max: ceiling,
+      min: expectedMin,
+      powerOn: 0,
+      systemFailure: 255,
+      linear: false,
     });
     if (!marked.ok)
       return { address: n, verified: false, reason: marked.reason, mismatches, unconfirmed };

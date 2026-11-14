@@ -3,11 +3,17 @@
  * before it is sent. `judge` changes nothing. `observe` is the only way the governor's view advances.
  */
 import { short, type Address } from '../dali/address.ts';
-import { decode, enabledDeviceType, frameText, type Command, type Frame } from '../dali/codec.ts';
+import { decode, encode, frameText, type Command, type Frame } from '../dali/codec.ts';
 import { spec, type CommandSpec } from '../dali/commands.ts';
 import { arcToFraction } from '../dali/curve.ts';
-import { framesFor, type TxFrame } from '../dali/sequences.ts';
-import { DEFAULT_TIMING, FORWARD_FRAME_MS, planFrames, type BusTiming } from '../bus/timing.ts';
+import type { TxFrame } from '../dali/sequences.ts';
+import {
+  DEFAULT_TIMING,
+  FORWARD_FRAME_MS,
+  settleMs,
+  wireMs,
+  type BusTiming,
+} from '../bus/timing.ts';
 import type { Simulator, SimUnit } from '../sim/simulator.ts';
 import { RESET_DEAF_MS } from '../sim/gear.ts';
 import { maxArcForMix, measure, mixSum, WORST_FACTS, type ColourFacts } from './mix.ts';
@@ -106,6 +112,18 @@ export type Outcome = { readonly ok: true } | { readonly ok: false; readonly rea
 
 const OK: Outcome = { ok: true };
 const no = (reason: string): Outcome => ({ ok: false, reason });
+
+/** Decode every frame of a transaction, each with the frame before it as context. */
+function decodeFrames(frames: readonly TxFrame[]): Command[] {
+  const out: Command[] = [];
+  let prev: Frame | undefined;
+  for (const f of frames) {
+    const c = decode(f.frame, prev);
+    if (c !== undefined) out.push(c);
+    prev = f.frame;
+  }
+  return out;
+}
 
 /** Approvals the governor has issued. Only `judge` adds to it. */
 const issued = new WeakSet<object>();
@@ -323,10 +341,7 @@ export class Governor {
     const notes: string[] = [...checked.notes];
 
     // A command behind an unlock was confirmed by a person, who was told what it does (P-ceiling).
-    const confirmed = candidate.frames.some((f, k) => {
-      const cmd = decode(f.frame, k > 0 ? candidate.frames[k - 1]?.frame : undefined);
-      return cmd !== undefined && CONFIRMED_RAISE.has(cmd.id);
-    });
+    const confirmed = decodeFrames(candidate.frames).some((c) => CONFIRMED_RAISE.has(c.id));
     const fitted = confirmed
       ? { ok: true as const, tx: candidate, note: '' }
       : this.fitCeiling(candidate, now);
@@ -337,11 +352,11 @@ export class Governor {
     }
 
     const rate = this.isResetFollowUp(candidate, now) ? [] : this.rateCheck(candidate, now);
-    if (rate.length > 0) {
-      const first = rate[0];
+    const [first] = rate;
+    if (first !== undefined) {
       return {
         kind: 'refuse',
-        reason: `Rate guard: ${first?.rule ?? 'limit'} (${first?.scope ?? ''}).`,
+        reason: `Rate guard: ${first.rule} (${first.scope}).`,
         ...this.retryAt(candidate, now, rate),
       };
     }
@@ -410,16 +425,17 @@ export class Governor {
     now: number,
   ): { ok: true; tx: Transaction; notes: string[] } | { ok: false; reason: string } {
     const dtr = [...this.dtr];
-    // Gear may still be deaf after a RESET, so a register loaded then is not known to have taken.
-    const times = planFrames(tx.frames, now, this.timing);
     const frames: TxFrame[] = [];
     const notes: string[] = [];
     let changed = false;
-    for (let k = 0; k < tx.frames.length; k++) {
-      const f = tx.frames[k];
-      if (f === undefined) continue;
-      const prev = k > 0 ? tx.frames[k - 1]?.frame : undefined;
+    let prev: Frame | undefined;
+    let free = now;
+    for (const f of tx.frames) {
+      // When this frame reaches the gear, for the RESET deafness check below.
+      const deliverAt = free + settleMs(prev === undefined, this.timing) + FORWARD_FRAME_MS;
+      free = deliverAt - FORWARD_FRAME_MS + wireMs(f, this.timing);
       const cmd = decode(f.frame, prev);
+      prev = f.frame;
       if (cmd === undefined)
         return { ok: false, reason: `Frame ${frameText(f.frame)} is not a supported command.` };
       const sp = spec(cmd.id);
@@ -429,12 +445,8 @@ export class Governor {
           reason: `${sp.label}: the send-twice or reply flag does not match the command.`,
         };
       }
-      if (sp.deviceType !== 0 && enabledDeviceType(prev) !== sp.deviceType) {
-        return {
-          ok: false,
-          reason: `${sp.label} needs ENABLE DEVICE TYPE ${String(sp.deviceType)} as the frame before it.`,
-        };
-      }
+      // A device type command decodes only right after its ENABLE DEVICE TYPE, so a raw frame without
+      // one is refused above as not a supported command (SPEC section 5).
       for (const r of sp.reads) {
         if (dtr[r] === undefined)
           return {
@@ -459,7 +471,7 @@ export class Governor {
       }
       frames.push(out);
       if (sp.sets !== undefined) {
-        dtr[sp.sets] = (times[k]?.deliverAt ?? now) < this.deafUntil ? undefined : cmd.value;
+        dtr[sp.sets] = deliverAt < this.deafUntil ? undefined : cmd.value;
       }
       for (const r of sp.gearWrites) dtr[r] = undefined;
     }
@@ -486,7 +498,8 @@ export class Governor {
       const v = this.allVerified(a);
       if (!v.ok) return v;
     }
-    const d0 = dtr[0];
+    // Every rule below that uses DTR0 reads it, and the check above has made sure it is known.
+    const d0 = dtr[0] ?? 255;
     const personOnly = (u: Unlock): Outcome => {
       if (!this.unlocked.has(u)) return no(`needs the ${u} unlock.`);
       if (!isPerson(source)) return no(`accepted only from a person at the console or the UI.`);
@@ -506,20 +519,20 @@ export class Governor {
       case 'activate':
         return OK;
       case 'set-max': {
-        const v = d0 === 255 ? 254 : (d0 ?? 255);
+        const v = d0 === 255 ? 254 : d0;
         return v > this.ceiling ? no('the value is above the ceiling.') : OK;
       }
       case 'set-min':
-        return (d0 ?? 255) > this.ceiling ? no('the value is above the ceiling.') : OK;
+        return d0 > this.ceiling ? no('the value is above the ceiling.') : OK;
       case 'set-scene':
-        return d0 !== 255 && (d0 ?? 255) > this.ceiling
+        return d0 !== 255 && d0 > this.ceiling
           ? no('the value is above the ceiling.')
-          : this.storedColourOk(a, d0 ?? 255);
+          : this.storedColourOk(a, d0);
       case 'set-power-on':
         if (d0 === 255) return no('255 would undo the power-on setting.');
-        return (d0 ?? 255) > this.ceiling
+        return d0 > this.ceiling
           ? no('the value is above the ceiling.')
-          : this.storedColourOk(a, d0 ?? 255);
+          : this.storedColourOk(a, d0);
       case 'temp-tc':
         if (a?.kind === 'short' && facts(a.n)?.tc !== true)
           return no('the gear does not report Tc.');
@@ -543,7 +556,7 @@ export class Governor {
         }
         return OK;
       case 'rgbwaf-control':
-        return ((d0 ?? 0xff) & 0xc0) === 0 ? OK : no('only channel control is allowed.');
+        return (d0 & 0xc0) === 0 ? OK : no('only channel control is allowed.');
       case 'refuse-colour-type':
         return no('the DA5-L is not known to report that colour type.');
       case 'expert':
@@ -597,13 +610,25 @@ export class Governor {
   }
 
   /** Feed a transaction into a fork of the shadow at the times the scheduler would send it. */
+  /** Each frame with its command and when the scheduler would deliver it. Called after the rules pass. */
   private plan(tx: Transaction, now: number): Planned[] {
-    const times = planFrames(tx.frames, now, this.timing);
-    return tx.frames.map((f, k) => {
-      const prev = k > 0 ? tx.frames[k - 1]?.frame : undefined;
-      const cmd = decode(f.frame, prev) ?? { id: 'PING' };
-      return { frame: f, cmd, spec: spec(cmd.id), deliverAt: times[k]?.deliverAt ?? now };
-    });
+    const out: Planned[] = [];
+    let prev: Frame | undefined;
+    let free = now;
+    for (const f of tx.frames) {
+      const deliverAt = free + settleMs(prev === undefined, this.timing) + FORWARD_FRAME_MS;
+      free = deliverAt - FORWARD_FRAME_MS + wireMs(f, this.timing);
+      const cmd = decode(f.frame, prev);
+      prev = f.frame;
+      if (cmd === undefined) throw new Error('plan() needs a transaction that passed the rules');
+      out.push({ frame: f, cmd, spec: spec(cmd.id), deliverAt });
+    }
+    return out;
+  }
+
+  /** When the first frame of a transaction starting on a free bus at `now` reaches the gear. */
+  private firstDelivery(now: number): number {
+    return now + this.timing.settleFirstMs + FORWARD_FRAME_MS;
   }
 
   private simulate(planned: readonly Planned[]): Simulator {
@@ -621,11 +646,13 @@ export class Governor {
     const bps = [...new Set([from, to, ...u.gear.breakpoints(from, to)])].sort((a, b) => a - b);
     const times = new Set<number>(bps);
     // A level fading up while the mix fades down can peak between breakpoints, so look inside too.
-    for (let i = 0; i + 1 < bps.length; i++) {
-      const a = bps[i] ?? 0;
-      const b = bps[i + 1] ?? a;
-      const n = Math.min(100, Math.floor((b - a) / 20));
-      for (let k = 1; k < n; k++) times.add(a + ((b - a) * k) / n);
+    let a: number | undefined;
+    for (const b of bps) {
+      if (a !== undefined) {
+        const n = Math.min(100, Math.floor((b - a) / 20));
+        for (let k = 1; k < n; k++) times.add(a + ((b - a) * k) / n);
+      }
+      a = b;
     }
     let max = 0;
     for (const t of times) {
@@ -647,7 +674,7 @@ export class Governor {
     let current = tx;
     for (let attempt = 0; attempt < 3; attempt++) {
       const planned = this.plan(current, now);
-      const from = planned[0]?.deliverAt ?? now;
+      const from = this.firstDelivery(now);
       const fork = this.simulate(planned);
       // Up to where every fade ends: a fade moves one way, so its end is its highest point.
       const to = Math.max(fork.settlesAt(), this.shadow.settlesAt(), from) + 1;
@@ -667,9 +694,9 @@ export class Governor {
         };
       }
       // Lower each DAPC that reaches an over-ceiling unit to the level its mix allows.
-      const frames = current.frames.map((f, k) => {
-        const p = planned[k];
-        if (p?.cmd.id !== 'DAPC' || p.cmd.address === undefined) return f;
+      const frames = planned.map((p) => {
+        const f = p.frame;
+        if (p.cmd.id !== 'DAPC' || p.cmd.address === undefined) return f;
         const value = p.cmd.value ?? 0;
         if (value === 0 || value === 255) return f;
         let cap = value;
@@ -721,7 +748,7 @@ export class Governor {
   /** The rate guard: compare predicted events with and without the transaction. */
   private rateCheck(tx: Transaction, now: number): Violation[] {
     const planned = this.plan(tx, now);
-    const first = planned[0]?.deliverAt ?? now;
+    const first = this.firstDelivery(now);
     const fork = this.simulate(planned);
     // An unlocked RESET is judged with the OFF that follows it: together they are one swing and one
     // hard step (SPEC S3.10). That OFF is then not judged again.
@@ -730,8 +757,16 @@ export class Governor {
       if (p.cmd.id !== 'RESET' || p.cmd.address === undefined) continue;
       const targets = this.members(p.cmd.address);
       const at = p.deliverAt + RESET_OFF_AFTER_MS;
-      for (const n of targets)
-        fork.send(framesFor({ id: 'OFF', address: short(n) })[0] ?? p.frame, at);
+      for (const n of targets) {
+        fork.send(
+          {
+            frame: encode({ id: 'OFF', address: short(n) }).frame,
+            sendTwice: false,
+            expectReply: false,
+          },
+          at,
+        );
+      }
       resets.push({ t: p.deliverAt, scopes: [...targets.map((n) => `a${String(n)}`), ROOM] });
     }
     const instant = this.target === 'hardware' && !FADE_BEHAVIOUR_CONFIRMED;
@@ -755,9 +790,9 @@ export class Governor {
     const cand = withExtra(this.predict(fork, from, to, instant), [...hist, ...extra]);
     for (const r of resets) {
       for (const scope of r.scopes) {
-        const ev = cand.get(scope);
-        const i = ev?.hard.findIndex((t) => t > r.t + 1 && t <= r.t + RESET_FOLLOW_UP_MS) ?? -1;
-        if (ev !== undefined && i >= 0) ev.hard.splice(i, 1);
+        const hard = cand.get(scope)?.hard ?? [];
+        const i = hard.findIndex((t) => t > r.t + 1 && t <= r.t + RESET_FOLLOW_UP_MS);
+        if (i >= 0) hard.splice(i, 1);
       }
     }
     const v = violations(cand, base, this.swingLimit);
@@ -786,9 +821,9 @@ export class Governor {
     if (!instant) return faded;
     const steps = predictEvents(sim, from, to, true);
     const out = new Map<string, TraceEvents>();
-    for (const scope of new Set([...faded.keys(), ...steps.keys()])) {
-      const a = faded.get(scope) ?? { legs: [], hard: [], reversals: [] };
-      const b = steps.get(scope) ?? { legs: [], hard: [], reversals: [] };
+    // Both come from the same simulator, so they have the same scopes.
+    for (const [scope, a] of faded) {
+      const b = steps.get(scope) ?? a;
       out.set(scope, {
         legs: mergeTimes([a.legs, b.legs]),
         hard: mergeTimes([a.hard, b.hard]),

@@ -79,20 +79,21 @@ export function runs(samples: readonly Sample[]): Run[] {
   let cur:
     | { start: number; end: number; dir: 1 | -1; from: number; to: number; jumpMax: number }
     | undefined;
-  for (let i = 1; i < samples.length; i++) {
-    const p = samples[i - 1];
-    const s = samples[i];
-    if (p === undefined || s === undefined) continue;
-    const d = s.v - p.v;
+  let p: Sample | undefined;
+  for (const s of samples) {
+    const prev = p;
+    p = s;
+    if (prev === undefined) continue;
+    const d = s.v - prev.v;
     if (Math.abs(d) <= EPS * Math.max(1, Math.abs(s.v))) continue;
     const dir: 1 | -1 = d > 0 ? 1 : -1;
-    if (cur?.dir !== dir || p.t - cur.end >= FLAT_BREAK_MS) {
+    if (cur?.dir !== dir || prev.t - cur.end >= FLAT_BREAK_MS) {
       if (cur !== undefined) out.push(cur);
-      cur = { start: p.t, end: s.t, dir, from: p.v, to: s.v, jumpMax: 1 };
+      cur = { start: prev.t, end: s.t, dir, from: prev.v, to: s.v, jumpMax: 1 };
     }
     cur.end = s.t;
     cur.to = s.v;
-    if (s.t - p.t <= JUMP_MS) cur.jumpMax = Math.max(cur.jumpMax, floorRatio(p.v, s.v));
+    if (s.t - prev.t <= JUMP_MS) cur.jumpMax = Math.max(cur.jumpMax, floorRatio(prev.v, s.v));
   }
   if (cur !== undefined) out.push(cur);
   return out;

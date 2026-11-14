@@ -11,3 +11,5 @@ test-results/
 tools/golden/.venv/
 __pycache__/
 *.pyc
+.stryker-tmp/
+reports/

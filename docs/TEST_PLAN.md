@@ -58,21 +58,23 @@ P-rate and P-rate-fade assert every clause of S3 on the traces, not only swings 
 
 Any change to the rate guard or panic adds or strengthens a property here in the same commit.
 
+The property tests run on the bench in `tests/harness/`: the scheduler, the governor and the simulator on a virtual clock. P-rate and P-rate-fade check the simulator's recorded output with `tests/harness/checker.ts`, which implements ADR 0011's rules separately from `src/safety/rate`. `pnpm verify` runs 25 cases of each. Set `PROP_RUNS` to run more: each stage that changes `src/safety` runs 1,000 before it closes. Until Stage 4 brings intents, the console and scripts, P-ceiling's "sources" are transactions and raw frames tagged with each source. A hardware variant of P-rate runs the governor with a separate shadow that knows nothing at connect, across reconnects.
+
 ## 4. Golden and differential tests
 
 - **G-frames.** `tools/golden/generate.py` writes JSON fixtures from python-dali for every supported command: frame bytes, send-twice flag and reply type, the DT8 sequences `tools/first_light.py` sends, and commissioning frames. Tests read only the fixtures.
-- **G-hasseb.** The 10-byte reports python-dali's driver builds for a sample of commands, without a device. The server's report builder is tested against the same fixtures.
+- **G-hasseb.** The 10-byte reports python-dali's driver builds for a sample of commands, without a device. The server's report builder is tested against the same fixtures. Stage 3 writes the fixtures. The report builder and its test come with the server in Stage 4.
 - **D-fakes.** Where python-dali's fake gear models a behaviour (clamping, scenes, groups, DTRs, addressing, commissioning), the same command streams run through it and through the simulator, and the query replies are compared. The four known differences in `dali.md` section 15 are listed as expected.
 - **D-live.** In Hardware and Both, the server refuses a frame whose flags differ from python-dali's decoding. Any such refusal in an e2e run against the fake device is a failure.
 
 ## 5. Mutation testing
 
-- **M-safety.** Stryker with the Vitest runner on `src/safety` and the codec in `src/dali`. It is a development dependency added in Stage 3, and runs on demand and before each stage close that touched those folders, not on every push.
+- **M-safety.** Stryker with the Vitest runner on `src/safety` and the codec in `src/dali` (`pnpm mutate`). It is a development dependency added in Stage 3, and runs on demand and before each stage close that touched those folders, not on every push. Surviving mutants in `src/safety` are listed with reasons in `docs/MUTATION.md`.
 
 ## 6. Lint tests
 
 - **L-sinks.** Exists from Stage 0: each banned sink is caught.
-- **L-boundary.** A test file proves lint catches an import of a transport's send outside `src/engine/router.ts`, a DOM global or timer in a pure folder, `createPolicy` or `new Worker` outside `src/workers`, and an inline style attribute in a component.
+- **L-boundary.** A test file proves lint catches an import of a transport's send outside `src/engine/router.ts`, a DOM global or timer in a pure folder, `createPolicy` or `new Worker` outside `src/workers`, and an inline style attribute in a component. Stage 3 adds the pure-folder part (`eslint.boundary.js`, `tests/lint/boundary.test.ts`). The rest comes with the router, the workers and the components.
 
 ## 7. End-to-end tests (Playwright, Chromium)
 

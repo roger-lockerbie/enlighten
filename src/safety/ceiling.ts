@@ -40,10 +40,7 @@ export async function lowerCeiling(
     });
     const unit = governor.shadow.byShortAddress(n);
     if (unit !== undefined) {
-      const snap = unit.gear.snapshot();
-      const last = snap.plans[snap.plans.length - 1];
-      const target = last === undefined ? 0 : last.level.offAtEnd ? 0 : last.level.to;
-      if (target > arc || unit.gear.levelAt(now()) > arc) {
+      if (unit.gear.finalLevel() > arc || unit.gear.levelAt(now()) > arc) {
         await submit({
           frames: framesForAll([{ id: 'DAPC', address: short(n), value: arc }]),
           source: 'profile',

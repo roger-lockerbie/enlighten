@@ -6,3 +6,5 @@ test-results
 pnpm-lock.yaml
 tools/golden/requirements.txt
 tests/golden/*.json
+reports
+.stryker-tmp

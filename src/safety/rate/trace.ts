@@ -42,16 +42,17 @@ function sampleTimes(gear: Da5l, from: number, to: number, instant: boolean): nu
   const bps = instant ? [from, to, ...gear.planStarts(from, to)] : gear.breakpoints(from, to);
   const sorted = [...new Set(bps)].sort((a, b) => a - b);
   const times = new Set<number>();
-  for (let i = 0; i < sorted.length; i++) {
-    const b = sorted[i];
-    if (b === undefined) continue;
+  let last: number | undefined;
+  for (const b of sorted) {
     if (b - PRE_MS > from) times.add(b - PRE_MS);
     times.add(b);
-    const next = sorted[i + 1];
-    if (!instant && next !== undefined && next - b > STEP_MS) {
-      const n = Math.min(MAX_INTERIOR, Math.floor((next - b) / STEP_MS));
-      for (let k = 1; k < n; k++) times.add(b + ((next - b) * k) / n);
+    // Inside a segment, sample often enough to find the peak where a level and a colour fade cross.
+    if (!instant && last !== undefined && b - last > STEP_MS) {
+      const a = last;
+      const n = Math.min(MAX_INTERIOR, Math.floor((b - a) / STEP_MS));
+      for (let k = 1; k < n; k++) times.add(a + ((b - a) * k) / n);
     }
+    last = b;
   }
   return [...times].sort((a, b) => a - b);
 }

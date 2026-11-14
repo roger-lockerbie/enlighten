@@ -414,6 +414,12 @@ export class Da5l {
     return [...out].sort((a, b) => a - b);
   }
 
+  /** The level the latest plan ends at: the target of a running fade, 0 for off. */
+  finalLevel(): number {
+    const p = this.planAt(Infinity);
+    return p.level.offAtEnd ? 0 : p.level.to;
+  }
+
   /** The time the last fade (level or colour) ends. */
   settlesAt(): number {
     const p = this.s.plans[this.s.plans.length - 1];

@@ -42,8 +42,9 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:prop && pnpm build && pnpm e2e",
+    "verify": "pnpm lint && pnpm typecheck && pnpm coverage && pnpm build && pnpm e2e",
     "golden": "tools/golden/.venv/bin/python -I tools/golden/generate.py",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "mutate": "PROP_RUNS=5 stryker run"
   }
 }

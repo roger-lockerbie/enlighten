@@ -7,7 +7,17 @@ import { sinkConfig } from './eslint.sinks.js';
 import { boundaryConfig } from './eslint.boundary.js';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'coverage/', 'playwright-report/', 'test-results/', 'node_modules/'] },
+  {
+    ignores: [
+      'dist/',
+      'coverage/',
+      'playwright-report/',
+      'test-results/',
+      'node_modules/',
+      'reports/',
+      '.stryker-tmp/',
+    ],
+  },
   {
     linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: 'error' },
   },
