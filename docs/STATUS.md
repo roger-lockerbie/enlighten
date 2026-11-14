@@ -60,18 +60,22 @@ Owner decision on the ceiling. When the ceiling is lowered while a driver is fad
 
 Carried to Stage 4: the router with single-use, time-bound approvals; `RealClock`; the hasseb report builder and its G-hasseb test; the transport keeping frames in order when panic stops waiting after 100 ms.
 
-## Stage 4 (transports and the hasseb), in progress
+## Stage 4 (transports and the hasseb), in progress: stage close
 
-Done and committed:
+Branch `stage-4-transports`. ADR 0012 records what was built and the choices made. What is in it:
 
-- Part A: `TimerClock` (the real clock, `src/bus/clock.ts`); the `Transport` interface (`src/engine/transport.ts`); `SimTransport`, the wire codec and `ServerTransport` (`src/transport/`, pure through an injected socket); the router with single-use, time-bound approvals (`src/engine/router.ts`); the governor's approvals carry their judgement time and `observe` returns the shadow's own answer; the test bench now runs on the real router; lint keeps transports, sending, policies and workers in their places.
-- SPEC section 9 now fixes the encoding (big-endian, hex token in the URL, message lengths, close reasons) and adds `0x84 STOPPED`.
-- Part B: the engine (`src/engine/engine.ts`) with target changes, fresh hardware state on every connect, drops, panic, the heartbeat watchdog, the ceiling, unlocks, requests, discovery (`inventory.ts`), the divergence gate and background check for Both (`divergence.ts`), the coalescer, commissioning (`commission.ts`), the hardware check (`hwcheck.ts`) and the page and worker protocol (`protocol.ts`).
+- `src/bus/clock.ts`: `TimerClock`, the real clock, with timers as wake-ups only.
+- `src/transport/`: `SimTransport`, the server protocol codec and `ServerTransport`, pure through an injected socket.
+- `src/engine/`: the router (approvals used once per frame, in order and in time), the engine (targets, fresh hardware state on every connect, drops, panic, the heartbeat watchdog, ceiling, unlocks, requests), discovery, the divergence gate and background check for Both, the coalescer, commissioning, the hardware check, and the page and worker protocol.
+- `src/workers/`: the bus worker shell and the one Trusted Types policy. `src/ui/`: the page's bus client and an interim page (top bar, banners, Devices page). Stage 5 builds the shell.
+- `server/`: the hardware server, its fake hasseb and bench (`pnpm server:demo`), and its pytest suite (`pnpm test:server`). websockets 17.4, so Python 3.11 or later.
+- e2e: E-modes and E-server against the server with its fake (`playwright.server.config.ts`), run by `pnpm e2e` after the preview tests. CI installs the server from hashes and runs its tests.
+- SPEC section 9 fixes the encoding and adds `STOPPED`. ADR 0002 items 2 to 4 and `hid=()`, `fullscreen=()` moved here from Stage 5, because Stage 4 adds the first worker.
 
-Found while building: on hardware, while any DT8 driver's colour is unknown this session, lowering MAX LEVEL below a lit driver's level is refused with no retry time (the rate guard predicts two hard steps in one transaction). The hardware check sets a known colour on every driver first. To raise at stage close.
+Found while building, for the owner: on hardware, while any DT8 driver's colour is unknown this session, lowering MAX LEVEL below a lit driver's level is refused with no retry time (the rate guard counts two hard steps in one transaction, ADR 0011). The hardware check sets a known colour on every driver first. Lowering the ceiling while lights are on, right after a connect, can fail the same way.
 
-Next: Part C (workers, the page, the interim UI), Part D (the Python server in `server/`), Part E (e2e against the fake device, CI), Part F (docs, then the stage close).
+Stage close: `pnpm verify`, `PROP_RUNS=1000 pnpm test:prop`, `pnpm mutate`, then `security-reviewer` and `dali-reviewer`.
 
 ## Next
 
-Stage 4 (transports and the hasseb) on Opus, in plan mode. Read ADR 0003, ADR 0011, `docs/SPEC.md` section 9 and the carried items above first.
+Finish the Stage 4 close. Then Stage 5 (app shell, design system and playground) on Sonnet, in plan mode.
