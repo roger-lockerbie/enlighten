@@ -47,6 +47,13 @@ export class Simulator {
     this.units.push(unit);
   }
 
+  /** Put a unit in place of any that match, or add it. */
+  replace(unit: SimUnit, match: (u: SimUnit) => boolean): void {
+    const i = this.units.findIndex(match);
+    if (i >= 0) this.units.splice(i, 1, unit);
+    else this.units.push(unit);
+  }
+
   unit(id: string): SimUnit | undefined {
     return this.units.find((u) => u.id === id);
   }

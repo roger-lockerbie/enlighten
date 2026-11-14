@@ -119,8 +119,10 @@ export async function scanAddress(
     'QUERY_GROUPS_8_15',
   ];
   for (const id of reads) await ask(submit, [q(id, a)], source, id);
-  if (types.includes(6))
+  if (types.includes(6)) {
     await ask(submit, [q('DT6_QUERY_DIMMING_CURVE', a)], source, 'dimming curve');
+    await ask(submit, [q('DT6_QUERY_FAST_FADE_TIME', a)], source, 'fast fade time');
+  }
   if (types.includes(8))
     await ask(submit, [q('DT8_QUERY_COLOUR_TYPE_FEATURES', a)], source, 'colour type features');
   for (let k = 0; k < 16; k++) {

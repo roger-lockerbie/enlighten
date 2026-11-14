@@ -428,6 +428,7 @@ export class Da5l {
       minLevel?: number | undefined;
       maxLevel?: number | undefined;
       groups?: number | undefined;
+      fastFade?: number | undefined;
       fadeTime?: number | undefined;
       fadeRate?: number | undefined;
       extendedFade?: number | undefined;
@@ -442,6 +443,7 @@ export class Da5l {
     if (f.minLevel !== undefined) s.minLevel = f.minLevel;
     if (f.maxLevel !== undefined) s.maxLevel = f.maxLevel;
     if (f.groups !== undefined) s.groups = f.groups;
+    if (f.fastFade !== undefined) s.fastFade = f.fastFade;
     if (f.fadeTime !== undefined) s.fadeTime = f.fadeTime;
     if (f.fadeRate !== undefined) s.fadeRate = f.fadeRate;
     if (f.extendedFade !== undefined) s.extendedFade = f.extendedFade;

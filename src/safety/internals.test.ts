@@ -93,6 +93,7 @@ describe('what the governor learns from replies', () => {
     tell(g, c('QUERY_STATUS', A), { kind: 'reply', byte: 0x10 });
     expect(reasonOf(g.modelAddress(0))).toMatch(/fading/);
     tell(g, c('QUERY_STATUS', A), { kind: 'reply', byte: 0 });
+    tell(g, c('QUERY_PHYSICAL_MINIMUM', A), { kind: 'reply', byte: 20 });
     tell(g, c('QUERY_MIN_LEVEL', A), { kind: 'reply', byte: 90 });
     tell(g, c('QUERY_MAX_LEVEL', A), { kind: 'reply', byte: 200 });
     tell(g, c('QUERY_GROUPS_0_7', A), { kind: 'reply', byte: 4 });
@@ -108,6 +109,8 @@ describe('what the governor learns from replies', () => {
     for (let k = 0; k < 16; k++)
       tell(g, c('QUERY_SCENE_LEVEL', A, k), { kind: 'reply', byte: k === 2 ? 120 : 255 });
     tell(g, c('DT6_QUERY_DIMMING_CURVE', A), { kind: 'reply', byte: 0 });
+    expect(reasonOf(g.modelAddress(0))).toMatch(/fast fade/);
+    tell(g, c('DT6_QUERY_FAST_FADE_TIME', A), { kind: 'reply', byte: 0 });
     expect(g.modelAddress(0).ok).toBe(true);
     const snap = g.shadow.byShortAddress(0)?.gear.snapshot();
     expect([snap?.minLevel, snap?.maxLevel, snap?.groups, snap?.fadeTime, snap?.fadeRate]).toEqual([
@@ -115,11 +118,15 @@ describe('what the governor learns from replies', () => {
     ]);
     expect(g.shadow.byShortAddress(0)?.gear.levelAt(200)).toBe(150);
     expect(g.addressInfo(0)?.levelKnown).toBe(true);
+    // The shadow clamps as the gear does: its physical minimum is the one read back.
+    expect(g.shadow.byShortAddress(0)?.gear.profile.settings.physicalMinimum).toBe(20);
+    expect(g.shadow.byShortAddress(0)?.gear.deviceTypes).toEqual([6]);
     expect(g.addressInfo(0)?.colourKnown).toBe(true);
     // DT8 gear needs its colour features first, and gets a matching light type.
     tell(g, c('QUERY_CONTROL_GEAR_PRESENT', B), { kind: 'reply', byte: 255 });
     tell(g, c('QUERY_DEVICE_TYPE', B), { kind: 'reply', byte: 8 });
     for (const [id, v] of [
+      ['QUERY_PHYSICAL_MINIMUM', 85],
       ['QUERY_MIN_LEVEL', 85],
       ['QUERY_MAX_LEVEL', 220],
       ['QUERY_GROUPS_0_7', 0],
@@ -144,6 +151,7 @@ describe('what the governor learns from replies', () => {
       tell(h, c('QUERY_CONTROL_GEAR_PRESENT', B), { kind: 'reply', byte: 255 });
       tell(h, c('QUERY_DEVICE_TYPE', B), { kind: 'reply', byte: 8 });
       for (const [id, v] of [
+        ['QUERY_PHYSICAL_MINIMUM', 85],
         ['QUERY_MIN_LEVEL', 85],
         ['QUERY_MAX_LEVEL', 220],
         ['QUERY_GROUPS_0_7', 0],

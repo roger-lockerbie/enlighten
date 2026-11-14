@@ -67,13 +67,19 @@ const SETS_LAST_ACTIVE: ReadonlySet<string> = new Set([
 ]);
 
 /** The DA5-L light type that matches what gear reported, for a hardware shadow unit. */
-function profileFor(types: readonly number[], colour: ColourFacts | undefined): Da5lProfile {
-  if (!types.includes(8) || colour === undefined) return da5l('C1');
-  if (colour.channels === 0) return da5l('C2', 'tc');
-  if (colour.channels === 2) return da5l('C2', 'rgbwaf');
-  if (colour.channels === 3) return colour.tc ? da5l('C5', 'tc') : da5l('C3');
-  if (colour.channels === 4) return da5l('C4');
-  return da5l('C5', 'rgbwaf');
+function profileFor(
+  types: readonly number[],
+  colour: ColourFacts | undefined,
+  physicalMinimum: number,
+): Da5lProfile {
+  // The physical minimum the gear reported, so SET MIN LEVEL and RESET clamp as the gear does.
+  const s = { physicalMinimum };
+  if (!types.includes(8) || colour === undefined) return da5l('C1', 'tc', s);
+  if (colour.channels === 0) return da5l('C2', 'tc', s);
+  if (colour.channels === 2) return da5l('C2', 'rgbwaf', s);
+  if (colour.channels === 3) return colour.tc ? da5l('C5', 'tc', s) : da5l('C3', 'rgbwaf', s);
+  if (colour.channels === 4) return da5l('C4', 'rgbwaf', s);
+  return da5l('C5', 'rgbwaf', s);
 }
 
 /** Unlocked commands that can raise output past the ceiling, which a person confirmed. */
@@ -125,6 +131,8 @@ export interface AddressInfo {
   extendedFade?: number | undefined;
   /** The last level read back. */
   level?: number | undefined;
+  /** DT6 fast fade time, as read back. */
+  fastFade?: number | undefined;
   /** The 16 scene levels read back. */
   scenes?: (number | undefined)[] | undefined;
   /** A command other than a query reached the gear since its scan began, so read-backs may be stale. */
@@ -900,6 +908,7 @@ export class Governor {
     const types = i.deviceTypes;
     if (i.present !== true || types === undefined) return no('The gear has not answered a scan.');
     const needs = [
+      i.physicalMinimum,
       i.minLevel,
       i.maxLevel,
       i.groups,
@@ -916,19 +925,23 @@ export class Governor {
     const scenes = i.scenes ?? [];
     if (scenes.length < 16 || scenes.some((x) => x === undefined))
       return no('The scene levels were not read back.');
-    let unit = this.shadow.byShortAddress(n);
-    if (unit === undefined) {
-      unit = {
-        id: `hw${String(n)}`,
-        gear: new Da5l(profileFor(types, i.colour), { shortAddress: n, at: this.lastAt }),
-      };
-      this.shadow.add(unit);
-    }
+    if (types.includes(6) && i.fastFade === undefined)
+      return no('The fast fade time was not read back.');
+    // A fresh unit each time, so the light type, physical minimum and device types match the read-backs.
+    const profile = profileFor(types, i.colour, i.physicalMinimum ?? 85);
+    const gear = new Da5l(profile, {
+      shortAddress: n,
+      at: this.lastAt,
+      deviceTypesOverride: types,
+    });
+    const unit = { id: `hw${String(n)}`, gear };
+    this.shadow.replace(unit, (u) => u.gear.shortAddress === n);
     unit.gear.applyFacts(
       {
         minLevel: i.minLevel,
         maxLevel: i.maxLevel,
         groups: i.groups,
+        fastFade: i.fastFade,
         fadeTime: i.fadeTime,
         fadeRate: i.fadeRate,
         extendedFade: i.extendedFade,
@@ -1255,6 +1268,9 @@ export class Governor {
         break;
       case 'QUERY_EXTENDED_FADE_TIME':
         if (v !== undefined) i.extendedFade = v;
+        break;
+      case 'DT6_QUERY_FAST_FADE_TIME':
+        i.fastFade = v;
         break;
       case 'QUERY_STATUS':
         if (v !== undefined) i.fading = (v & 0x10) !== 0;

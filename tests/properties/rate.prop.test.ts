@@ -74,6 +74,7 @@ const realBench = fc.record({
   groups: fc.array(fc.integer({ min: 0, max: 15 }), { minLength: 3, maxLength: 3 }),
   scene: fc.array(fc.integer({ min: 0, max: 254 }), { minLength: 3, maxLength: 3 }),
   min: fc.array(fc.integer({ min: 85, max: 160 }), { minLength: 3, maxLength: 3 }),
+  phys: fc.array(fc.integer({ min: 1, max: 85 }), { minLength: 3, maxLength: 3 }),
   level: fc.array(fc.integer({ min: 0, max: 254 }), { minLength: 3, maxLength: 3 }),
   fade: fc.array(fc.integer({ min: 0, max: 6 }), { minLength: 3, maxLength: 3 }),
 });
@@ -87,7 +88,7 @@ describe('P-rate on hardware the governor has never seen', () => {
           const real = Simulator.of(
             cfg.units.map((n, i) => ({
               id: `R${String(n)}`,
-              profile: da5l(cfg.light[i] ?? 'C2'),
+              profile: da5l(cfg.light[i] ?? 'C2', 'tc', { physicalMinimum: cfg.phys[i] ?? 85 }),
               opts: { shortAddress: n },
             })),
           );
@@ -97,7 +98,7 @@ describe('P-rate on hardware the governor has never seen', () => {
               if (((cfg.groups[i] ?? 0) >> g) & 1) r.to('ADD_TO_GROUP', n, g);
             r.set('SET_SCENE', n, cfg.scene[i] ?? 0, 0);
             r.set('SET_SCENE', n, cfg.scene[i] ?? 0, 3);
-            r.set('SET_MIN_LEVEL', n, cfg.min[i] ?? 85);
+            r.set('SET_MIN_LEVEL', n, (cfg.min[i] ?? 85) - 84 + (cfg.phys[i] ?? 85) - 1);
             r.set('SET_FADE_TIME', n, cfg.fade[i] ?? 0);
             r.to('DAPC', n, cfg.level[i] ?? 0);
           });
