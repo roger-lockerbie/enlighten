@@ -19,6 +19,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 - A lint rule that keeps DOM, network, timers and the system clock out of the pure folders, with a test.
 - `pnpm coverage` (in `verify`), `pnpm mutate` (Stryker, on demand) and `pnpm golden`.
 - ADR 0011: the interfaces as built and the rate guard's exact rules.
+- On hardware, a governor shadow built from scan read-backs (levels, limits, groups, fades, scenes, curve, colour features, physical minimum), with every unpredictable light change counted as the worst case, following the Stage 3 security review.
 
 ### Changed
 
