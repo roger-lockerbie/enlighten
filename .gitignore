@@ -13,3 +13,5 @@ __pycache__/
 *.pyc
 .stryker-tmp/
 reports/
+server/.venv/
+.pytest_cache/
