@@ -363,3 +363,8 @@ export async function play(
   }
   return { rec, ceilings };
 }
+
+/** A test timeout that grows with the number of property runs: about a second a run, at least two minutes. */
+export function timeout(runs: number): number {
+  return Math.max(120_000, runs * 1000);
+}
