@@ -1,15 +1,22 @@
 # Dependencies
 
-Each dependency is justified here with its licence. Add a runtime dependency only with the owner's approval. There are no runtime dependencies installed yet: the app ships only its own code and Svelte's compiled output. The ones approved for later stages are listed below.
+Each dependency is justified here with its licence. Add a runtime dependency only with the owner's approval. The app has no runtime dependencies installed yet: it ships only its own code and Svelte's compiled output. The hardware server has three, installed since Stage 4.
 
 ## Approved, not yet installed
 
-| Package     | Version | Licence                                                        | Where            | Why                                                                                                                      | Approved                              |
-| ----------- | ------- | -------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
-| three       | 0.187.0 | MIT                                                            | The app, Stage 7 | WebGL renderer for the visualiser. Core only, named imports, no addons. No dependencies of its own.                      | The brief's default stack, ADR 0002   |
-| websockets  | 17.4    | BSD-3-Clause                                                   | The server       | HTTP and WebSocket serving for the hardware server. No dependencies of its own. Its wheels carry an optional C speed-up. | The owner, 14 November 2026, ADR 0003 |
-| python-dali | 0.16    | LGPL-3.0                                                       | The server       | Frame decoding at run time. Used as a dependency, never copied.                                                          | The owner, 14 November 2026           |
-| hidapi      | 0.15.0  | BSD-3-Clause (offered beside GPL-3.0 and its original licence) | The server       | USB HID access to the hasseb.                                                                                            | The owner, with python-dali           |
+| Package | Version | Licence | Where            | Why                                                                                                 | Approved                            |
+| ------- | ------- | ------- | ---------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| three   | 0.187.0 | MIT     | The app, Stage 7 | WebGL renderer for the visualiser. Core only, named imports, no addons. No dependencies of its own. | The brief's default stack, ADR 0002 |
+
+## Installed: the hardware server's run-time dependencies
+
+In `server/.venv`, from `server/requirements.txt`. See "Python: the hardware server" below.
+
+| Package     | Version | Licence                                                        | Where      | Why                                                                                                                      | Approved                              |
+| ----------- | ------- | -------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| websockets  | 17.4    | BSD-3-Clause                                                   | The server | HTTP and WebSocket serving for the hardware server. No dependencies of its own. Its wheels carry an optional C speed-up. | The owner, 14 November 2026, ADR 0003 |
+| python-dali | 0.16    | LGPL-3.0                                                       | The server | Frame decoding at run time. Used as a dependency, never copied.                                                          | The owner, 14 November 2026           |
+| hidapi      | 0.15.0  | BSD-3-Clause (offered beside GPL-3.0 and its original licence) | The server | USB HID access to the hasseb.                                                                                            | The owner, with python-dali           |
 
 Fonts are assets, not packages: Inter and JetBrains Mono, both SIL Open Font License 1.1, added as WOFF2 files with their licence texts in Stage 5 (`docs/UI.md`).
 
