@@ -4,6 +4,7 @@ import sveltePlugin from 'eslint-plugin-svelte';
 import svelteParser from 'svelte-eslint-parser';
 import tseslint from 'typescript-eslint';
 import { sinkConfig } from './eslint.sinks.js';
+import { boundaryConfig } from './eslint.boundary.js';
 
 export default tseslint.config(
   { ignores: ['dist/', 'coverage/', 'playwright-report/', 'test-results/', 'node_modules/'] },
@@ -41,6 +42,7 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   ...sinkConfig,
+  ...boundaryConfig,
   {
     // These files name the banned sinks on purpose: the rule definitions, the lint test and the e2e test
     // that proves the browser refuses them. Inline disable comments are off everywhere.

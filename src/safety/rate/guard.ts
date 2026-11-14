@@ -1,7 +1,7 @@
 /**
  * The rate guard's checks on predicted events (SPEC S3, ADR 0005, exact rules in ADR 0011).
  */
-import type { TraceEvents } from './legs.ts';
+import { TIME_MARGIN_MS as M, type TraceEvents } from './legs.ts';
 import { ROOM } from './trace.ts';
 
 /** No setting, unlock or code path goes past three swings a second (S3.2). */
@@ -66,29 +66,29 @@ export function scopeViolations(
   const out: Violation[] = [];
   const n = swingLimit(swings);
   const legs = tag(cand.legs, base.legs);
-  for (const r of windowViolations(legs, 1000, 2 * n))
+  for (const r of windowViolations(legs, 1000 + M, 2 * n))
     out.push({ scope, rule: `more than ${String(n)} swing(s) in a second`, retryAt: r });
   if (n > 1) {
     for (let i = 0; i + 2 < legs.length; i++) {
       const a = legs[i];
       const c = legs[i + 2];
       if (a === undefined || c === undefined) continue;
-      if (c.t - a.t < SWING_SPACING_MS && (a.isNew || legs[i + 1]?.isNew === true || c.isNew)) {
-        out.push({ scope, rule: 'swings closer than 360 ms', retryAt: a.t + SWING_SPACING_MS });
+      if (c.t - a.t < SWING_SPACING_MS + M && (a.isNew || legs[i + 1]?.isNew === true || c.isNew)) {
+        out.push({ scope, rule: 'swings closer than 360 ms', retryAt: a.t + SWING_SPACING_MS + M });
       }
     }
   }
-  const hardSpan = scope === ROOM ? HARD_WINDOW_ROOM_MS : HARD_WINDOW_MS;
-  for (const r of windowViolations(tag(cand.hard, base.hard), hardSpan, 1)) {
+  const hardWindow = scope === ROOM ? HARD_WINDOW_ROOM_MS : HARD_WINDOW_MS;
+  for (const r of windowViolations(tag(cand.hard, base.hard), hardWindow + M, 1)) {
     out.push({
       scope,
-      rule: `more than one hard step in ${String(hardSpan / 1000)} s`,
+      rule: `more than one hard step in ${String(hardWindow / 1000)} s`,
       retryAt: r,
     });
   }
   for (const r of windowViolations(
     tag(cand.reversals, base.reversals),
-    1000,
+    1000 + M,
     REVERSALS_PER_SECOND,
   )) {
     out.push({ scope, rule: 'more than three small reversals in a second', retryAt: r });
@@ -99,18 +99,18 @@ export function scopeViolations(
     const l = legs[k];
     if (l === undefined) continue;
     const back2 = legs[k - 2];
-    const fast = back2 !== undefined && back2.t > l.t - PATTERN_WINDOW_MS;
+    const fast = back2 !== undefined && back2.t > l.t - PATTERN_WINDOW_MS - M;
     if (!fast) {
       patternStart = undefined;
       continue;
     }
     patternStart ??= back2.t;
-    if (l.isNew && l.t - patternStart >= PATTERN_MAX_MS) {
+    if (l.isNew && l.t - patternStart >= PATTERN_MAX_MS - M) {
       const prev = legs[k - 1];
       out.push({
         scope,
         rule: 'a fast repeating pattern ran for 5 s',
-        retryAt: (prev?.t ?? l.t) + PATTERN_WINDOW_MS,
+        retryAt: (prev?.t ?? l.t) + PATTERN_WINDOW_MS + M,
       });
     }
   }

@@ -5,13 +5,23 @@
 import type { Da5l } from '../../sim/gear.ts';
 import { LUMINANCE_WEIGHT, type Terminal } from '../../sim/profile.ts';
 import type { Simulator } from '../../sim/simulator.ts';
-import { events, mergeTimes, type Sample, type TraceEvents } from './legs.ts';
+import {
+  directedEvents,
+  events,
+  mergeDirected,
+  mergeTimes,
+  SAME_LEG_MS,
+  TIME_MARGIN_MS,
+  type DirectedEvents,
+  type Sample,
+  type TraceEvents,
+} from './legs.ts';
 
 /** Saturated red: only the red channel above 10% (ADR 0005). */
 export const SATURATED_RED = 0.1;
 /** Interior samples inside a segment, at most this far apart. */
-const STEP_MS = 50;
-const MAX_INTERIOR = 100;
+const STEP_MS = 10;
+const MAX_INTERIOR = 400;
 /** A pre-step sample this long before each breakpoint catches instant steps. */
 const PRE_MS = 0.001;
 
@@ -80,22 +90,26 @@ export function predictEvents(
   for (const { u, times } of perUnit) {
     const samples = sampleUnit(u.gear, times, instant);
     const labels = u.gear.model.terminals;
-    const lists: TraceEvents[] = [];
+    const lists: DirectedEvents[] = [];
     labels.forEach((label, i) => {
       if (label === 'unused') return;
-      lists.push(events(samples.map((s): Sample => ({ t: s.t, v: s.d[i] ?? 0 }))));
+      lists.push(directedEvents(samples.map((s): Sample => ({ t: s.t, v: s.d[i] ?? 0 }))));
     });
-    lists.push(events(samples.map((s) => ({ t: s.t, v: luminance(s.d, labels) }))));
-    const red: number[] = [];
+    lists.push(directedEvents(samples.map((s) => ({ t: s.t, v: luminance(s.d, labels) }))));
+    const red: { t: number; dir: 0 }[] = [];
     let was: boolean | undefined;
     for (const s of samples) {
       const now = satRed(s.d, labels);
-      if (was !== undefined && now !== was) red.push(s.t);
+      if (was !== undefined && now !== was) red.push({ t: s.t, dir: 0 });
       was = now;
     }
     out.set(scopeOf(u.id, u.gear.shortAddress), {
-      legs: mergeTimes([...lists.map((l) => l.legs), red]),
-      hard: mergeTimes(lists.map((l) => l.hard)),
+      // The guard merges less than the rule allows, so it never counts fewer legs than the trace has.
+      legs: mergeDirected([...lists.map((l) => l.legs), red], SAME_LEG_MS - TIME_MARGIN_MS),
+      hard: mergeDirected(
+        lists.map((l) => l.hard),
+        SAME_LEG_MS - TIME_MARGIN_MS,
+      ),
       reversals: mergeTimes(lists.map((l) => l.reversals)),
     });
   }

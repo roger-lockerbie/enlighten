@@ -12,8 +12,11 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.65.0",
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/vitest-runner": "10.1.1",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@types/node": "26.6.6",
+    "@vitest/coverage-v8": "5.1.0",
     "eslint": "10.14.0",
     "eslint-plugin-svelte": "3.24.0",
     "fast-check": "4.10.2",
@@ -40,6 +43,7 @@
     "format": "prettier --write .",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:prop && pnpm build && pnpm e2e",
-    "golden": "tools/golden/.venv/bin/python -I tools/golden/generate.py"
+    "golden": "tools/golden/.venv/bin/python -I tools/golden/generate.py",
+    "coverage": "vitest run --coverage"
   }
 }

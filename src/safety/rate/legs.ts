@@ -32,6 +32,14 @@ export interface TraceEvents {
 
 /** A run is a leg when its ends differ by this ratio or more, or one end is off (S3.1). */
 export const LEG_RATIO = 1.1;
+/**
+ * The guard decides with a small margin on every ratio and time, so differences in where a trace is
+ * sampled cannot let the real output pass a limit (ADR 0011).
+ */
+export const RATIO_MARGIN = 0.99;
+export const TIME_MARGIN_MS = 40;
+/** Fade ends are exact in the trace, so the 0.7 s fade test needs only a small margin. */
+export const FADE_MARGIN_MS = 5;
 /** A leg with a ratio above this is a hard step unless faded (S3.3). */
 export const HARD_RATIO = 2;
 /** A fade this long or longer is not a hard step (S3.3). */
@@ -91,7 +99,7 @@ export function runs(samples: readonly Sample[]): Run[] {
 }
 
 export function isLeg(r: Run): boolean {
-  return ratio(r.from, r.to) >= LEG_RATIO;
+  return ratio(r.from, r.to) >= LEG_RATIO * RATIO_MARGIN;
 }
 
 export function touchesOff(r: Run): boolean {
@@ -105,23 +113,62 @@ export function touchesOff(r: Run): boolean {
  */
 export function isHard(r: Run): boolean {
   if (!isLeg(r)) return false;
-  if (r.jumpMax > HARD_RATIO) return true;
-  return floorRatio(r.from, r.to) > HARD_RATIO && r.end - r.start < HARD_FADE_MS;
+  const hard = HARD_RATIO * RATIO_MARGIN;
+  if (r.jumpMax > hard) return true;
+  return floorRatio(r.from, r.to) > hard && r.end - r.start < HARD_FADE_MS + FADE_MARGIN_MS;
 }
 
-export function events(samples: readonly Sample[]): TraceEvents {
+/** An event with the direction of the leg it starts: 1 up, -1 down, 0 for a saturated red change. */
+export interface Directed {
+  readonly t: number;
+  readonly dir: 1 | -1 | 0;
+}
+
+export interface DirectedEvents {
+  readonly legs: Directed[];
+  readonly hard: Directed[];
+  readonly reversals: number[];
+}
+
+export function directedEvents(samples: readonly Sample[]): DirectedEvents {
   const rs = runs(samples);
-  const legs: number[] = [];
-  const hard: number[] = [];
+  const legs: Directed[] = [];
+  const hard: Directed[] = [];
   const reversals: number[] = [];
   rs.forEach((r, i) => {
-    if (isLeg(r)) legs.push(r.start);
-    if (isHard(r)) hard.push(r.start);
+    if (isLeg(r)) legs.push({ t: r.start, dir: r.dir });
+    if (isHard(r)) hard.push({ t: r.start, dir: r.dir });
     const prev = rs[i - 1];
     if (prev !== undefined && prev.dir !== r.dir && (!isLeg(prev) || !isLeg(r)))
       reversals.push(r.start);
   });
   return { legs, hard, reversals };
+}
+
+export function events(samples: readonly Sample[]): TraceEvents {
+  const e = directedEvents(samples);
+  return { legs: e.legs.map((x) => x.t), hard: e.hard.map((x) => x.t), reversals: e.reversals };
+}
+
+/**
+ * Legs of one address on its several traces (each channel and luminance) that go the same way and
+ * start within this time of the first of them are one leg: one movement shows up on several channels,
+ * with each channel's peak at a slightly different time. Opposite directions are never merged.
+ */
+export const SAME_LEG_MS = 100;
+
+/** Merge directed events from several traces into one list of start times (see `SAME_LEG_MS`). */
+export function mergeDirected(
+  lists: readonly (readonly Directed[])[],
+  tol = SAME_LEG_MS,
+): number[] {
+  const all = lists.flat().sort((a, b) => a.t - b.t);
+  const clusters: Directed[] = [];
+  for (const e of all) {
+    const near = clusters.some((c) => c.dir === e.dir && e.t - c.t <= tol);
+    if (!near) clusters.push(e);
+  }
+  return mergeTimes([clusters.map((c) => c.t)]);
 }
 
 /** Merge sorted event times from several traces of one scope, counting events within `tol` ms as one. */

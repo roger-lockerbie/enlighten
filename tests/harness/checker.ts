@@ -117,20 +117,44 @@ interface Events {
   reversals: number[];
 }
 
-function eventsOf(pts: readonly { t: number; v: number }[]): Events {
+interface Dir {
+  t: number;
+  dir: number;
+}
+
+interface DirEvents {
+  legs: Dir[];
+  hard: Dir[];
+  reversals: number[];
+}
+
+function dirEventsOf(pts: readonly { t: number; v: number }[]): DirEvents {
   const rs = runsOf(pts);
   const isLeg = (r: Run) => ratioOf(r.from, r.to) >= LEG;
-  const e: Events = { legs: [], hard: [], reversals: [] };
+  const e: DirEvents = { legs: [], hard: [], reversals: [] };
   rs.forEach((r, i) => {
     if (isLeg(r)) {
-      e.legs.push(r.start);
+      e.legs.push({ t: r.start, dir: r.dir });
       if (r.jump > HARD || (floored(r.from, r.to) > HARD && r.end - r.start < FADE_MS))
-        e.hard.push(r.start);
+        e.hard.push({ t: r.start, dir: r.dir });
     }
     const p = rs[i - 1];
     if (p !== undefined && p.dir !== r.dir && (!isLeg(p) || !isLeg(r))) e.reversals.push(r.start);
   });
   return e;
+}
+
+function eventsOf(pts: readonly { t: number; v: number }[]): Events {
+  const e = dirEventsOf(pts);
+  return { legs: e.legs.map((x) => x.t), hard: e.hard.map((x) => x.t), reversals: e.reversals };
+}
+
+/** One address's legs on several traces: same direction within 100 ms of the first is one leg. */
+function mergeDir(lists: Dir[][]): number[] {
+  const all = lists.flat().sort((a, b) => a.t - b.t);
+  const kept: Dir[] = [];
+  for (const e of all) if (!kept.some((k) => k.dir === e.dir && e.t - k.t <= 100)) kept.push(e);
+  return merge([kept.map((k) => k.t)]);
 }
 
 function merge(lists: number[][]): number[] {
@@ -211,11 +235,11 @@ export function rateProblems(rec: TraceRecorder, swings: number): RateProblem[] 
   for (const id of ids) {
     const pts = rec.points.get(id) ?? [];
     const labels = rec.labels.get(id) ?? [];
-    const lists: Events[] = labels.flatMap((l, i) =>
-      l === 'unused' ? [] : [eventsOf(pts.map((p) => ({ t: p.t, v: p.d[i] ?? 0 })))],
+    const lists: DirEvents[] = labels.flatMap((l, i) =>
+      l === 'unused' ? [] : [dirEventsOf(pts.map((p) => ({ t: p.t, v: p.d[i] ?? 0 })))],
     );
-    lists.push(eventsOf(pts.map((p) => ({ t: p.t, v: lum(p.d, labels) }))));
-    const red: number[] = [];
+    lists.push(dirEventsOf(pts.map((p) => ({ t: p.t, v: lum(p.d, labels) }))));
+    const red: Dir[] = [];
     let was: boolean | undefined;
     const r = labels.indexOf('R');
     for (const p of pts) {
@@ -223,12 +247,12 @@ export function rateProblems(rec: TraceRecorder, swings: number): RateProblem[] 
         r >= 0 &&
         (p.d[r] ?? 0) > RED &&
         p.d.every((x, i) => i === r || labels[i] === 'unused' || x <= RED);
-      if (was !== undefined && now !== was) red.push(p.t);
+      if (was !== undefined && now !== was) red.push({ t: p.t, dir: 0 });
       was = now;
     }
     const e: Events = {
-      legs: merge([...lists.map((l) => l.legs), red]),
-      hard: merge(lists.map((l) => l.hard)),
+      legs: mergeDir([...lists.map((l) => l.legs), red]),
+      hard: mergeDir(lists.map((l) => l.hard)),
       reversals: merge(lists.map((l) => l.reversals)),
     };
     dropResetPair(id, e);

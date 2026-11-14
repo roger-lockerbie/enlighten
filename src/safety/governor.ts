@@ -12,6 +12,7 @@ import type { Simulator, SimUnit } from '../sim/simulator.ts';
 import { RESET_DEAF_MS } from '../sim/gear.ts';
 import { maxArcForMix, measure, mixSum, WORST_FACTS, type ColourFacts } from './mix.ts';
 import { PHANTOM, predictEvents, ROOM, scopeOf } from './rate/trace.ts';
+import { mergeTimes, type TraceEvents } from './rate/legs.ts';
 import { swingLimit, violations, withExtra, type Violation } from './rate/guard.ts';
 import {
   LIGHT_CHANGING,
@@ -316,7 +317,7 @@ export class Governor {
     if (tx.source === 'panic')
       return { kind: 'refuse', reason: 'Panic does not go through judge.' };
 
-    const checked = this.checkRules(tx);
+    const checked = this.checkRules(tx, now);
     if (!checked.ok) return { kind: 'refuse', reason: checked.reason };
     let candidate: Transaction = checked.tx;
     const notes: string[] = [...checked.notes];
@@ -406,8 +407,11 @@ export class Governor {
   /** The rule table, frame by frame, with DAPCs clamped to the ceiling. */
   private checkRules(
     tx: Transaction,
+    now: number,
   ): { ok: true; tx: Transaction; notes: string[] } | { ok: false; reason: string } {
     const dtr = [...this.dtr];
+    // Gear may still be deaf after a RESET, so a register loaded then is not known to have taken.
+    const times = planFrames(tx.frames, now, this.timing);
     const frames: TxFrame[] = [];
     const notes: string[] = [];
     let changed = false;
@@ -454,7 +458,9 @@ export class Governor {
         changed = true;
       }
       frames.push(out);
-      if (sp.sets !== undefined) dtr[sp.sets] = cmd.value;
+      if (sp.sets !== undefined) {
+        dtr[sp.sets] = (times[k]?.deliverAt ?? now) < this.deafUntil ? undefined : cmd.value;
+      }
       for (const r of sp.gearWrites) dtr[r] = undefined;
     }
     return { ok: true, tx: changed ? { ...tx, frames } : tx, notes };
@@ -735,7 +741,7 @@ export class Governor {
       first + HORIZON_MS,
     );
     const hist = this.synthetic.filter((e) => e.t >= from);
-    const base = withExtra(predictEvents(this.shadow, from, to, instant), hist);
+    const base = withExtra(this.predict(this.shadow, from, to, instant), hist);
     const extra = this.extraEvents(planned);
     if (first < this.holdUntil && planned.some((p) => LIGHT_CHANGING.has(p.cmd.id))) {
       return [
@@ -746,7 +752,7 @@ export class Governor {
         },
       ];
     }
-    const cand = withExtra(predictEvents(fork, from, to, instant), [...hist, ...extra]);
+    const cand = withExtra(this.predict(fork, from, to, instant), [...hist, ...extra]);
     for (const r of resets) {
       for (const scope of r.scopes) {
         const ev = cand.get(scope);
@@ -763,6 +769,33 @@ export class Governor {
       });
     }
     return v;
+  }
+
+  /**
+   * Predicted events. On hardware, until fades are confirmed, both the instant-step prediction and the
+   * faded one count: instant steps are the worst case for hard steps, but a level and a colour fading
+   * together can rise and fall on one channel, which only the faded prediction shows.
+   */
+  private predict(
+    sim: Simulator,
+    from: number,
+    to: number,
+    instant: boolean,
+  ): Map<string, TraceEvents> {
+    const faded = predictEvents(sim, from, to, false);
+    if (!instant) return faded;
+    const steps = predictEvents(sim, from, to, true);
+    const out = new Map<string, TraceEvents>();
+    for (const scope of new Set([...faded.keys(), ...steps.keys()])) {
+      const a = faded.get(scope) ?? { legs: [], hard: [], reversals: [] };
+      const b = steps.get(scope) ?? { legs: [], hard: [], reversals: [] };
+      out.set(scope, {
+        legs: mergeTimes([a.legs, b.legs]),
+        hard: mergeTimes([a.hard, b.hard]),
+        reversals: mergeTimes([a.reversals, b.reversals]),
+      });
+    }
+    return out;
   }
 
   /** The earliest time the same transaction would pass, checked by judging it again then. */
