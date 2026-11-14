@@ -257,6 +257,7 @@ export class Engine {
   private pageVisible = false;
   private tick: Cancel | undefined;
   private readonly listeners = new Set<(s: Snapshot) => void>();
+  private readonly startListeners = new Set<(f: TxFrame, conn: Conn | undefined) => void>();
   private emitPending: Cancel | undefined;
   private disposed = false;
 
@@ -301,6 +302,7 @@ export class Engine {
     const router = new Router({
       transport,
       clock: this.clock,
+      issuer: governor,
       onRefused: (reason) => {
         this.notice(`The router refused a frame: ${reason}`);
       },
@@ -333,6 +335,9 @@ export class Engine {
       onFrame: (r) => {
         if (ref.conn !== undefined) this.onFrame(ref.conn, r);
       },
+      onStart: (f) => {
+        for (const l of this.startListeners) l(f, ref.conn);
+      },
     });
     const conn: Conn = {
       id,
@@ -349,6 +354,19 @@ export class Engine {
     };
     ref.conn = conn;
     return conn;
+  }
+
+  /**
+   * A hardware connection is replaced or lost: latch its governor, drop its queue, and close its
+   * router, so nothing it had queued can reach the bus after a later panic (security review H1).
+   */
+  private retireHardware(): void {
+    const c = this.hwConn;
+    if (c === undefined) return;
+    this.hwConn = undefined;
+    c.governor.latch();
+    c.scheduler.close();
+    c.router.close();
   }
 
   private active(): Conn | undefined {
@@ -368,8 +386,14 @@ export class Engine {
       );
     this.stopRunners('The output target changed.');
     this.target = t;
+    if (t === 'simulator') {
+      // Anything the hardware connection still had queued must not go out after the change. The
+      // server connection stays open and idle, so the real lights are not turned off by this.
+      this.retireHardware();
+      this.emit();
+      return OK;
+    }
     this.emit();
-    if (t === 'simulator') return OK;
     return this.connectHardware();
   }
 
@@ -385,7 +409,7 @@ export class Engine {
     if (hw === undefined) return no('There is no server.');
     const attempt = ++this.connectAttempt;
     // Nothing learned before carries over: a new governor, an empty shadow (SPEC R1.1a).
-    this.hwConn = undefined;
+    this.retireHardware();
     this.askCanSee = false;
     this.canSee = undefined;
     this.connection = 'connecting';
@@ -424,7 +448,7 @@ export class Engine {
     if (state !== 'down' && state !== 'fault') return;
     if (this.connection === 'connecting') return; // connectHardware reports its own failure.
     const had = this.hwConn !== undefined;
-    this.hwConn = undefined;
+    this.retireHardware();
     this.connectAttempt++;
     if (this.target !== 'simulator' && had) this.stopRunners('The hardware connection dropped.');
     // SPEC R1.8: show it, stop, and send nothing to the simulator in its place.
@@ -438,7 +462,7 @@ export class Engine {
   onDevice(attached: boolean): void {
     if (!attached) {
       const had = this.hwConn !== undefined;
-      this.hwConn = undefined;
+      this.retireHardware();
       if (this.target !== 'simulator' && had) this.stopRunners('The hasseb was unplugged.');
       this.connection = 'no-hasseb';
       this.connectionReason = 'The hasseb was unplugged.';
@@ -608,9 +632,7 @@ export class Engine {
   private divergence(conn: Conn, d: Divergence): void {
     this.divergences.push(d);
     if (this.divergences.length > DIVERGENCES) this.divergences.shift();
-    const last = this.lastRescan.get(d.address) ?? -Infinity;
-    if (this.clock.now() - last >= RESCAN_MIN_MS && conn === this.hwConn)
-      this.pendingRescan.add(d.address);
+    if (conn === this.hwConn) this.pendingRescan.add(d.address);
     this.emit();
   }
 
@@ -618,13 +640,21 @@ export class Engine {
     const hw = this.hwConn;
     if (this.target !== 'both' || hw === undefined || this.latched || this.backgroundBusy) return;
     if (hw.scheduler.queued > 0 || this.jobs.size > 0 || this.coalescer.waiting() > 0) return;
-    const [n] = this.pendingRescan;
+    const now = this.clock.now();
+    const n = [...this.pendingRescan].find(
+      (a) => now - (this.lastRescan.get(a) ?? -Infinity) >= RESCAN_MIN_MS,
+    );
     if (n !== undefined) {
       this.pendingRescan.delete(n);
-      this.lastRescan.set(n, this.clock.now());
+      this.lastRescan.set(n, now);
       // The hardware's values correct the shadow by the safe path: a scan rebuilds its model (ADR 0012).
+      // A rescan that cannot model the address (a fade was running) stays pending, and is tried
+      // again no sooner than RESCAN_MIN_MS later.
       void this.runJob(hw, 'rescan', `Rescan A${String(n)}`, async (_job, submit) => {
         await scanAddress(n, hw.governor, submit);
+      }).then(() => {
+        if (this.hwConn === hw && hw.governor.addressInfo(n)?.modelled !== true)
+          this.pendingRescan.add(n);
       });
       return;
     }
@@ -673,13 +703,29 @@ export class Engine {
         return r.ok ? r.value : { ok: false as const, reason: r.reason };
       }),
     );
-    const first = results[0];
-    if (first?.ok === true) this.ceiling = arc;
+    // Report what happened where the lights are: the active connection (security review L1).
+    const conns = this.conns();
+    const active = this.active();
+    const i = active === undefined ? 0 : conns.indexOf(active);
+    const mine = results[i] ?? results[0];
+    if (mine === undefined) return no('No connection.');
+    if (mine.ok) this.ceiling = arc;
     this.emit();
-    return first ?? no('No connection.');
+    if (!mine.ok) return mine;
+    const failed = (mine.profiles ?? [])
+      .filter((p) => !p.verified)
+      .map((p) => `A${String(p.address)}`);
+    if (failed.length > 0)
+      return no(
+        `The ceiling is now arc level ${String(arc)}, but MAX LEVEL did not take on ${failed.join(', ')}. Write the safety profile again.`,
+      );
+    return OK;
   }
 
   unlock(u: Unlock, source: Source, confirmed: boolean): Outcome {
+    // On hardware the operator answers first whether they can see the lights (security review L4).
+    if (u === 'rate' && this.hwConn !== undefined && this.canSee === undefined)
+      return no('Answer whether you can see the lights first.');
     let out: Outcome = OK;
     for (const c of this.conns()) {
       const r = c.governor.unlock(u, source, confirmed);
@@ -852,6 +898,15 @@ export class Engine {
           return p;
         },
         panic: () => this.panic(),
+        whenStarted: (match) =>
+          new Promise<void>((resolve) => {
+            const l = (f: TxFrame, c: Conn | undefined) => {
+              if (c !== conn || !match(f)) return;
+              this.startListeners.delete(l);
+              resolve();
+            };
+            this.startListeners.add(l);
+          }),
       };
       return run(ctx);
     });
@@ -881,6 +936,9 @@ export class Engine {
   // What the page sees
 
   private onFrame(conn: Conn, r: BusRecord): void {
+    // SPEC R1.9: a transport fault stops running work, not only the job that saw it.
+    if (r.result.kind === 'fault' && conn === this.active())
+      this.stopRunners(`A frame faulted: ${r.result.reason}`);
     const cmd = decode(r.frame.frame, conn.prev);
     conn.prev = r.frame.frame;
     this.monitor.push({

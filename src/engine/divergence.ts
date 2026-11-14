@@ -71,7 +71,13 @@ export class DivergenceGate implements Gate {
     const cmd = decode(sent.frame.frame, prev);
     // Was the address modelled before this frame? The shadow's answer is worth comparing only then.
     const n = cmd?.address?.kind === 'short' ? cmd.address.n : undefined;
-    const modelled = n !== undefined && this.governor.addressInfo(n)?.modelled === true;
+    const info = n === undefined ? undefined : this.governor.addressInfo(n);
+    // A level is worth comparing only when the shadow knows it and no fade is running, since how the
+    // DA5-L fades is not yet confirmed (dali.md section 16).
+    const unit = n === undefined ? undefined : this.governor.shadow.byShortAddress(n);
+    const levelKnown =
+      info?.levelKnown === true && unit !== undefined && unit.gear.settlesAt() <= sent.at;
+    const modelled = info?.modelled === true && (cmd?.id !== 'QUERY_ACTUAL_LEVEL' || levelKnown);
     const shadow = this.governor.observe(sent, result);
     if (cmd === undefined || n === undefined || !modelled || shadow === undefined) return;
     if (!this.comparing() || !COMPARED.has(cmd.id)) return;

@@ -29,7 +29,7 @@ class FakeHardware implements HardwareTransport {
     readonly sim: Simulator,
     clock: VirtualClock,
   ) {
-    this.inner = new SimTransport(sim, clock, withFloors({}));
+    this.inner = new SimTransport(sim, clock, withFloors({}), { keepLog: true });
   }
   state(): TransportState {
     return this.st;
@@ -62,7 +62,7 @@ class FakeHardware implements HardwareTransport {
 function setup(o: { hardware?: boolean; hwSim?: Simulator } = {}) {
   const clock = new VirtualClock(1000);
   const sim = Simulator.bench();
-  const simTransport = new SimTransport(sim, clock, withFloors({}));
+  const simTransport = new SimTransport(sim, clock, withFloors({}), { keepLog: true });
   const hwSim = o.hwSim ?? Simulator.bench({ at: 0 });
   const hw = o.hardware === false ? undefined : new FakeHardware(hwSim, clock);
   const engine = new Engine({
@@ -322,6 +322,49 @@ describe('hardware and Both', () => {
   });
 });
 
+describe('replaced connections (security review H1)', () => {
+  const nonPanicAfterPanic = (hw: FakeHardware, from: number): string[] => {
+    const log = hw.inner.log.slice(from);
+    const last = log.map((l) => l.panic).lastIndexOf(true);
+    return log.slice(last + 1).map((l) => `${String(l.frame.frame.a)},${String(l.frame.frame.b)}`);
+  };
+
+  for (const change of ['both', 'simulator', 'reconnect', 'drop', 'unplug'] as const) {
+    it(`nothing the old connection queued reaches the bus after panic (${change})`, async () => {
+      const { engine, settle, drive, hw, clock } = setup();
+      if (hw === undefined) throw new Error('hardware');
+      await settle();
+      await drive(engine.setTarget('hardware', 'ui'));
+      await settle();
+      await clock.advance(3000);
+      const from = hw.inner.log.length;
+      // Work queued on the hardware connection, not yet on the bus.
+      // Queries, which the governor always allows, so only the retirement can stop them.
+      const queued = [0, 1, 0, 1].map((n) =>
+        engine.request(
+          { kind: 'commands', commands: [{ id: 'QUERY_ACTUAL_LEVEL', address: short(n) }] },
+          'ui',
+        ),
+      );
+      if (change === 'both') void engine.setTarget('both', 'ui');
+      else if (change === 'simulator') await engine.setTarget('simulator', 'ui');
+      else if (change === 'reconnect') void engine.reconnect('ui');
+      else if (change === 'drop') hw.drop();
+      else engine.onDevice(false);
+      if (change === 'drop') hw.st = 'ready';
+      const p = engine.panic();
+      await drive(p);
+      await clock.advance(5000);
+      for (const q of queued) await q;
+      expect(nonPanicAfterPanic(hw, from)).toEqual([]);
+      const sent = hw.inner.log.slice(from).filter((l) => !l.panic);
+      // At most the frame already on the wire went out; the rest were dropped.
+      expect(sent.length).toBeLessThanOrEqual(1);
+      engine.dispose();
+    });
+  }
+});
+
 describe('panic and the latch (SPEC S4)', () => {
   it('stops everything, sends TERMINATE and OFF on every connection, and holds until a person resumes', async () => {
     const { engine, settle, drive, hw, simTransport, clock } = setup();
@@ -471,6 +514,43 @@ describe('commissioning (SPEC D3)', () => {
   }, 60_000);
 });
 
+describe('commissioning with a shared random address (DALI review 3)', () => {
+  async function run(c: number[], d: number[]) {
+    const hwSim = Simulator.bench({ at: 0 });
+    hwSim.add({
+      id: 'C',
+      gear: new Da5l(benchA(), { shortAddress: null, at: 0, randomPreload: c }),
+    });
+    hwSim.add({
+      id: 'D',
+      gear: new Da5l(benchB(), { shortAddress: null, at: 0, randomPreload: d }),
+    });
+    const { engine, settle, drive } = setup({ hwSim });
+    await settle();
+    await drive(engine.setTarget('hardware', 'ui'));
+    await settle();
+    engine.unlock('reset', 'ui', true);
+    await drive(engine.commission('ui', 'commission'));
+    const result = engine.snapshot().commission;
+    engine.dispose();
+    return { result, c: hwSim.unit('C')?.gear.shortAddress, d: hwSim.unit('D')?.gear.shortAddress };
+  }
+
+  it('randomises again, and gives each driver its own address', async () => {
+    const { result, c, d } = await run([0x123456, 0x200000], [0x123456, 0x300000]);
+    expect(result?.problems).toEqual([]);
+    expect([c, d].sort()).toEqual([2, 3]);
+  }, 60_000);
+
+  it('gives up rather than share an address when the clash never clears', async () => {
+    const same = Array.from({ length: 10 }, () => 0x0abcde);
+    const { result, c, d } = await run(same, same);
+    expect(result?.problems.join(' ')).toContain('kept choosing the same random address');
+    expect(c).toBeNull();
+    expect(d).toBeNull();
+  }, 60_000);
+});
+
 describe('the hardware check', () => {
   it('runs every automatic step on the bench and records manual ones', async () => {
     const { engine, settle, drive } = setup();
@@ -559,7 +639,12 @@ describe('the hardware check', () => {
       steps: { id: string; values?: Record<string, unknown> }[];
     };
     const tc = report.steps.find((s) => s.id === 'p2-store-tc-limit');
-    expect(tc?.values?.['same']).toBe(true);
+    expect(tc?.values?.['changed']).toBe(true);
+    expect(tc?.values?.['restored']).toBe(true);
+    const gf = report.steps.find((x) => x.id === 'p3-store-gear-features');
+    expect([gf?.values?.['changed'], gf?.values?.['restored']]).toEqual([true, true]);
+    const inFlight = report.steps.find((x) => x.id === 'p4-panic-in-flight');
+    expect(typeof inFlight?.values?.['inFlight']).toBe('boolean');
     expect((await engine.runCheck('nope', 'ui')).ok).toBe(false);
     expect((await engine.runCheck('p2-limits', 'script')).ok).toBe(false);
     engine.dispose();
