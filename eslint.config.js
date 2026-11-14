@@ -16,6 +16,8 @@ export default tseslint.config(
       'node_modules/',
       'reports/',
       '.stryker-tmp/',
+      'server/',
+      'tools/golden/.venv/',
     ],
   },
   {

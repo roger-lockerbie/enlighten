@@ -8,3 +8,7 @@ tools/golden/requirements.txt
 tests/golden/*.json
 reports
 .stryker-tmp
+server/.venv
+server/requirements.txt
+server/requirements-dev.txt
+.pytest_cache
