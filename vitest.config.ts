@@ -19,5 +19,17 @@ export default defineConfig({
         },
       },
     ],
+    // Targets from docs/TEST_PLAN.md section 1: 90% of lines on the pure core, 95% of branches on
+    // src/safety. `pnpm coverage` runs the unit and property tests together against them.
+    coverage: {
+      provider: 'v8',
+      include: ['src/dali/**/*.ts', 'src/sim/**/*.ts', 'src/bus/**/*.ts', 'src/safety/**/*.ts'],
+      exclude: ['**/*.test.ts', '**/index.ts'],
+      reporter: ['text-summary', 'text'],
+      thresholds: {
+        lines: 90,
+        'src/safety/**': { lines: 90, branches: 95 },
+      },
+    },
   },
 });

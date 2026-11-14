@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stage 0 (repo, tooling and security baseline) and Stage 1 (research) are merged. Stage 2 (design) is written on `stage-2-design` and waiting for the owner's review. Stage 3 (DALI core, simulator and safety governor) is next, on Opus, in plan mode.
+Stages 0 to 2 are merged. Stage 3 (DALI core, simulator and safety governor) is done on `stage-3-core` and waiting for review. Stage 4 (transports and the hasseb) is next, on Opus, in plan mode.
 
 ## Done in Stage 0
 
@@ -43,6 +43,23 @@ Decisions the owner made during this stage: panic's safe level is off, the serve
 
 `docs/STAGES.md` now matches the design for Stages 3, 4, 5 and 12.
 
+## Stage 3 (DALI core, simulator and safety governor), done and waiting for review
+
+Branch `stage-3-core`. What is in it:
+
+- `tools/golden/generate.py` and the fixtures in `tests/golden/` (`pnpm golden`). `src/dali` is byte-equal to python-dali for every supported command and a decode sweep, with one documented departure (ADR 0011).
+- `src/sim`: the DA5-L profile with every unknown as a sourced setting and a hardware-day check, the gear model, the simulated bus. Behaviour tests per section of `dali.md`, and the differential check against python-dali's fake gear.
+- `src/bus`: the clock, timing with floors, and the scheduler with panic.
+- `src/safety`: the governor (rule table, mix rule, rate guard, safety profile, ceiling, panic), and on hardware a shadow built from scan read-backs. ADR 0011 records the interfaces as built and the rate guard's exact rules.
+- Property tests on a virtual-clock bench, including a hardware variant where the real gear differs from anything the governor starts with. All 15 pass at 1,000 runs each.
+- `pnpm verify` runs `pnpm coverage`: 99% of lines on the pure core and over 95% of branches on `src/safety`.
+- `pnpm mutate` scores 94.73% (94.46% on `src/safety`), past the 85% target. Every surviving mutant in `src/safety` is listed with its reason in `docs/MUTATION.md`. The runs found gaps in the tests, now closed, and one bug: a governor accepted a starting ceiling outside arc levels 1 to 254. That is fixed.
+- Reviews: `dali-reviewer` passed with follow-ups, all fixed and re-checked. `security-reviewer` failed the first run (hardware shadow) and the first re-run (rescan staleness). Both were fixed, and the second re-run passed with follow-ups, which are fixed or logged in `docs/SECURITY_FINDINGS.md`.
+
+Owner decision on the ceiling. When the ceiling is lowered while a driver is fading down from above the new ceiling, and that driver does not pull its output down to a lower MAX LEVEL, `lowerCeiling` sends the hold DAPC and then an OFF, because the light is still above the new ceiling while it fades. The owner chose to keep the OFF as the safe choice. With the profile default (`maxLowerPullsDown: true`, a hardware-day item) the case does not arise. `src/safety/ceiling.edges.test.ts` pins it.
+
+Carried to Stage 4: the router with single-use, time-bound approvals; `RealClock`; the hasseb report builder and its G-hasseb test; the transport keeping frames in order when panic stops waiting after 100 ms.
+
 ## Next
 
-Stage 3 on Opus, in plan mode. Read `docs/SPEC.md` section 5, ADR 0004 and ADR 0005 first.
+Stage 4 (transports and the hasseb) on Opus, in plan mode. Read ADR 0003, ADR 0011, `docs/SPEC.md` section 9 and the carried items above first.

@@ -58,21 +58,23 @@ P-rate and P-rate-fade assert every clause of S3 on the traces, not only swings 
 
 Any change to the rate guard or panic adds or strengthens a property here in the same commit.
 
+The property tests run on the bench in `tests/harness/`: the scheduler, the governor and the simulator on a virtual clock. P-rate and P-rate-fade check the simulator's recorded output with `tests/harness/checker.ts`, which implements ADR 0011's rules separately from `src/safety/rate`. `pnpm verify` runs 25 cases of each. Set `PROP_RUNS` to run more: each stage that changes `src/safety` runs 1,000 before it closes. Until Stage 4 brings intents, the console and scripts, P-ceiling's "sources" are transactions and raw frames tagged with each source. A hardware variant of P-rate runs the governor with a separate shadow that knows nothing at connect, across reconnects.
+
 ## 4. Golden and differential tests
 
 - **G-frames.** `tools/golden/generate.py` writes JSON fixtures from python-dali for every supported command: frame bytes, send-twice flag and reply type, the DT8 sequences `tools/first_light.py` sends, and commissioning frames. Tests read only the fixtures.
-- **G-hasseb.** The 10-byte reports python-dali's driver builds for a sample of commands, without a device. The server's report builder is tested against the same fixtures.
+- **G-hasseb.** The 10-byte reports python-dali's driver builds for a sample of commands, without a device. The server's report builder is tested against the same fixtures. Stage 3 writes the fixtures. The report builder and its test come with the server in Stage 4.
 - **D-fakes.** Where python-dali's fake gear models a behaviour (clamping, scenes, groups, DTRs, addressing, commissioning), the same command streams run through it and through the simulator, and the query replies are compared. The four known differences in `dali.md` section 15 are listed as expected.
 - **D-live.** In Hardware and Both, the server refuses a frame whose flags differ from python-dali's decoding. Any such refusal in an e2e run against the fake device is a failure.
 
 ## 5. Mutation testing
 
-- **M-safety.** Stryker with the Vitest runner on `src/safety` and the codec in `src/dali`. It is a development dependency added in Stage 3, and runs on demand and before each stage close that touched those folders, not on every push.
+- **M-safety.** Stryker with the Vitest runner on `src/safety` and the codec in `src/dali` (`pnpm mutate`). It is a development dependency added in Stage 3, and runs on demand and before each stage close that touched those folders, not on every push. Surviving mutants in `src/safety` are listed with reasons in `docs/MUTATION.md`.
 
 ## 6. Lint tests
 
 - **L-sinks.** Exists from Stage 0: each banned sink is caught.
-- **L-boundary.** A test file proves lint catches an import of a transport's send outside `src/engine/router.ts`, a DOM global or timer in a pure folder, `createPolicy` or `new Worker` outside `src/workers`, and an inline style attribute in a component.
+- **L-boundary.** A test file proves lint catches an import of a transport's send outside `src/engine/router.ts`, a DOM global or timer in a pure folder, `createPolicy` or `new Worker` outside `src/workers`, and an inline style attribute in a component. Stage 3 adds the pure-folder part (`eslint.boundary.js`, `tests/lint/boundary.test.ts`). The rest comes with the router, the workers and the components.
 
 ## 7. End-to-end tests (Playwright, Chromium)
 
@@ -137,6 +139,8 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Dimming curve, gear features (automatic activation), RGBWAF control.
 - [ ] Colour temperature limits, all four.
 - [ ] All 16 scene levels and both group bytes.
+- [ ] The colour as shipped: QUERY COLOUR VALUE selectors 226 and 233 to 238.
+- [ ] With the `expert` unlock, STORE COLOUR TEMPERATURE Tc LIMIT on driver A, then read it back. Whether limits can be stored at all.
 - [ ] Version numbers and memory bank 0.
 
 ### Part 3: the transport
@@ -153,9 +157,11 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Write the profile to both drivers and read it back.
 - [ ] Power-cycle the drivers. They stay off. Film the first second for any flash.
 - [ ] Pull the bus supply for a second. The level does not change.
+- [ ] Set SYSTEM FAILURE LEVEL to a low level with a 4 s fade time, pull the bus supply for two seconds, and watch: a step or a fade, and what the tape does when the bus returns. Then write the profile again.
 - [ ] Store a warm power-on colour, power-cycle, raise the level. Record the colour.
 - [ ] Lower MAX LEVEL below the present level. Record whether the output drops by itself.
 - [ ] Panic from the app, from Escape and by closing the tab. Time each to dark.
+- [ ] Panic while a send-twice frame with a reply is in flight: check the hasseb keeps frames in order when panic stops waiting after 100 ms (`PANIC_WAIT_MS`).
 - [ ] Stop the server with Ctrl-C. The tapes go off.
 
 ### Part 5: behaviour (`dali.md` section 16)
@@ -169,8 +175,12 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] What SET SCENE stores as colour, with and without a temporary colour.
 - [ ] Send twice with a frame to the other driver in between.
 - [ ] Twenty UPs at fade rate 15, querying after each.
+- [ ] Level 100, SET MIN LEVEL 150, query: does raising MIN lift the level.
+- [ ] DAPC 200, SET MAX LEVEL 150, query at once and after 2 s. Repeat during a slow fade upward.
+- [ ] GO TO LAST ACTIVE LEVEL at a known level, and query.
+- [ ] If QUERY MIN FAST FADE TIME shows support, time a fade at a count of 27 (675 or 700 ms).
 - [ ] An extended fade of 16 minutes, timed.
-- [ ] With the tapes covered, once: RESET from the app, then re-read everything.
+- [ ] With the tapes covered, once: RESET from the app, then re-read everything, including the stored power-on colour and GO TO LAST ACTIVE LEVEL after the OFF.
 - [ ] With the tapes covered, once: IDENTIFY DEVICE from a python-dali script, since the app refuses it. Record what the driver does.
 
 ### Part 6: light, with a lux meter if one is to hand
@@ -179,6 +189,7 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Sweep colour temperature at a fixed level. Constant lux means constant total.
 - [ ] One RGBWAF channel: sweep the channel level at arc level 254, then the arc level with the channel at 254.
 - [ ] Lux at the wall for each tape at the ceiling and at the minimum, to set the visualiser's placeholders.
+- [ ] Light each white channel of driver A (C2) on its own and note which terminals light, to set the C2 terminal order. Do the same for W and A on driver B (C5).
 
 ### Part 7: Both mode
 

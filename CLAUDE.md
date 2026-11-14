@@ -84,9 +84,12 @@ Use Node 26.13.1 (`.nvmrc`) and pnpm 12.18.0 through corepack. The dev server ru
 | `pnpm test`      | Unit tests (Vitest).                                           |
 | `pnpm test:prop` | Property tests (fast-check, in `*.prop.test.ts` files).        |
 | `pnpm e2e`       | Playwright in Chromium. Builds and starts the preview itself.  |
-| `pnpm lint`      | ESLint (including the banned sinks) and Prettier check.        |
+| `pnpm coverage`  | Unit and property tests with the coverage targets.             |
+| `pnpm mutate`    | Stryker on `src/safety` and the codec. On demand, not in CI.   |
+| `pnpm golden`    | Regenerate the python-dali golden fixtures in `tests/golden/`. |
+| `pnpm lint`      | ESLint (banned sinks, pure-core boundary) and Prettier check.  |
 | `pnpm format`    | Prettier write.                                                |
 | `pnpm typecheck` | svelte-check over TypeScript and Svelte.                       |
-| `pnpm verify`    | lint, typecheck, test, test:prop, build and e2e.               |
+| `pnpm verify`    | lint, typecheck, coverage, build and e2e.                      |
 
 First time on a machine: `pnpm install --frozen-lockfile`, then `pnpm exec playwright install chromium`. Node 26 has no bundled corepack, so run `npm install --global corepack` and `corepack enable` first.
