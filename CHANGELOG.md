@@ -20,7 +20,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 - `pnpm coverage` (in `verify`), `pnpm mutate` (Stryker, on demand) and `pnpm golden`.
 - ADR 0011: the interfaces as built and the rate guard's exact rules.
 - On hardware, a governor shadow built from scan read-backs (levels, limits, groups, fades, scenes, curve, colour features, physical minimum), with every unpredictable light change counted as the worst case, following the Stage 3 security review.
+- Mutation testing on `src/safety` and the codec, with every surviving mutant in `src/safety` explained in `docs/MUTATION.md`, and the tests it called for: exact outcomes for the governor, the safety profile, the ceiling and the rate guard.
 
 ### Changed
 
 - The plan for Stages 3, 4, 5 and 12 follows the design: the governor as ADR 0004 sets it out, a Python hardware server before any WebHID transport, and the build settings the spike proved.
+- The governor works out the bus schedule once, for both the rule check and the plan, and drops checks that cannot fail.
+- A governor now refuses a starting ceiling outside arc levels 1 to 254, as `setCeiling` does.
