@@ -57,6 +57,12 @@ fake changes levels at once, with no fades, so a fade set on it shows as a diver
 `--demo-quirk level-offset` makes the fake answer QUERY ACTUAL LEVEL one step high while a driver is lit, to see the
 divergence log at work. `--demo-unaddressed` adds a driver with no short address, for commissioning.
 
+### Timing
+
+`--gap-ms` sets the least time from one frame's report to the next frame (default 20, as python-dali).
+`--send-twice-ms` sets how long the hasseb waits before repeating a send-twice frame (default 10, as
+python-dali). Both are hardware-day items: measure them with a scope or a second interface.
+
 ### Trace
 
 `--trace` prints every report from the hasseb except the idle ones. The hardware check asks for this on

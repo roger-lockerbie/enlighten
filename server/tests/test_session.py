@@ -372,3 +372,34 @@ def test_an_idle_session_notices_an_unplug(dist: Path, monkeypatch: pytest.Monke
                 assert await recv(ws) == p.device(True)
 
     asyncio.run(go())
+
+
+def test_nothing_goes_out_after_the_final_off_when_the_server_stops(dist: Path) -> None:
+    """Security review M1: a SEND that arrives while the server is stopping is dropped, not queued."""
+
+    async def go() -> None:
+        async with server(dist, quirk="slow") as s:
+            async with s.client() as ws:
+                await welcomed(ws)
+                await ws.send(send(1, 0x02, 100))
+                await asyncio.sleep(0.05)
+                stopping = asyncio.create_task(s.hub.shutdown())
+                await asyncio.sleep(0.01)
+                await ws.send(send(2, 0x02, 120))
+                await stopping
+            frames_ = s.frames()
+            assert frames_[-2:] == STOP
+            assert frames_.count("general.DAPC") == 1
+
+    asyncio.run(go())
+
+
+def test_a_connection_while_stopping_is_refused(dist: Path) -> None:
+    async def go() -> None:
+        async with server(dist) as s:
+            s.hub.closing = True
+            async with s.client() as ws:
+                await closed_with(ws, p.SERVER_STOPPING)
+            s.hub.closing = False
+
+    asyncio.run(go())

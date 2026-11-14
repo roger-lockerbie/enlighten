@@ -29,6 +29,22 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap.add_argument("--demo-quirk", choices=fake.QUIRKS, help="make the fake differ, for tests")
     ap.add_argument("--demo-unaddressed", action="store_true", help="add a fake driver with no address")
     ap.add_argument("--trace", action="store_true", help="print every hasseb report but idle ones")
+    ap.add_argument(
+        "--gap-ms",
+        type=int,
+        default=20,
+        choices=range(0, 201),
+        metavar="0..200",
+        help="least time from one frame's report to the next frame (default 20, as python-dali)",
+    )
+    ap.add_argument(
+        "--send-twice-ms",
+        type=int,
+        default=10,
+        choices=range(1, 101),
+        metavar="1..100",
+        help="the delay the hasseb waits before repeating a send-twice frame (default 10, as python-dali)",
+    )
     return ap.parse_args(argv)
 
 
@@ -53,9 +69,10 @@ async def run(args: argparse.Namespace) -> int:
         bus = fake.FakeBus(fake.bench(args.demo_quirk, args.demo_unaddressed), echo=say)
         device = fake.FakeHasseb(bus, args.demo_quirk)
         demo = device
-        link = Link(lambda: demo if demo.plugged else None, trace)
+        opener = lambda: demo if demo.plugged else None  # noqa: E731
     else:
-        link = Link(open_real, trace)
+        opener = open_real
+    link = Link(opener, trace, args.gap_ms / 1000, args.send_twice_ms)
     hub = Hub(link, log=lambda t: say(f"enlighten: {t}"))
 
     loop = asyncio.get_running_loop()

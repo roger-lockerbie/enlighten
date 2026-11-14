@@ -12,12 +12,25 @@ from dali.gear import general
 from dali.gear.general import EnableDeviceType
 
 
-def decode(a: int, b: int, previous: Command | None) -> Command | None:
-    """The command a 16-bit frame carries, given the frame sent before it. None if it is not known."""
-    device_type = previous.param if isinstance(previous, EnableDeviceType) else 0
-    cmd = Command.from_frame(ForwardFrame(16, [a, b]), devicetype=device_type)
+def _known(cmd: Command | None) -> Command | None:
     if cmd is None or type(cmd) is Command or isinstance(cmd, general.UnknownGearCommand):
         return None
+    return cmd
+
+
+def decode(a: int, b: int, previous: Command | None) -> Command | None:
+    """The command a 16-bit frame carries, given the frame sent before it. None if it is not known.
+
+    After ENABLE DEVICE TYPE, a standard command numbered below 224 is the part 102 command: the standard
+    applies ENABLE DEVICE TYPE only to the application extended commands, 224 to 255. python-dali finds
+    no command there. The app decodes it this way too (ADR 0011), so the server does the same.
+    """
+    device_type = previous.param if isinstance(previous, EnableDeviceType) else 0
+    frame = ForwardFrame(16, [a, b])
+    cmd = _known(Command.from_frame(frame, devicetype=device_type))
+    standard = a & 1 == 1 and not 0xA0 <= a <= 0xCB
+    if cmd is None and device_type != 0 and standard and b < 224:
+        cmd = _known(Command.from_frame(frame, devicetype=0))
     return cmd
 
 

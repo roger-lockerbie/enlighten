@@ -6,6 +6,9 @@ temperature, address 1 in C5 presenting five RGBWAF channels. It is not the simu
 changes happen at once, with no fades, so a fade set on the demo bench shows as a divergence in Both.
 
 Commands are recognised by python-dali's class names (a run-time use of python-dali, nothing copied).
+
+Known simplifications, none of which a test relies on: there is no 300 ms deaf time after RESET, no
+fades, no power or bus failure, and memory banks other than bank 0 are absent.
 """
 
 from __future__ import annotations
@@ -69,6 +72,8 @@ class Gear:
     random_address: int = 0xFFFFFF
     search: list[int] = field(default_factory=lambda: [0xFF, 0xFF, 0xFF])
     walk: int | None = None
+    walk_ok: bool = False
+    temp_control: int | None = None
 
     def __post_init__(self) -> None:
         self.rng = random.Random(self.seed)
@@ -103,8 +108,11 @@ class Gear:
         for i, c in enumerate(self.temp_channels):
             if c is not None:
                 self.channel_levels[i] = c
+        if self.temp_control is not None:
+            self.rgbwaf_control = self.temp_control
         self.temp_tc = None
         self.temp_channels = [None] * 6
+        self.temp_control = None
 
     def search_address(self) -> int:
         return (self.search[0] << 16) | (self.search[1] << 8) | self.search[2]
@@ -136,11 +144,16 @@ class Gear:
         """Apply one command. Returns the answer byte, or None for no answer."""
         d = self.dtr
         on = self.level > 0
+        # QUERY NEXT DEVICE TYPE answers only straight after QUERY DEVICE TYPE or itself.
+        chained = self.walk_ok
+        self.walk_ok = n in ("general.QueryDeviceType", "general.QueryNextDeviceType")
         if n == "general.DAPC":
             if b != MASK:
                 self.set_level(b)
         elif n == "general.Off":
             self.level = 0
+            if self.gear_features & 1:
+                self.activate()
         elif n == "general.RecallMaxLevel":
             self.set_level(self.max_level)
         elif n == "general.RecallMinLevel":
@@ -162,7 +175,10 @@ class Gear:
                 self.set_level(self.scenes[b & 0x0F])
         elif n == "general.Reset":
             fresh = Gear(self.short, self.tc, self.channels, self.assigned, self.seed, self.level_offset)
+            dtr = self.dtr
             self.__dict__.update(fresh.__dict__)
+            # RESET leaves the DTRs as they were (dali.md section 5).
+            self.dtr = dtr
             self.level = 254
         elif n == "general.StoreActualLevelInDTR0":
             d[0] = self.level
@@ -193,7 +209,10 @@ class Gear:
         elif n == "general.RemoveFromGroup":
             self.groups &= ~(1 << (b & 0x0F))
         elif n == "general.SetShortAddress":
-            self.short = None if d[0] == MASK else d[0] >> 1
+            if d[0] == MASK:
+                self.short = None
+            elif d[0] & 1 and d[0] >> 1 < 64:
+                self.short = d[0] >> 1
         # Queries.
         elif n == "general.QueryControlGearPresent":
             return YES
@@ -209,7 +228,7 @@ class Gear:
             self.walk = None
             return 0xFF
         elif n == "general.QueryNextDeviceType":
-            return self._next_type()
+            return self._next_type() if chained else None
         elif n == "general.QueryPhysicalMinimum":
             return self.physical_minimum
         elif n == "general.QueryActualLevel":
@@ -275,7 +294,7 @@ class Gear:
             for i in range(3):
                 self.temp_channels[3 + i] = d[i]
         elif n == "colour.SetTemporaryRGBWAFControl":
-            self.rgbwaf_control = d[0]
+            self.temp_control = d[0]
         elif n == "colour.Activate":
             self.activate()
         elif n == "colour.StoreColourTemperatureTcLimit":

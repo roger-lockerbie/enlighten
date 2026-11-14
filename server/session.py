@@ -73,7 +73,11 @@ class Hub:
     async def poll_device(self) -> None:
         """Watch for the hasseb coming and going, and tell the client."""
         while not self.closing:
-            attached = await self._run(self.link.poll)
+            try:
+                attached = await self._run(self.link.poll)
+            except Exception as e:  # noqa: BLE001 - one bad poll must not end the watch
+                self.log(f"device check failed: {e!r}")
+                attached = False
             if attached != self.attached:
                 self.attached = attached
                 self.log(f"hasseb {'attached' if attached else 'not attached'}")
@@ -92,16 +96,27 @@ class Hub:
 
     async def pump(self) -> None:
         """Send queued frames, one at a time, for as long as the server runs."""
-        while not self.closing:
-            await self.wake.wait()
-            self.wake.clear()
-            while self.queue:
-                async with self.bus:
-                    if not self.queue:
-                        break
-                    item = self.queue.popleft()
-                    reply = await self._one(item.send)
-                await self._send(item.ws, reply)
+        try:
+            while not self.closing:
+                await self.wake.wait()
+                self.wake.clear()
+                while self.queue and not self.closing:
+                    async with self.bus:
+                        if not self.queue or self.closing:
+                            break
+                        item = self.queue.popleft()
+                        reply = await self._one(item.send)
+                    await self._send(item.ws, reply)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 - if the pump fails, the lights go off
+            self.log(f"the frame pump failed: {e!r}")
+            ws = self.client
+            self.client = None
+            t, o = await self.stop()
+            if ws is not None:
+                await self._send(ws, p.stopped(t, o))
+                await self._refuse(ws, p.SERVER_STOPPING)
 
     async def _one(self, s: p.Send) -> bytes:
         cmd = frames.decode(s.a, s.b, self.previous)
@@ -159,6 +174,9 @@ class Hub:
             self.log("refused a connection: bad or used token")
             await self._refuse(ws, p.NOT_AUTHORISED)
             return
+        if self.closing:
+            await self._refuse(ws, p.SERVER_STOPPING)
+            return
         if self.client is not None:
             await self._refuse(ws, p.BUSY)
             return
@@ -195,7 +213,10 @@ class Hub:
                 await self._refuse(ws, p.PROTOCOL_ERROR)
                 return
             if isinstance(msg, p.Send):
-                if len(self.queue) >= QUEUE_LIMIT:
+                if self.closing or self.client is not ws:
+                    # The server is stopping, or this session no longer holds the bus: never queue.
+                    await self._send(ws, p.result(msg.seq, p.DROPPED))
+                elif len(self.queue) >= QUEUE_LIMIT:
                     await self._send(ws, p.result(msg.seq, p.REFUSED))
                 else:
                     self.queue.append(Queued(ws, msg))

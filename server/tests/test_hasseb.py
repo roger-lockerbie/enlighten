@@ -127,3 +127,69 @@ def test_server_decoding_matches_the_fixtures(case: dict) -> None:
     assert cmd is not None
     assert frames.name(cmd) == case["pd"]
     assert frames.flags(cmd) == (case["sendTwice"], case["reply"] != "none")
+
+
+def test_reports_that_are_not_answers_do_not_extend_the_timeout() -> None:
+    """Security review L2: a stream of sniffer reports with the frame's own sequence number."""
+    import time as _time
+
+    class Chatty:
+        seq = 0
+
+        def write(self, r):
+            self.seq = r[2]
+
+        def read(self, timeout_ms):
+            _time.sleep(0.01)
+            return bytes([0xAA, 0x07, self.seq, 5, 1, 7, 0, 0, 0, 0])
+
+        def close(self):
+            pass
+
+    t0 = _time.monotonic()
+    assert Hasseb(Chatty()).transmit(0x01, 0xA0, True, False) == (p.HASSEB_TIMEOUT, 0)
+    assert _time.monotonic() - t0 < 0.4
+
+
+def test_part_102_commands_after_enable_device_type_decode_as_the_app_decodes_them() -> None:
+    """ADR 0011's one departure from python-dali, kept the same in the server (DALI review 4)."""
+    dt8 = EnableDeviceType(8)
+    for (a, b), want in [((0x01, 0xA0), "general.QueryActualLevel"), ((0x01, 0x05), "general.RecallMaxLevel"), ((0xFF, 0x00), "general.Off")]:
+        cmd = frames.decode(a, b, dt8)
+        assert cmd is not None and frames.name(cmd) == want
+    # Commands 224 and up stay device type commands, and an unknown one stays unknown.
+    assert frames.name(frames.decode(0x03, 0xF9, dt8)) == "colour.QueryColourTypeFeatures"
+    assert frames.decode(0x03, 0xE0, EnableDeviceType(7)) is None
+
+
+def test_the_gap_between_frames_is_kept() -> None:
+    """DALI review 1: the server keeps a least gap from one frame's report to the next frame."""
+    import time as _time
+
+    class Quick:
+        def __init__(self):
+            self.times = []
+            self.written = []
+            self.last = None
+
+        def write(self, r):
+            self.times.append(_time.monotonic())
+            self.written.append(r)
+            self.last = r
+
+        def read(self, timeout_ms):
+            r, self.last = self.last, None
+            return None if r is None else bytes([0xAA, 0x07, r[2], 1, 0, 0, 0, 0, 0, 0])
+
+        def close(self):
+            pass
+
+    d = Quick()
+    h = Hasseb(d, gap_s=0.02, send_twice_ms=25)
+    for _ in range(3):
+        h.transmit(0xFF, 0x00, False, False)
+    gaps = [b - a for a, b in zip(d.times, d.times[1:])]
+    assert all(g >= 0.019 for g in gaps)
+    h.transmit(0x01, 0x2A, False, True)
+    assert d.written[-1][6] == 25
+    assert all(r[6] == 0 for r in d.written[:-1])

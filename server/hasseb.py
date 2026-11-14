@@ -30,6 +30,13 @@ SEND_TWICE_DELAY_MS = 10
 
 TIMEOUT_S = 0.25
 
+# The least time from one frame's report to the next frame. python-dali sleeps 20 ms before every send,
+# with the comment that the gap "need[s] to be at lest 22*417 µs", and the vendor's fork 15 ms: the
+# firmware may not keep the bus's settling time by itself. The app's scheduler keeps it for its own
+# frames, but the server's stop and a queue that drains do not go through the scheduler, so the server
+# keeps this gap too. Measuring it is a hardware-day item.
+MIN_GAP_S = 0.020
+
 
 class HidDevice(Protocol):
     def write(self, report: bytes) -> None: ...
@@ -85,19 +92,27 @@ def outcome(report: bytes) -> tuple[int, int] | None:
 
 
 class Hasseb:
-    def __init__(self, device: HidDevice, trace: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        device: HidDevice,
+        trace: Callable[[str], None] | None = None,
+        gap_s: float = MIN_GAP_S,
+        send_twice_ms: int = SEND_TWICE_DELAY_MS,
+    ):
         self.device = device
         self.seq = 0
         self.trace = trace
         self.idle = 0
+        self.gap_s = gap_s
+        self.send_twice_ms = send_twice_ms
+        self.free_at = 0.0
 
     def _next(self) -> int:
         self.seq = next_sequence(self.seq)
         return self.seq
 
-    def _await(self, kind: int, seq: int) -> bytes | None:
-        """Read until the report for this sequence number arrives, or the timeout."""
-        deadline = time.monotonic() + TIMEOUT_S
+    def _await(self, kind: int, seq: int, deadline: float) -> bytes | None:
+        """Read until the report for this sequence number arrives, or the deadline."""
         while True:
             left = deadline - time.monotonic()
             if left <= 0:
@@ -116,17 +131,32 @@ class Hasseb:
     def firmware_version(self) -> tuple[int, int] | None:
         seq = self._next()
         self.device.write(version_request(seq))
-        report = self._await(CMD_VERSION, seq)
+        report = self._await(CMD_VERSION, seq, time.monotonic() + TIMEOUT_S)
         return None if report is None else (report[3], report[4])
 
     def transmit(self, a: int, b: int, expect_reply: bool, send_twice: bool) -> tuple[int, int]:
         """Send one frame and wait for its report. Returns a RESULT status and data byte."""
         seq = self._next()
+        wait = self.free_at - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
         # The report is written as python-dali writes it: ten bytes starting 0xAA. How hidapi treats a
         # first byte that is not a report ID is a hardware-day item (docs/research/hasseb.md section 3).
-        self.device.write(send_report(seq, a, b, expect_reply, send_twice))
+        report_out = bytearray(send_report(seq, a, b, expect_reply, send_twice))
+        if send_twice:
+            report_out[6] = self.send_twice_ms
+        try:
+            self.device.write(bytes(report_out))
+            return self._answer(seq)
+        finally:
+            self.free_at = time.monotonic() + self.gap_s
+
+    def _answer(self, seq: int) -> tuple[int, int]:
+        # One deadline for the whole frame: reports that are not answers do not extend it, so the bus
+        # is never held past the timeout and the stop can always follow.
+        deadline = time.monotonic() + TIMEOUT_S
         while True:
-            report = self._await(CMD_SEND, seq)
+            report = self._await(CMD_SEND, seq, deadline)
             if report is None:
                 return p.HASSEB_TIMEOUT, 0
             answer = outcome(report)
@@ -137,9 +167,17 @@ class Hasseb:
 class Link:
     """The hasseb if one is attached. It reopens the device when it comes back."""
 
-    def __init__(self, opener: Callable[[], HidDevice | None], trace: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        opener: Callable[[], HidDevice | None],
+        trace: Callable[[str], None] | None = None,
+        gap_s: float = MIN_GAP_S,
+        send_twice_ms: int = SEND_TWICE_DELAY_MS,
+    ):
         self.opener = opener
         self.trace = trace
+        self.gap_s = gap_s
+        self.send_twice_ms = send_twice_ms
         self.hasseb: Hasseb | None = None
         self.firmware: tuple[int, int] = (0, 0)
 
@@ -162,10 +200,10 @@ class Link:
             except OSError:
                 device = None
             if device is not None:
-                hasseb = Hasseb(device, self.trace)
+                hasseb = Hasseb(device, self.trace, self.gap_s, self.send_twice_ms)
                 try:
                     version = hasseb.firmware_version()
-                except OSError:
+                except (OSError, ValueError):
                     version = None
                 if version is None:
                     device.close()
