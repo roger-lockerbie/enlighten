@@ -234,8 +234,9 @@ src/
   console/         line editor, history, parser, completion         pure
   script/          script parser                                    pure
   switch/          part 301 event machine, presets                  pure
-  light/           radiosity, direct term, emitters, colour         pure
-  store/           validators, migrations, Store interface          pure, plus an IndexedDB adapter
+  light/           radiosity, direct term, emitters, colour,        pure
+                   and the bench preview's placeholder colour
+  store/           validators, migrations, Store interface          pure (the IndexedDB adapter is src/ui/idb.ts)
   transport/       SimTransport, ServerTransport, wire codec        pure: the worker passes the WebSocket
   workers/         bus worker and light worker shells, the Trusted Types policy
   ui/              Svelte components, stores, design tokens, the three.js renderer

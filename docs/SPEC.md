@@ -338,6 +338,8 @@ JSON, at most 2 MB, with these top-level keys and no others:
 
 Names are at most 60 characters. Numbers have ranges. Enumerations are closed. Validation follows ADR 0009. An import replaces the library and set-up after a confirmation that lists what will change, and never sends a frame. Imported preferences cannot turn off verify mode or override reduced motion: those two apply only when they make the app more careful. Simulator profile settings in `devices` apply to the simulated bench only (R1.6).
 
+Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013).
+
 ## 9. Server protocol
 
 One WebSocket at `/bus`. Binary messages only. Every message starts with a type byte. A message of the wrong length or an unknown type closes the connection.

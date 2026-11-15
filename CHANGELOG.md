@@ -30,6 +30,17 @@ All notable changes to this project are recorded here. The format follows Keep a
 - e2e tests against the server and its fake (E-modes, E-server), and CI steps that install the server from hashes and run its tests.
 - ADR 0012: the transports, the engine and the server as built.
 
+- Stage 5 shell: the top bar (target and connection, the ceiling with its verified count, bus use, unlocks, Panic), the rail with Alt-1 to Alt-4, a collapsible inspector, a placeholder console drawer with Ctrl-` that remembers its height, F6 between regions, and the banner line.
+- The design system: dark tokens, self-hosted Inter and JetBrains Mono with their licences and checksums, and paired sliders, number fields, segmented controls, a colour picker, a fade picker, toggles, dialogs opened without modal state, typed confirmations and status chips.
+- The Playground: a panel for each device as it reports itself (level, colour temperature, colour and raw channels, fade), Live and Commit modes, power, step and hold-to-dim, feedback on what was sent, clamped or refused, and a 2D bench preview.
+- The ceiling dialog: lower at once, raise with the new value typed.
+- The Bus monitor with filters, pause and the divergence log. Settings with preferences, workspace export and import, records set aside, and the key legend. Device names and the simulator's settings on the Devices page.
+- `src/store`: the hand-written validator, preferences, migrations and workspace files, with U-store and P-validator. IndexedDB through `src/ui/idb.ts`.
+- The engine gives the page each unit's light, feedback on live values, numbered monitor lines and the bench set-up. New intents for colour temperature, RGBWAF and Commit's Apply, and the DAPC sequence for a moving level.
+- e2e: E-shell, E-playground, E-ceiling, E-import, E-panic and E-a11y, the CSP test on every page, the Devices page, the entry chunk's budget, and the playground and ceiling in Hardware and Both against the fake. V-ui by hand with `pnpm e2e:visual`.
+- A `max-level` quirk in the fake server, for the mismatch test.
+- ADR 0013: the shell and playground as built.
+
 ### Changed
 
 - The plan for Stages 3, 4, 5 and 12 follows the design: the governor as ADR 0004 sets it out, a Python hardware server before any WebHID transport, and the build settings the spike proved.
@@ -38,8 +49,16 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The server protocol fixes its encoding and close reasons, and adds `STOPPED` (SPEC section 9).
 - The production CSP names one Trusted Types policy, `enlighten-worker`, and Svelte compiles with `fragments: 'tree'` (ADR 0002 items 2 to 4, moved from Stage 5).
 - The Permissions-Policy turns `hid` and `fullscreen` off.
+- The Permissions-Policy turns off 15 more features the app never uses (THREAT_MODEL section 4). Three that Chromium does not recognise are left out.
+- A style attribute in a component is a lint error. A `style:` directive is allowed (ADR 0002).
+- `src/light` and `src/store` join the pure core, for lint and coverage.
+- The page imports the hardware check's step list without its runners.
+- Output percentages show one decimal everywhere, as 39.5% for arc 220.
+- The e2e tests run at 1440 by 900, with a 90 s limit for the start-up scan.
 
 ### Fixed
+
+- S4-D6: lowering the ceiling on hardware with a DT8 colour unknown left a second lit driver above it for 3 to 5 s. Lit gear is now turned down before the MAX LEVEL writes: the first driver lands at once and the second one second later.
 
 - On hardware, the rate guard counted two opposite legs that start at the same moment as one leg when it united its faded and instant predictions, so a room could rise and fall from one command past the limit. Found by the 1,000-run property tests, present since Stage 3.
 - The property tests' trace checker summed each driver's last sample, taken at different times, so the room showed small steps the light never made. It now samples every driver at the same times.

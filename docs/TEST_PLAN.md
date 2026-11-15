@@ -101,11 +101,13 @@ Every e2e test uses the harness in `e2e/harness.ts`, so each also fails on a CSP
 | E-switch     | Every event type by mouse, touch and keyboard, and a plate on an unverified address doing nothing                                                                                                                          |
 | E-a11y       | Keyboard reach of every control, roles and names, reduced motion, and no element that blinks                                                                                                                               |
 
+From Stage 5 the preview tests are in `e2e/*.spec.ts`, one file per flow. They run in the Simulator target. `e2e/server/playground.spec.ts` runs E-playground and E-ceiling in Hardware and Both against the fake. It includes a mismatch from the fake's `max-level` quirk, and the order of the hold and the MAX LEVEL writes when lowering. `e2e/devices.spec.ts` covers the simulator settings (R1.6). `e2e/bundle.spec.ts` checks that the entry chunk has no lazily loaded code and stays under 250 kB, ready for three.js in Stage 7. Each test needs about 15 s for the start-up scan, because the simulated bus runs at DALI speed. Still to come with later stages: a script raising the ceiling (E-ceiling, Stage 6), and panic mid-script and mid-sequence (E-panic, Stages 6 and 9).
+
 CI runs Chromium only. The client uses Chrome and Brave, so from Stage 5 the app is checked by hand in both at each stage close, with hardware through the server from Stage 4. The simulator is also checked by hand in Firefox and Safari. The results go in the stage report.
 
 ## 8. Visual regression
 
-- **V-ui.** Screenshots of each page in the dark theme at 1440 by 900.
+- **V-ui.** Screenshots of each page in the dark theme at 1440 by 900. Run by hand on the reference laptop with `pnpm e2e:visual`, not in CI, because fonts render differently on Linux and one set of baselines cannot serve both (ADR 0013).
 - **V-hallway.** One screenshot per mount preset and diffuser, in Chromium's software renderer so CI and laptops agree, with a small per-pixel tolerance.
 - Numeric checks carry the accuracy: probe values from the pure core against fixtures. Screenshots catch regressions in the shader and layout.
 

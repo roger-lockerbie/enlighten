@@ -4,6 +4,7 @@ coverage
 playwright-report
 playwright-report-server
 test-results
+test-results-visual
 pnpm-lock.yaml
 tools/golden/requirements.txt
 tests/golden/*.json

@@ -40,6 +40,7 @@
     "test:prop": "vitest run --project prop",
     "e2e": "playwright test && playwright test -c playwright.server.config.ts",
     "e2e:server": "playwright test -c playwright.server.config.ts",
+    "e2e:visual": "playwright test -c playwright.visual.config.ts",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
