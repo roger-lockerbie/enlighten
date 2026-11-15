@@ -1,6 +1,6 @@
 /**
  * E-playground and E-ceiling against the server with its fake hasseb, in Hardware and Both: the
- * controls reach the bus, lowering the ceiling turns lit gear down before the MAX LEVEL writes
+ * controls reach the bus, lowering the ceiling turns lit gear down before the profile work
  * (S4-D6), and a driver whose MAX LEVEL does not take is shown as a mismatch (SPEC R6.4).
  */
 import { expect, test, type Page } from '@playwright/test';
@@ -70,7 +70,7 @@ test('in Hardware, level, colour temperature, colour and fade reach the bus', as
   expect(await w.problems()).toEqual([]);
 });
 
-test('in Both, lowering the ceiling turns lit gear down before the MAX LEVEL writes', async ({
+test('in Both, lowering the ceiling turns lit gear down before the profile work', async ({
   page,
 }) => {
   server = await startServer();
@@ -91,11 +91,12 @@ test('in Both, lowering the ceiling turns lit gear down before the MAX LEVEL wri
   await page.getByTestId('ceiling-percent').locator('input').press('Enter');
   await page.getByRole('button', { name: 'Lower now' }).click();
   await expect(page.getByTestId('ceiling')).toContainText('arc 195', { timeout: 60_000 });
+  // The hold reaches the bus before the slower profile work: its read-backs come after it.
   const bus = s.bus(from);
   const hold = bus.indexOf('general.DAPC');
-  const max = bus.indexOf('general.SetMaxLevel');
+  const readBack = bus.indexOf('general.QueryMaxLevel');
   expect(hold).toBeGreaterThanOrEqual(0);
-  expect(max).toBeGreaterThan(hold);
+  expect(readBack).toBeGreaterThan(hold);
   await expect(page.getByTestId('verified')).toHaveText('2/2 verified', { timeout: 60_000 });
   expect(await w.problems()).toEqual([]);
 });

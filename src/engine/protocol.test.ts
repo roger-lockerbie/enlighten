@@ -91,6 +91,12 @@ describe('Stage 5 messages to the worker', () => {
     });
     expect(parseToWorker({ type: 'init', ceilingArc: 221 })).toBeUndefined();
     expect(parseToWorker({ type: 'init', bench: { A: 1 } })).toBeUndefined();
+    // The default preferences hold no set-up: a start with an empty one is a start with the defaults.
+    expect(parseToWorker({ type: 'init', ceilingArc: 220, bench: {} })).toEqual({
+      type: 'init',
+      ceilingArc: 220,
+      bench: {},
+    });
   });
 });
 

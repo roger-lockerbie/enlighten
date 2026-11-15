@@ -120,8 +120,12 @@ function parseFade(x: unknown): FadeSetting | undefined {
   return undefined;
 }
 
-function parseBench(x: unknown): Partial<Record<'A' | 'B', UnitSetup>> | undefined {
-  if (!isObj(x) || Object.keys(x).length === 0) return undefined;
+/** A set-up for the bench's units. A change must name a unit; a start may name none. */
+function parseBench(
+  x: unknown,
+  allowEmpty = false,
+): Partial<Record<'A' | 'B', UnitSetup>> | undefined {
+  if (!isObj(x) || (!allowEmpty && Object.keys(x).length === 0)) return undefined;
   const out: Partial<Record<'A' | 'B', UnitSetup>> = {};
   for (const k of Object.keys(x)) {
     if (k !== 'A' && k !== 'B') return undefined;
@@ -268,7 +272,7 @@ export function parseToWorker(x: unknown): ToWorker | undefined {
       // A session never starts above the default ceiling: a higher one needs a person's
       // confirmation once the app is running (ADR 0013, security review S5-L2).
       if (arc !== undefined && !isInt(arc, 1, DEFAULT_CEILING_ARC)) return undefined;
-      const bench = b === undefined ? undefined : parseBench(b);
+      const bench = b === undefined ? undefined : parseBench(b, true);
       if (b !== undefined && bench === undefined) return undefined;
       return {
         type: 'init',
