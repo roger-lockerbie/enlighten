@@ -26,14 +26,14 @@ Stage 5 builds the app people use every day: the shell from `docs/UI.md`, the de
   2. The colour, loaded without ACTIVATE.
   3. The DAPC.
 
-  Automatic activation brings the colour in with the level, but only where the gear features read back say it is on (bit 0, dali.md section 11). Otherwise, or where they were not read, the colour is activated before the DAPC. From off that changes nothing visible, and the level then comes up in the new colour. With no level, the colour is activated. Extended fade byte 0 is allowed and means no fade.
+  Automatic activation brings the colour in with the level, but only where the gear features read back say it is on (bit 0, dali.md section 11). Otherwise, or where they were not read, ACTIVATE is sent too: before the DAPC from off or when the light gets brighter, after it when the light gets dimmer. The light between the two is then never brighter than at either end. With no level, the colour is activated. Extended fade byte 0 is allowed and means no fade.
 
 - Power, step and dim use the existing `commands` intent. Dim repeats UP or DOWN every 200 ms while the button is held. It stops at the first refusal, on release, and when focus leaves.
 
 ### Simulator settings
 
 - `src/sim/settings.ts` lists each setting's allowed values: a choice for booleans and enumerations (the researched default first), a range for numbers, and fixed for the two that are not edited in this version (the Tc limits and the C2 terminal order). The page, IndexedDB and workspace files all pass through the same check.
-- A change first turns each lit unit it replaces off, through the governor, which judges that step and waits if the rate guard asks. It then replaces the gear in the bench simulator with `Simulator.replace`, and the new gear starts off. The rate guard reads each unit's history from its gear, and new gear has none, so light changes on the simulated bench then wait for the 2 s hard step window. The simulated connection keeps its governor and scheduler, and the unit is scanned and profiled again. The hardware connection is never touched (SPEC R1.6). A physical minimum above the ceiling is refused, naming the ceiling the unit would need, and so is a factory MAX LEVEL below the physical minimum.
+- A change first turns each lit unit it replaces off, through the governor, which judges that step and waits if the rate guard asks. It then replaces the gear in the bench simulator with `Simulator.replace`, and the new gear starts off. The rate guard reads each unit's history from its gear, and new gear has none. So from the start of the OFF until the hard step window has passed after the rebuild, the simulated governor lets nothing but OFF through (`Governor.holdLightChanges`, the same hold a hardware connect has), for jobs as well as requests. The simulated connection keeps its governor and scheduler, and the unit is scanned and profiled again. The hardware connection is never touched (SPEC R1.6). A physical minimum above the ceiling is refused, naming the ceiling the unit would need, and so is a factory MAX LEVEL below the physical minimum.
 
 ### Persistence
 
