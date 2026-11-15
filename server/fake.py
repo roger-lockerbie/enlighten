@@ -28,7 +28,7 @@ from .hasseb import CMD_SEND, CMD_VERSION, PREAMBLE
 MASK = 0xFF
 YES = 0xFF
 
-QUIRKS = ("level-offset", "slow", "wrong-sequence", "no-answer")
+QUIRKS = ("level-offset", "slow", "wrong-sequence", "no-answer", "max-level")
 
 # Memory bank 0, read only. Placeholder contents: the part 102 version is 2.0 (8) at 0x16.
 BANK0 = [
@@ -47,6 +47,8 @@ class Gear:
     assigned: list[int]
     seed: int
     level_offset: bool = False
+    # The max-level quirk: SET MAX LEVEL is ignored, so the read-back does not match the ceiling.
+    ignores_max: bool = False
     physical_minimum: int = 85
     level: int = 0
     last_active: int = 254
@@ -174,7 +176,9 @@ class Gear:
             if self.scenes[b & 0x0F] != MASK:
                 self.set_level(self.scenes[b & 0x0F])
         elif n == "general.Reset":
-            fresh = Gear(self.short, self.tc, self.channels, self.assigned, self.seed, self.level_offset)
+            fresh = Gear(
+                self.short, self.tc, self.channels, self.assigned, self.seed, self.level_offset, self.ignores_max
+            )
             dtr = self.dtr
             self.__dict__.update(fresh.__dict__)
             # RESET leaves the DTRs as they were (dali.md section 5).
@@ -183,6 +187,8 @@ class Gear:
         elif n == "general.StoreActualLevelInDTR0":
             d[0] = self.level
         elif n == "general.SetMaxLevel":
+            if self.ignores_max:
+                return None
             self.max_level = max(self.min_level, min(254, d[0]))
             if self.level > self.max_level:
                 self.level = self.max_level
@@ -360,7 +366,15 @@ class Gear:
 def bench(quirk: str | None = None, unaddressed: bool = False) -> list[Gear]:
     gear = [
         Gear(short=0, tc=True, channels=0, assigned=[MASK] * 6, seed=1, level_offset=quirk == "level-offset"),
-        Gear(short=1, tc=False, channels=5, assigned=[1, 2, 3, 4, 5, MASK], seed=2, level_offset=quirk == "level-offset"),
+        Gear(
+            short=1,
+            tc=False,
+            channels=5,
+            assigned=[1, 2, 3, 4, 5, MASK],
+            seed=2,
+            level_offset=quirk == "level-offset",
+            ignores_max=quirk == "max-level",
+        ),
     ]
     if unaddressed:
         gear.append(Gear(short=None, tc=True, channels=0, assigned=[MASK] * 6, seed=3))

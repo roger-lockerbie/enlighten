@@ -32,7 +32,8 @@
 
   const W = 240;
   const H = 120;
-  let canvas = $state<HTMLCanvasElement | undefined>(undefined);
+  // Svelte sets a bound element to null when it leaves the page, as the field does in Raw mode.
+  let canvas = $state<HTMLCanvasElement | null>(null);
 
   const ch = (i: number) => channels[i] ?? 0;
   const hs = $derived(channelsToHue(ch(0), ch(1), ch(2)));
@@ -62,7 +63,7 @@
 
   $effect(() => {
     const c = canvas;
-    if (c === undefined) return;
+    if (c === null) return;
     const ctx = c.getContext('2d');
     if (ctx === null) return;
     const img = ctx.createImageData(W, H);
@@ -81,7 +82,7 @@
   let dragging = false;
   function fromPointer(e: PointerEvent, live: boolean): void {
     const c = canvas;
-    if (c === undefined || disabled) return;
+    if (c === null || disabled) return;
     const r = c.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));

@@ -90,8 +90,12 @@ export class AppState {
     }, 250);
   }
 
-  call(...args: Parameters<BusClient['call']>): Promise<CallResult> {
-    return this.client.call(...args);
+  /**
+   * Every call the page makes. Values from the page's state are Svelte proxies, which postMessage
+   * cannot clone, so each call is posted as a plain snapshot.
+   */
+  call(call: Parameters<BusClient['call']>[0]): Promise<CallResult> {
+    return this.client.call($state.snapshot(call));
   }
 
   /** Lower at once (SPEC R6.2), or ask for a typed confirmation to raise (R6.3). */
