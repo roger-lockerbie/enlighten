@@ -40,7 +40,7 @@ import {
   type Unlock,
 } from '../safety/types.ts';
 import { Da5l } from '../sim/gear.ts';
-import type { Terminal } from '../sim/profile.ts';
+import { DEFAULT_SETTINGS, type Terminal } from '../sim/profile.ts';
 import { DEFAULT_SETUP, unitProfile, type BenchUnit, type UnitSetup } from '../sim/settings.ts';
 import { Simulator } from '../sim/simulator.ts';
 import { Coalescer, type CoalescedResult } from './coalescer.ts';
@@ -57,6 +57,7 @@ import { readFacts, type DriverFacts } from './inventory.ts';
 import { Router } from './router.ts';
 import { send, StepError, toSubmitted, txOf } from './submit.ts';
 import { HARD_WINDOW_MS } from '../safety/rate/guard.ts';
+import { TIME_MARGIN_MS } from '../safety/rate/legs.ts';
 import type { HardwareTransport, Transport } from './transport.ts';
 
 export type OutputTarget = 'simulator' | 'hardware' | 'both';
@@ -243,6 +244,9 @@ type LiveValue = (
   | { readonly kind: 'tc'; readonly mirek: number }
   | { readonly kind: 'rgbwaf'; readonly channels: Channels }
 ) & { readonly address: number; readonly source: Source };
+
+/** The longest the simulated bench's OFFs before a rebuild may take. */
+const REBUILD_HOLD_MS = 60_000;
 
 /** How much sooner than the gear's 200 ms the engine starts a new DAPC sequence. */
 const SEQUENCE_MARGIN_MS = 100;
@@ -674,15 +678,19 @@ export class Engine {
   }
 
   /** A `Submit` bound to a connection and a job. Refusals with a retry time are retried (`patient`). */
-  private submitter(conn: Conn, job: Job | undefined): Submit {
-    const raw: Submit = async (tx, priority) => {
+  /** A `Submit` bound to a connection and a job, that returns the first refusal as it is. */
+  private rawSubmitter(conn: Conn, job: Job | undefined): Submit {
+    return async (tx, priority) => {
       if (job?.aborted === true) return { kind: 'dropped', reason: 'Stopped.' };
       if (conn.kind === 'hardware' && this.hwConn !== conn)
         return { kind: 'dropped', reason: 'The hardware connection changed.' };
       return toSubmitted(await conn.scheduler.submit(tx, priority));
     };
+  }
+
+  private submitter(conn: Conn, job: Job | undefined): Submit {
     return patient(
-      raw,
+      this.rawSubmitter(conn, job),
       (ms) => this.wait(ms),
       () => this.clock.now(),
     );
@@ -823,14 +831,26 @@ export class Engine {
 
   async setCeiling(arc: number, source: Source, confirmed = false): Promise<Outcome> {
     const lowering = arc < this.ceiling;
+    // A rebuilt simulated unit may not have been scanned yet, so its set-up is checked too (SPEC R6.5).
+    const benchMin = Math.max(
+      ...(['A', 'B'] as const).map(
+        (u) => this.benchSetup[u].settings.physicalMinimum ?? DEFAULT_SETTINGS.physicalMinimum,
+      ),
+    );
+    if (lowering && arc < benchMin)
+      return no(
+        `A simulated driver cannot go below arc level ${String(benchMin)}. That is the lowest ceiling it can hold.`,
+      );
     const results = await Promise.all(
       this.conns().map(async (c) => {
-        const r = await this.runJob(c, 'ceiling', 'Ceiling', async (_job, submit) =>
+        const r = await this.runJob(c, 'ceiling', 'Ceiling', async (job, submit) =>
           lowering
-            ? lowerCeiling(
+            ? // lowerCeiling waits for the rate guard itself, and works its holds out again before
+              // each attempt, so it takes a submit that does not retry (DALI review S5-L4).
+              lowerCeiling(
                 c.governor,
                 arc,
-                submit,
+                this.rawSubmitter(c, job),
                 source,
                 () => this.clock.now(),
                 (ms) => this.wait(ms),
@@ -1035,11 +1055,15 @@ export class Engine {
     if (i.mirek !== undefined && i.channels !== undefined)
       return 'Apply a colour temperature or channels, not both.';
     // The DAPC brings a loaded colour in only if the gear reports automatic activation (gear features
-    // bit 0, dali.md section 11). Otherwise, or if it was not read, the colour is activated before the
-    // level: from off that changes nothing visible, and the level then comes up in the new colour
-    // (DALI review S5-D3).
+    // bit 0, dali.md section 11). Otherwise, or if it was not read, ACTIVATE is sent as well: before
+    // the level when the light is off or getting brighter, so the new colour starts at the dimmer
+    // end, and after it when the light is getting dimmer. The light between the two is then never
+    // brighter than at the start or the end (DALI review S5-D3).
     const auto = ((conn.facts.get(n)?.gearFeatures ?? 0) & 1) === 1;
-    const activate = i.arc === undefined || !auto;
+    const present = conn.governor.shadow.byShortAddress(n)?.gear.levelAt(this.clock.now()) ?? 0;
+    const colourFirst = i.arc === undefined || present <= 0 || i.arc >= present;
+    const activate = i.arc === undefined || (!auto && colourFirst);
+    const activateAfter = i.arc !== undefined && !auto && !colourFirst;
     if (i.mirek !== undefined) {
       const bad = this.checkColour(conn, n, 'tc');
       if (bad !== undefined) return bad;
@@ -1056,6 +1080,8 @@ export class Engine {
       if (!Number.isInteger(i.arc) || i.arc < 0 || i.arc > 254)
         return 'A level is an arc level from 0 to 254.';
       cmds.push({ id: 'DAPC', address: a, value: i.arc });
+      if (activateAfter && (i.mirek !== undefined || i.channels !== undefined))
+        cmds.push({ id: 'DT8_ACTIVATE', address: a });
     }
     return cmds;
   }
@@ -1065,8 +1091,12 @@ export class Engine {
     if (conn === undefined) return { ok: false };
     const held = this.benchHeld(conn);
     if (held !== undefined && !held.ok) {
+      if (held.retryAt === undefined) {
+        this.setFeedback(key, this.clock.now(), 'refused', `Refused: ${held.reason}`);
+        return { ok: false };
+      }
       this.setFeedback(key, this.clock.now(), 'waiting', `Waiting: ${held.reason}`);
-      return held.retryAt === undefined ? { ok: false } : { ok: false, retryAt: held.retryAt };
+      return { ok: false, retryAt: held.retryAt };
     }
     const a = short(v.address);
     const now = this.clock.now();
@@ -1155,7 +1185,12 @@ export class Engine {
     }
     // The rate guard reads each unit's history from its gear, and new gear has none. So each lit
     // unit is first turned off through the governor, which judges that step and makes it wait if it
-    // must (DALI review S5-D1). Nothing about the light is then changed by the rebuild itself.
+    // must. While that happens, and for the hard step window after the rebuild, the governor lets
+    // nothing but OFF through, from any source or job, and the engine turns requests away (DALI
+    // review S5-D1). Nothing about the light is then changed by the rebuild itself.
+    const reason = 'the simulated bench is being rebuilt';
+    this.benchHoldUntil = Infinity;
+    this.simConn.governor.holdLightChanges(this.clock.now() + REBUILD_HOLD_MS, reason);
     const off = await this.runJob(
       this.simConn,
       'settings',
@@ -1170,7 +1205,20 @@ export class Engine {
         }
       },
     );
-    if (!off.ok) return no(`The simulated units could not be turned off first: ${off.reason}`);
+    const lit = units.filter((u) => {
+      const g = this.sim.unit(u)?.gear;
+      return g !== undefined && (g.finalLevel() > 0 || g.levelAt(this.clock.now()) > 0);
+    });
+    if (!off.ok || lit.length > 0) {
+      this.benchHoldUntil = -Infinity;
+      this.simConn.governor.holdLightChanges(
+        this.clock.now() + HARD_WINDOW_MS + TIME_MARGIN_MS,
+        reason,
+      );
+      return no(
+        `The simulated units could not be turned off first: ${off.ok ? `unit ${lit.join(', ')} is still lit` : off.reason}`,
+      );
+    }
     const now = this.clock.now();
     for (const unit of units) {
       const next = setup[unit];
@@ -1187,7 +1235,8 @@ export class Engine {
     // The new gear has no history for the rate guard, so light changes on the simulated bench wait
     // for the hard step window to pass (SPEC S3.3). The simulated connection keeps its governor and
     // scheduler, so no second frame can share the simulated bus with one already on it.
-    this.benchHoldUntil = now + HARD_WINDOW_MS;
+    this.benchHoldUntil = now + HARD_WINDOW_MS + TIME_MARGIN_MS;
+    this.simConn.governor.holdLightChanges(this.benchHoldUntil, reason);
     this.lastLiveDapc.clear();
     this.simConn.facts.clear();
     this.simConn.profiles.clear();
@@ -1197,14 +1246,19 @@ export class Engine {
     return OK;
   }
 
-  /** While the simulated bench is held after a rebuild, refuse light changes with a retry time. */
+  /**
+   * While the simulated bench is being rebuilt, refuse light changes. In the 2 s after, refuse them
+   * with a retry time. The governor holds them too, for jobs as well as requests.
+   */
   private benchHeld(conn: Conn): RequestResult | undefined {
     if (conn !== this.simConn || this.clock.now() >= this.benchHoldUntil) return undefined;
-    return {
-      ok: false,
-      reason: 'The simulated bench was just rebuilt. Light changes wait 2 s.',
-      retryAt: this.benchHoldUntil,
-    };
+    return this.benchHoldUntil === Infinity
+      ? { ok: false, reason: 'The simulated bench is being rebuilt.' }
+      : {
+          ok: false,
+          reason: 'The simulated bench was just rebuilt. Light changes wait 2 s.',
+          retryAt: this.benchHoldUntil,
+        };
   }
 
   // -----------------------------------------------------------------------------------------------

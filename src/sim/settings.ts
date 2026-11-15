@@ -139,6 +139,23 @@ export const DEFAULT_SETUP: Readonly<Record<BenchUnit, UnitSetup>> = {
   B: { presentation: 'rgbwaf', settings: {} },
 };
 
+/**
+ * A bench set-up the session can start with: a unit whose physical minimum is above the starting
+ * ceiling falls back to its default set-up, since nothing may raise the ceiling to suit it.
+ */
+export function fitBench(
+  bench: Partial<Record<BenchUnit, UnitSetup>>,
+  ceiling: number,
+): Record<BenchUnit, UnitSetup> {
+  const fit = (u: BenchUnit): UnitSetup => {
+    const s = bench[u] ?? DEFAULT_SETUP[u];
+    return (s.settings.physicalMinimum ?? DEFAULT_SETTINGS.physicalMinimum) > ceiling
+      ? DEFAULT_SETUP[u]
+      : s;
+  };
+  return { A: fit('A'), B: fit('B') };
+}
+
 /** The profile a bench unit is built from, for a set-up. */
 export function unitProfile(unit: BenchUnit, setup: UnitSetup): Da5lProfile {
   return da5l(unit === 'A' ? 'C2' : 'C5', setup.presentation, setup.settings);

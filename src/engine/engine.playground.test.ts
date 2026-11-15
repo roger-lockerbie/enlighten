@@ -497,4 +497,91 @@ describe('start and set-up', () => {
     expect(q.ok).toBe(true);
     engine.dispose();
   });
+
+  it('holds jobs as well as requests after a rebuild, and lets nothing but OFF through during it', async () => {
+    const { engine, settle, drive, idle, sim, clock } = setup();
+    await settle();
+    await idle();
+    await drive(engine.request({ kind: 'apply', address: 0, arc: 200 }, 'ui'));
+    await clock.advance(100);
+    const changes: number[] = [];
+    let last = sim.unit('A')?.gear.levelAt(clock.now()) ?? 0;
+    const t0 = clock.now();
+    const watch = () => {
+      const l = sim.unit('A')?.gear.levelAt(clock.now()) ?? 0;
+      if (l > 0 !== last > 0) changes.push(Math.round(clock.now() - t0));
+      last = l;
+      if (clock.now() - t0 < 10_000) clock.at(clock.now() + 5, watch);
+    };
+    watch();
+    expect(
+      (
+        await drive(
+          engine.setBench({ A: { presentation: 'tc', settings: { minRaiseLifts: false } } }, 'ui'),
+        )
+      ).ok,
+    ).toBe(true);
+    // As the DALI re-review did: a hardware check step that lights A straight after the rebuild.
+    await drive(engine.runCheck('p4-max-below-level', 'ui', { confirmed: true }));
+    await clock.advance(10_000);
+    expect(changes.length).toBeGreaterThan(1);
+    for (let i = 1; i < changes.length; i++)
+      expect((changes[i] ?? 0) - (changes[i - 1] ?? 0)).toBeGreaterThanOrEqual(1990);
+    engine.dispose();
+  });
+
+  it('refuses a ceiling below a rebuilt unit physical minimum before its rescan ends', async () => {
+    const { engine, settle, drive, idle } = setup();
+    await settle();
+    await idle();
+    expect(
+      (
+        await drive(
+          engine.setBench({ A: { presentation: 'tc', settings: { physicalMinimum: 140 } } }, 'ui'),
+        )
+      ).ok,
+    ).toBe(true);
+    const r = await drive(engine.setCeiling(100, 'ui'));
+    expect(r.ok ? '' : r.reason).toContain('cannot go below arc level 140');
+    expect(engine.snapshot().ceilingArc).toBe(220);
+    engine.dispose();
+  });
+});
+
+describe('the ceiling in the engine', () => {
+  it('does not relight a tape a person turned off while the hold waited (S5-L4)', async () => {
+    const { engine, settle, idle, sim, clock } = setup();
+    await settle();
+    await idle();
+    void engine.request({ kind: 'apply', address: 0, arc: 220 }, 'ui');
+    await clock.advance(100);
+    // The person turns A off: held by the rate guard, and retried by the coalescer.
+    void engine.request({ kind: 'level', address: 0, arc: 0 }, 'ui');
+    await clock.advance(50);
+    void engine.setCeiling(150, 'ui');
+    await clock.advance(12_000);
+    expect(sim.unit('A')?.gear.levelAt(clock.now())).toBe(0);
+    expect(engine.snapshot().ceilingArc).toBe(150);
+    engine.dispose();
+  });
+});
+
+describe('Apply on lit gear without automatic activation', () => {
+  it('activates after the level when the light gets dimmer, so it is never brighter between', async () => {
+    const { engine, settle, drive, idle, simTransport, heard } = setup({ autoActivation: false });
+    await settle();
+    await idle();
+    expect(
+      (await drive(engine.request({ kind: 'apply', address: 0, mirek: 300, arc: 200 }, 'ui'))).ok,
+    ).toBe(true);
+    await idle();
+    const from = simTransport.log.length;
+    const r = await drive(
+      engine.request({ kind: 'apply', address: 0, mirek: 290, arc: 150 }, 'ui'),
+    );
+    expect(r.ok ? 'ok' : r.reason).toBe('ok');
+    const ids = heard(from);
+    expect(ids.indexOf('DAPC')).toBeLessThan(ids.lastIndexOf('DT8_ACTIVATE'));
+    engine.dispose();
+  });
 });

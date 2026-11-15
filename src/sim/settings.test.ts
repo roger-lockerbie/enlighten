@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, SETTINGS_INFO, type Da5lSettings } from './profile.ts';
-import { parseSettings, parseUnitSetup, SETTING_EDIT, settingAllowed } from './settings.ts';
+import {
+  DEFAULT_SETUP,
+  fitBench,
+  parseSettings,
+  parseUnitSetup,
+  SETTING_EDIT,
+  settingAllowed,
+} from './settings.ts';
 
 const keys = Object.keys(DEFAULT_SETTINGS) as (keyof Da5lSettings)[];
 
@@ -52,6 +59,13 @@ describe('the editable simulator settings', () => {
       physicalMinimum: 50,
       factoryMaxLevel: 50,
     });
+  });
+
+  it('starts a unit whose physical minimum is above the ceiling with its default set-up', () => {
+    const high = { presentation: 'rgbwaf' as const, settings: { physicalMinimum: 200 } };
+    expect(fitBench({ A: high }, 150)).toEqual(DEFAULT_SETUP);
+    expect(fitBench({ A: high }, 220).A).toEqual(high);
+    expect(fitBench({}, 220)).toEqual(DEFAULT_SETUP);
   });
 
   it('checks a unit set-up', () => {

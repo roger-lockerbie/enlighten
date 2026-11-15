@@ -15,7 +15,8 @@ import {
   type FromWorker,
   type ToWorker,
 } from '../engine/protocol.ts';
-import { DEFAULT_SETUP, unitProfile } from '../sim/settings.ts';
+import { fitBench, unitProfile } from '../sim/settings.ts';
+import { DEFAULT_CEILING_ARC } from '../safety/governor.ts';
 import { Simulator } from '../sim/simulator.ts';
 import { ServerTransport, type WebSocketLike } from '../transport/server.ts';
 import { SimTransport } from '../transport/sim.ts';
@@ -43,7 +44,8 @@ function start(m: Extract<ToWorker, { type: 'init' }>): Engine {
     },
   });
   const timing = withFloors({});
-  const bench = { ...DEFAULT_SETUP, ...m.bench };
+  // A stored set-up that cannot hold the starting ceiling starts from its defaults (SPEC R6.5).
+  const bench = fitBench(m.bench ?? {}, m.ceilingArc ?? DEFAULT_CEILING_ARC);
   const sim = Simulator.bench({
     at: clock.now(),
     a: unitProfile('A', bench.A),

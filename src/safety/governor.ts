@@ -239,7 +239,8 @@ export class Governor {
   private synthetic: { t: number; scope: string; until: number; tx?: number | undefined }[] = [];
   /** The OFF that follows an unlocked RESET is part of the RESET's one swing (SPEC S3.10). */
   private resetOff: { targets: Set<number>; until: number } | undefined;
-  private readonly holdUntil: number;
+  private holdUntil: number;
+  private holdReason = 'nothing is known about the lights just after connecting';
   /** Addresses with a temporary colour set since their last ACTIVATE: 'tc', 'rgb', 'waf' parts seen. */
   private readonly tempSeen = new Map<number, Set<string>>();
   /** Approvals this governor issued, so a router can refuse another connection's (ADR 0012). */
@@ -260,6 +261,17 @@ export class Governor {
     }
     this.holdUntil =
       opts.target === 'hardware' ? (opts.connectedAt ?? 0) + CONNECT_HOLD_MS : -Infinity;
+  }
+
+  /**
+   * Hold every light change but OFF until a time, with a reason, as after a hardware connect. The
+   * engine uses it while the simulated bench is rebuilt: new gear has no history for the rate guard,
+   * so nothing may light it until the hard step window has passed (ADR 0013, DALI review S5-D1).
+   * It replaces any hold this governor had. Only the simulated bench's governor is given one.
+   */
+  holdLightChanges(until: number, reason: string): void {
+    this.holdUntil = until;
+    this.holdReason = reason;
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -1014,7 +1026,7 @@ export class Governor {
       return [
         {
           scope: 'bus',
-          rule: 'nothing is known about the lights just after connecting',
+          rule: this.holdReason,
           retryAt: this.holdUntil,
         },
       ];
