@@ -1,25 +1,116 @@
+/*
+ * Design tokens and base styles (docs/UI.md section 5). Dark only. One accent, used sparingly. No
+ * gradients, glows, shadows or decoration. State is never carried by colour alone. Components style
+ * themselves with classes and custom properties: no style attributes (ADR 0002).
+ */
+
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/Inter-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/Inter-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+}
+
 :root {
   color-scheme: dark;
   --bg: #0b0b0c;
+  --surface: #131315;
+  --raised: #1b1b1e;
+  --line: #2a2a2f;
   --text: #e8e8ea;
   --text-muted: #9a9aa0;
+  --accent: #8fb4d9;
+  --danger: #d9534f;
+  --warn: #c9a24a;
+  --viewport: #050506;
+  --font-ui: Inter, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --size-1: 12px;
+  --size-2: 13px;
+  --size-3: 16px;
+  --size-4: 18px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius: 4px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --motion: 120ms;
+  --topbar: 48px;
+  --rail: 180px;
+  --inspector: 320px;
+}
+
+/* Transitions are off when the system asks, or when the user always wants less motion (S6.2). */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion: 0ms;
+  }
+}
+
+:root[data-motion='reduce'] {
+  --motion: 0ms;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html,
 body {
   margin: 0;
+  height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-ui);
+  font-size: var(--size-2);
+  line-height: 1.45;
   font-variant-numeric: tabular-nums;
 }
 
-:root {
-  --panel: #151517;
-  --line: #2a2a2e;
-  --accent: #c9b98a;
-  --warn: #d9a441;
-  --danger: #c0392b;
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 500;
+}
+
+h1 {
+  font-size: var(--size-4);
+}
+
+h2 {
+  font-size: var(--size-3);
+}
+
+h3 {
+  font-size: var(--size-2);
+}
+
+p {
+  margin: 0;
 }
 
 button,
@@ -28,21 +119,115 @@ select,
 textarea {
   font: inherit;
   color: inherit;
-  background: #1d1d20;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0.3rem 0.7rem;
+  font-variant-numeric: tabular-nums;
 }
 
-button:disabled {
+button,
+select,
+input:not([type='range'], [type='checkbox'], [type='radio']),
+textarea {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-3);
+  min-height: 28px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+button:disabled,
+input:disabled,
+select:disabled {
   opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The one strong action on a page. */
+button.primary {
+  border-color: var(--accent);
+}
+
+button.danger {
+  border-color: var(--danger);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: var(--focus-width) solid var(--accent);
+  outline-offset: var(--focus-offset);
 }
 
 a {
   color: var(--accent);
+}
+
+code,
+kbd,
+samp,
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--size-1);
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+th,
+td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.small {
+  font-size: var(--size-1);
+}
+
+/* Visually hidden, read by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-4);
 }

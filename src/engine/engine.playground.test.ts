@@ -300,6 +300,12 @@ describe('Apply in Commit mode', () => {
       await ask({ kind: 'apply', address: 0, fade: { kind: 'extended', value: 0x50 } }),
     ).toEqual({ ok: false, reason: 'That is not an extended fade time.' });
     expect(
+      await ask({ kind: 'apply', address: 0, fade: { kind: 'extended', value: 0x05 } }),
+    ).toEqual({ ok: false, reason: 'That is not an extended fade time.' });
+    expect(
+      (await ask({ kind: 'apply', address: 0, fade: { kind: 'extended', value: 0 } })).ok,
+    ).toBe(true);
+    expect(
       await ask({ kind: 'apply', address: 1, mirek: 300, channels: [0, 0, 0, 0, 0, 0] }),
     ).toEqual({ ok: false, reason: 'Apply a colour temperature or channels, not both.' });
     expect(await ask({ kind: 'apply', address: 1, mirek: 300 })).toEqual({

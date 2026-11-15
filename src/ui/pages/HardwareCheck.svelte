@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Snapshot } from '../engine/engine.ts';
-  import { CHECK_STEP_INFO as CHECK_STEPS } from '../engine/hwcheck-steps.ts';
-  import type { BusClient } from './bus.ts';
+  import type { Snapshot } from '../../engine/engine.ts';
+  import { CHECK_STEP_INFO as CHECK_STEPS } from '../../engine/hwcheck-steps.ts';
+  import type { BusClient } from '../bus.ts';
 
   let { snap, client }: { snap: Snapshot; client: BusClient } = $props();
 

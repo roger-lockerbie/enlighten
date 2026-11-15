@@ -987,7 +987,8 @@ export class Engine {
         if (!Number.isInteger(v) || v < 0 || v > 15) return 'A fade time is 0 to 15.';
         cmds.push({ id: 'DTR0', value: v }, { id: 'SET_FADE_TIME', address: a });
       } else {
-        if (!Number.isInteger(v) || v < 0 || extendedFadeMs(v) === 0)
+        // 0 is no fade at all. Other bytes must name a time (dali.md section 7).
+        if (!Number.isInteger(v) || v < 0 || (v !== 0 && extendedFadeMs(v) === 0))
           return 'That is not an extended fade time.';
         // The extended fade is used only while the fade time is 0 (dali.md section 7).
         cmds.push(

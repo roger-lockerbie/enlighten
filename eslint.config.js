@@ -55,6 +55,19 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   ...sinkConfig,
+  {
+    // Rune modules: the Svelte parser, with TypeScript inside, typed like the components.
+    files: ['**/*.svelte.ts'],
+    languageOptions: {
+      parser: svelteParser,
+      parserOptions: {
+        parser: tseslint.parser,
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+        extraFileExtensions: ['.svelte'],
+      },
+    },
+  },
   ...boundaryConfig,
   {
     // These files name the banned sinks on purpose: the rule definitions, the lint test and the e2e test
