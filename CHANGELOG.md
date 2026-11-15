@@ -43,3 +43,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 - On hardware, the rate guard counted two opposite legs that start at the same moment as one leg when it united its faded and instant predictions, so a room could rise and fall from one command past the limit. Found by the 1,000-run property tests, present since Stage 3.
 - The property tests' trace checker summed each driver's last sample, taken at different times, so the room showed small steps the light never made. It now samples every driver at the same times.
+
+### Security
+
+- qs, a transitive dependency of Stryker, is overridden to 6.16.2 to clear four advisories. The two advisories left open (minimatch, deepmerge) are explained in `docs/DEPENDENCIES.md`.

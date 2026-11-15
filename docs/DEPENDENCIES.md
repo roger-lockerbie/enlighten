@@ -82,5 +82,14 @@ All live in `pnpm-workspace.yaml`.
 | `strictDepBuilds`         | true           | Fails the install if a dependency has an install script that nobody approved.                                                                     |
 | `allowBuilds`             | `{}`           | The allowlist for dependency install scripts. It is empty: no dependency may run an install script.                                               |
 | `savePrefix`              | `''`           | Saves exact versions, never `^` or `~`.                                                                                                           |
+| `overrides`               | `qs: 6.16.2`   | Replaces a vulnerable transitive version. See the next section.                                                                                   |
+
+## Advisories on transitive packages
+
+All three are in development tools. None of the affected code is in `dist/` or the hardware server.
+
+- **qs, overridden to 6.16.2.** typed-rest-client 2.3.1, which Stryker uses for its dashboard reporter, pins qs 6.15.1 exactly. That version has four moderate advisories, all fixed by 6.16.2, a patch release in the same line. We don't use the dashboard reporter, so the risk was low, but the fix was cheap. Remove the override when typed-rest-client moves past 6.15.
+- **minimatch 10.2.6, open.** It has one moderate advisory, GHSA-g3hv-75wg-m249 (a slow glob), fixed only in 11.0.1. ESLint, typescript-eslint and Stryker all ask for 10.x, and forcing a major version under them could break linting or mutation runs. Its patterns come from our own config files, never from outside input. It will be picked up when those tools move to 11.
+- **deepmerge 4.3.1, open.** It has one low advisory, GHSA-gcqx-w48m-w2h4 (prototype poisoning in the merged object), and no fixed release yet. vite-plugin-svelte uses it at build time to merge our own Svelte config. It will be updated when a fix is released.
 
 CI and the setup steps in the README use `pnpm install --frozen-lockfile`, which fails if `package.json` and the lockfile disagree.
