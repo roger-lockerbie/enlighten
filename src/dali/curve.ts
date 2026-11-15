@@ -27,3 +27,11 @@ export function percentToArcFloor(percent: number): number {
 
 /** The ratio between successive levels, 10^(3/253). */
 export const STEP_RATIO = Math.pow(10, 3 / 253);
+
+/** The nearest whole arc level to an output percentage. Any output above zero is at least level 1. */
+export function percentToArcNearest(percent: number): number {
+  if (!(percent > 0)) return 0;
+  if (percent >= 100) return 254;
+  const exact = 1 + (253 / 3) * (Math.log10(percent) + 1);
+  return Math.max(1, Math.min(254, Math.round(exact)));
+}
