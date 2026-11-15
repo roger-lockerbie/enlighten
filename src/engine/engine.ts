@@ -1191,30 +1191,45 @@ export class Engine {
     const reason = 'the simulated bench is being rebuilt';
     this.benchHoldUntil = Infinity;
     this.simConn.governor.holdLightChanges(this.clock.now() + REBUILD_HOLD_MS, reason);
-    const off = await this.runJob(
-      this.simConn,
-      'settings',
-      'Simulator settings',
-      async (_job, submit) => {
-        for (const u of units) {
-          const g = this.sim.unit(u)?.gear;
-          const n = g?.shortAddress;
-          if (g === undefined || n === null || n === undefined) continue;
-          if (g.finalLevel() <= 0 && g.levelAt(this.clock.now()) <= 0) continue;
-          await send(submit, [{ id: 'OFF', address: short(n) }], source, 'off before the rebuild');
-        }
-      },
-    );
-    const lit = units.filter((u) => {
-      const g = this.sim.unit(u)?.gear;
-      return g !== undefined && (g.finalLevel() > 0 || g.levelAt(this.clock.now()) > 0);
-    });
-    if (!off.ok || lit.length > 0) {
+    // Any way out of the OFF job, a thrown error included, ends the open-ended hold.
+    const release = () => {
       this.benchHoldUntil = -Infinity;
       this.simConn.governor.holdLightChanges(
         this.clock.now() + HARD_WINDOW_MS + TIME_MARGIN_MS,
         reason,
       );
+    };
+    let off: Awaited<ReturnType<typeof this.runJob<void>>>;
+    try {
+      off = await this.runJob(
+        this.simConn,
+        'settings',
+        'Simulator settings',
+        async (_job, submit) => {
+          for (const u of units) {
+            const g = this.sim.unit(u)?.gear;
+            const n = g?.shortAddress;
+            if (g === undefined || n === null || n === undefined) continue;
+            if (g.finalLevel() <= 0 && g.levelAt(this.clock.now()) <= 0) continue;
+            await send(
+              submit,
+              [{ id: 'OFF', address: short(n) }],
+              source,
+              'off before the rebuild',
+            );
+          }
+        },
+      );
+    } catch (e) {
+      release();
+      throw e;
+    }
+    const lit = units.filter((u) => {
+      const g = this.sim.unit(u)?.gear;
+      return g !== undefined && (g.finalLevel() > 0 || g.levelAt(this.clock.now()) > 0);
+    });
+    if (!off.ok || lit.length > 0) {
+      release();
       return no(
         `The simulated units could not be turned off first: ${off.ok ? `unit ${lit.join(', ')} is still lit` : off.reason}`,
       );
