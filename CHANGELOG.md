@@ -38,3 +38,8 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The server protocol fixes its encoding and close reasons, and adds `STOPPED` (SPEC section 9).
 - The production CSP names one Trusted Types policy, `enlighten-worker`, and Svelte compiles with `fragments: 'tree'` (ADR 0002 items 2 to 4, moved from Stage 5).
 - The Permissions-Policy turns `hid` and `fullscreen` off.
+
+### Fixed
+
+- On hardware, the rate guard counted two opposite legs that start at the same moment as one leg when it united its faded and instant predictions, so a room could rise and fall from one command past the limit. Found by the 1,000-run property tests, present since Stage 3.
+- The property tests' trace checker summed each driver's last sample, taken at different times, so the room showed small steps the light never made. It now samples every driver at the same times.

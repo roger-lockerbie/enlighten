@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 3 are merged. Stage 4 (transports and the hasseb) is in progress on `stage-4-transports`, on Opus. The approved plan's parts: A core plumbing, B engine, C workers and the page, D the Python server, E e2e and CI, F docs and stage close.
+Stages 0 to 3 are merged. Stage 4 (transports and the hasseb) is done on `stage-4-transports`, on Opus, and waiting for review in its PR.
 
 ## Done in Stage 0
 
@@ -60,7 +60,7 @@ Owner decision on the ceiling. When the ceiling is lowered while a driver is fad
 
 Carried to Stage 4: the router with single-use, time-bound approvals; `RealClock`; the hasseb report builder and its G-hasseb test; the transport keeping frames in order when panic stops waiting after 100 ms.
 
-## Stage 4 (transports and the hasseb), in progress: stage close
+## Stage 4 (transports and the hasseb), done and waiting for review
 
 Branch `stage-4-transports`. ADR 0012 records what was built and the choices made. What is in it:
 
@@ -72,10 +72,20 @@ Branch `stage-4-transports`. ADR 0012 records what was built and the choices mad
 - e2e: E-modes and E-server against the server with its fake (`playwright.server.config.ts`), run by `pnpm e2e` after the preview tests. CI installs the server from hashes and runs its tests.
 - SPEC section 9 fixes the encoding and adds `STOPPED`. ADR 0002 items 2 to 4 and `hid=()`, `fullscreen=()` moved here from Stage 5, because Stage 4 adds the first worker.
 
-Found while building, for the owner: on hardware, while any DT8 driver's colour is unknown this session, lowering MAX LEVEL below a lit driver's level is refused with no retry time (the rate guard counts two hard steps in one transaction, ADR 0011). The hardware check sets a known colour on every driver first. Lowering the ceiling while lights are on, right after a connect, can fail the same way.
+Stage close:
 
-Stage close: `pnpm verify`, `PROP_RUNS=1000 pnpm test:prop`, `pnpm mutate`, then `security-reviewer` and `dali-reviewer`.
+- `pnpm verify` passes: lint, typecheck, 2,322 unit and property tests at 98.46% line coverage on the pure core, the build, and both e2e configs (3 and 13 tests). The server's pytest suite runs in CI.
+- `PROP_RUNS=1000 pnpm test:prop` passes. Two runs found counterexamples on unseen hardware, both present since Stage 3: a real gap in the rate guard (S4-P1, fixed with `uniteTimes`) and a fault in the test's own checker (S4-P4, fixed). Both are now fixed examples in the property.
+- `pnpm mutate` scores 96.69% (96.58% on `src/safety`). Every survivor is explained in `docs/MUTATION.md`.
+- `security-reviewer` and `dali-reviewer` ran on the diff, and again on each fix (the checker fix had the DALI review). Findings are fixed or logged in `docs/SECURITY_FINDINGS.md` (S4-H1 to S4-P5).
+
+Open, for the owner or later stages:
+
+- S4-D6: on hardware, while any DT8 driver's colour is unknown this session, lowering the ceiling below a lit driver's level lands late (about 9 s in the DALI review's run, where SPEC R6.2 says at once). The rate guard counts two hard steps across one send-twice SET MAX LEVEL. Two fixes are set out in ADR 0012 for the owner to choose: turn lit drivers down before the MAX LEVEL writes, or merge the two events across a send-twice pair in the governor.
+- S4-R9: the hardware shadow assumes automatic activation is on and does not apply the gear features it reads. Needs a `src/safety` change once the DA5-L's setting is known.
+- S4-P2 and S4-P3 are accepted, with property generators as follow-ups.
+- WebHID is not built. The Stage 4 page is interim, and Stage 5 builds the shell.
 
 ## Next
 
-Finish the Stage 4 close. Then Stage 5 (app shell, design system and playground) on Sonnet, in plan mode.
+Review and merge the Stage 4 PR. Then Stage 5 (app shell, design system and playground) on Sonnet, in plan mode.
