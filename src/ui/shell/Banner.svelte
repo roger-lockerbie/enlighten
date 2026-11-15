@@ -29,6 +29,11 @@
   {#if tokenProblem !== undefined}
     <p class="banner" role="alert">{tokenProblem}</p>
   {/if}
+  {#if snap !== undefined && !snap.hardwareAvailable}
+    <p class="banner quiet">
+      Hardware and Both need the server. Run <code>python -m server</code> and open the address it prints.
+    </p>
+  {/if}
   {#if snap?.latched}
     <p class="banner danger" role="alert">
       <span
@@ -119,6 +124,12 @@
   }
   .warn {
     border-left: 4px solid var(--warn);
+  }
+  .quiet {
+    color: var(--text-muted);
+    font-size: var(--size-1);
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
   }
   .danger {
     border-left: 4px solid var(--danger);
