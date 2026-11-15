@@ -15,23 +15,41 @@ export type Mode = 'strict' | 'dev';
  */
 export const TRUSTED_TYPES_POLICY = 'enlighten-worker';
 
-/** Features turned off for every origin. */
+/**
+ * Features turned off for every origin. The list from Stage 4, and from Stage 5 every other feature
+ * MDN lists that names a capability the app never uses (docs/THREAT_MODEL.md section 4).
+ */
 const DISABLED_FEATURES = [
   'accelerometer',
+  'autoplay',
   'bluetooth',
+  'browsing-topics',
   'camera',
+  'captured-surface-control',
+  'compute-pressure',
   'display-capture',
+  'encrypted-media',
   'fullscreen',
+  'gamepad',
   'geolocation',
   'gyroscope',
   'hid',
+  'identity-credentials-get',
+  'idle-detection',
+  'local-fonts',
   'magnetometer',
   'microphone',
   'midi',
+  'otp-credentials',
   'payment',
+  'picture-in-picture',
+  'publickey-credentials-create',
   'publickey-credentials-get',
   'serial',
+  'speaker-selection',
+  'storage-access',
   'usb',
+  'window-management',
   'xr-spatial-tracking',
 ];
 

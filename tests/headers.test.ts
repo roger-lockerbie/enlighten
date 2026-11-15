@@ -59,6 +59,36 @@ describe('strict headers', () => {
       expect(policy).toContain(`${feature}=()`);
     }
   });
+
+  // Chromium logs 'Unrecognized feature' for ambient-light-sensor, attribution-reporting and web-share,
+  // so those three are left out (docs/THREAT_MODEL.md section 4).
+  it('turns off the wider list from the threat model, section 4', () => {
+    const off = new Set(
+      permissionsPolicy()
+        .split(', ')
+        .filter((d) => d.endsWith('=()'))
+        .map((d) => d.slice(0, -3)),
+    );
+    for (const feature of [
+      'autoplay',
+      'encrypted-media',
+      'gamepad',
+      'idle-detection',
+      'local-fonts',
+      'picture-in-picture',
+      'publickey-credentials-create',
+      'identity-credentials-get',
+      'otp-credentials',
+      'storage-access',
+      'window-management',
+      'compute-pressure',
+      'captured-surface-control',
+      'speaker-selection',
+      'browsing-topics',
+    ]) {
+      expect(off.has(feature), feature).toBe(true);
+    }
+  });
 });
 
 describe('meta fallback', () => {
