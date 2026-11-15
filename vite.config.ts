@@ -6,6 +6,7 @@ import {
   metaFallbackTags,
   PREVIEW_PORT,
   securityHeaders,
+  serverHeadersJson,
 } from './config/security.ts';
 
 /** Puts the CSP and referrer meta tags first in <head> of the built page. */
@@ -20,8 +21,19 @@ function metaFallback(): Plugin {
   };
 }
 
+/** Writes dist/headers.json, the header set the hardware server sends on every response. */
+function serverHeaders(): Plugin {
+  return {
+    name: 'enlighten-server-headers',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'headers.json', source: serverHeadersJson() });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [svelte(), metaFallback()],
+  plugins: [svelte(), metaFallback(), serverHeaders()],
   server: {
     host: HOST,
     port: DEV_PORT,

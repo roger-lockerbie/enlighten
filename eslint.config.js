@@ -12,10 +12,13 @@ export default tseslint.config(
       'dist/',
       'coverage/',
       'playwright-report/',
+      'playwright-report-server/',
       'test-results/',
       'node_modules/',
       'reports/',
       '.stryker-tmp/',
+      'server/',
+      'tools/golden/.venv/',
     ],
   },
   {

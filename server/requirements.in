@@ -1,0 +1,3 @@
+python-dali==0.16
+hidapi==0.15.0
+websockets==17.4

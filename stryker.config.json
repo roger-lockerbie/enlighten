@@ -3,13 +3,23 @@
   "packageManager": "pnpm",
   "testRunner": "vitest",
   "plugins": ["@stryker-mutator/vitest-runner"],
-  "vitest": { "configFile": "vitest.config.ts", "related": true },
+  "vitest": {
+    "configFile": "vitest.config.ts",
+    "related": true
+  },
   "coverageAnalysis": "perTest",
   "mutate": ["src/safety/**/*.ts", "!src/safety/**/*.test.ts", "src/dali/codec.ts"],
-  "thresholds": { "high": 90, "low": 85, "break": 85 },
+  "thresholds": {
+    "high": 90,
+    "low": 85,
+    "break": 85
+  },
   "reporters": ["clear-text", "progress", "json"],
-  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
+  },
   "tempDirName": ".stryker-tmp",
   "concurrency": 8,
-  "timeoutMS": 60000
+  "timeoutMS": 60000,
+  "dryRunTimeoutMinutes": 30
 }

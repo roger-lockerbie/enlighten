@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,6 +31,16 @@ jobs:
           pnpm --version
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install the hardware server (hash-pinned wheels)
+        run: |
+          python -m venv server/.venv
+          server/.venv/bin/python -m pip install --require-hashes --only-binary :all: \
+            -r server/requirements.txt -r server/requirements-dev.txt
+      - name: Server tests
+        run: pnpm test:server
       - name: Find Playwright version
         id: pw
         run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
@@ -55,5 +65,6 @@ jobs:
           name: playwright-report
           path: |
             playwright-report/
+            playwright-report-server/
             test-results/
           retention-days: 7

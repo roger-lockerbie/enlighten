@@ -19,6 +19,7 @@ import {
   LEG_RATIO,
   mergeDirected,
   mergeTimes,
+  uniteTimes,
   RATIO_MARGIN,
   ratio,
   REVERSAL_MIN_RATIO,
@@ -111,6 +112,20 @@ describe('merging events from several traces', () => {
     expect(mergeTimes([[10], [0]])).toEqual([0, 10]);
     expect(mergeTimes([[0, 5, 11]])).toEqual([0, 11]);
     expect(mergeTimes([[30, 20], [10]])).toEqual([10, 20, 30]);
+  });
+});
+
+describe('uniting the faded and instant predictions', () => {
+  it('counts an event both predictions have once', () => {
+    expect(uniteTimes([100], [102])).toEqual([100]);
+    expect(uniteTimes([100], [106])).toEqual([100, 106]);
+    expect(uniteTimes([], [5])).toEqual([5]);
+  });
+  it('keeps two legs of one prediction at the same moment (Stage 4 property counterexample)', () => {
+    expect(uniteTimes([100, 100], [100])).toEqual([100, 100]);
+    expect(uniteTimes([100], [100, 101])).toEqual([100, 101]);
+    expect(uniteTimes([0, 3, 4], [1])).toEqual([0, 3, 4]);
+    expect(uniteTimes([10, 20], [30])).toEqual([10, 20, 30]);
   });
 });
 

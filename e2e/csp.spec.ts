@@ -43,8 +43,9 @@ test('placeholder page loads with no CSP violation, console error or page error'
   expect(headers['cross-origin-resource-policy']).toBe('same-origin');
   expect(headers['referrer-policy']).toBe('no-referrer');
   expect(headers['x-content-type-options']).toBe('nosniff');
-  expect(headers['content-security-policy']).toMatch(/trusted-types svelte-trusted-html(;|$)/);
-  expect(headers['permissions-policy']).toContain('hid=(self)');
+  expect(headers['content-security-policy']).toMatch(/trusted-types enlighten-worker(;|$)/);
+  expect(headers['permissions-policy']).toContain('hid=()');
+  expect(headers['permissions-policy']).toContain('fullscreen=()');
 
   const violations = await page.evaluate(
     () => (window as unknown as { __cspViolations?: string[] }).__cspViolations ?? [],

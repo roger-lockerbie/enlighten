@@ -7,6 +7,7 @@ import { decode, encode, frameText, type Command, type Frame } from '../dali/cod
 import { spec, type CommandSpec } from '../dali/commands.ts';
 import { arcToFraction } from '../dali/curve.ts';
 import type { TxFrame } from '../dali/sequences.ts';
+import type { BusReply } from '../dali/reply.ts';
 import {
   DEFAULT_TIMING,
   FORWARD_FRAME_MS,
@@ -19,7 +20,7 @@ import { Da5l, RESET_DEAF_MS } from '../sim/gear.ts';
 import { da5l, type Da5lProfile } from '../sim/profile.ts';
 import { maxArcForMix, measure, mixSum, WORST_FACTS, type ColourFacts } from './mix.ts';
 import { PHANTOM, predictEvents, ROOM, scopeOf } from './rate/trace.ts';
-import { mergeTimes, type TraceEvents } from './rate/legs.ts';
+import { uniteTimes, type TraceEvents } from './rate/legs.ts';
 import { swingLimit, violations, withExtra, type Violation } from './rate/guard.ts';
 import {
   LIGHT_CHANGING,
@@ -197,8 +198,8 @@ function freeze(tx: Transaction): Transaction {
   return Object.freeze({ ...tx, frames: Object.freeze(frames) });
 }
 
-function approve(tx: Transaction): Approved {
-  const a = Object.freeze({ tx }) as unknown as Approved;
+function approve(tx: Transaction, issuedAt: number): Approved {
+  const a = Object.freeze({ tx, issuedAt }) as unknown as Approved;
   issued.add(a);
   return a;
 }
@@ -241,6 +242,8 @@ export class Governor {
   private readonly holdUntil: number;
   /** Addresses with a temporary colour set since their last ACTIVATE: 'tc', 'rgb', 'waf' parts seen. */
   private readonly tempSeen = new Map<number, Set<string>>();
+  /** Approvals this governor issued, so a router can refuse another connection's (ADR 0012). */
+  private readonly approvals = new WeakSet<object>();
 
   constructor(opts: GovernorOptions) {
     this.target = opts.target;
@@ -359,6 +362,11 @@ export class Governor {
     return OK;
   }
 
+  /** True when this governor issued the approval: a router accepts only its own governor's. */
+  issued(a: unknown): boolean {
+    return typeof a === 'object' && a !== null && this.approvals.has(a);
+  }
+
   /** Panic latches the governor. Nothing is allowed until a person resumes (SPEC S4.4). */
   latch(): void {
     this.latched = true;
@@ -451,7 +459,8 @@ export class Governor {
     }
     // The approval holds a frozen copy, and the scheduler sends from it (security review M1).
     const sealed = freeze(candidate);
-    const approval = approve(sealed);
+    const approval = approve(sealed, now);
+    this.approvals.add(approval);
     if (candidate === tx) return { kind: 'allow', approval };
     return { kind: 'clamp', tx: sealed, note: notes.join(' '), approval };
   }
@@ -1048,9 +1057,9 @@ export class Governor {
     for (const [scope, a] of faded) {
       const b = steps.get(scope) ?? a;
       out.set(scope, {
-        legs: mergeTimes([a.legs, b.legs]),
-        hard: mergeTimes([a.hard, b.hard]),
-        reversals: mergeTimes([a.reversals, b.reversals]),
+        legs: uniteTimes(a.legs, b.legs),
+        hard: uniteTimes(a.hard, b.hard),
+        reversals: uniteTimes(a.reversals, b.reversals),
       });
     }
     return out;
@@ -1076,18 +1085,19 @@ export class Governor {
    * Record a frame that went to a transport, with what came back. A refused frame never reached the
    * bus. A fault may have, so everything it could change becomes unknown (SPEC R1.9).
    */
-  observe(sent: SentFrame, result: SendResult): void {
-    if (result.kind === 'refused') return;
+  observe(sent: SentFrame, result: SendResult): BusReply | undefined {
+    if (result.kind === 'refused') return undefined;
     const f = sent.frame;
     const prev = this.lastSent;
     this.lastSent = f.frame;
     this.lastAt = sent.at;
     const fault = result.kind === 'fault';
-    if (!this.shadowFedByTransport) {
-      this.shadow.send(f, sent.at, this.timing.settleLaterMs + FORWARD_FRAME_MS);
-    }
+    // The shadow's own answer, before anything is learned from the hardware's (SPEC R1.5).
+    const shadowReply = this.shadowFedByTransport
+      ? undefined
+      : this.shadow.send(f, sent.at, this.timing.settleLaterMs + FORWARD_FRAME_MS);
     const cmd = decode(f.frame, prev);
-    if (cmd === undefined) return;
+    if (cmd === undefined) return shadowReply;
     const sp = spec(cmd.id);
     const a = cmd.address;
     const targets = a === undefined ? [] : this.members(a);
@@ -1230,6 +1240,7 @@ export class Governor {
     ) {
       this.unaddressedPresent = result.kind !== 'no-reply';
     }
+    return shadowReply;
   }
 
   private learn(n: number, cmd: Command, result: SendResult): void {

@@ -1,15 +1,22 @@
 # Dependencies
 
-Each dependency is justified here with its licence. Add a runtime dependency only with the owner's approval. There are no runtime dependencies installed yet: the app ships only its own code and Svelte's compiled output. The ones approved for later stages are listed below.
+Each dependency is justified here with its licence. Add a runtime dependency only with the owner's approval. The app has no runtime dependencies installed yet: it ships only its own code and Svelte's compiled output. The hardware server has three, installed since Stage 4.
 
 ## Approved, not yet installed
 
-| Package     | Version           | Licence                                                        | Where            | Why                                                                                                                      | Approved                              |
-| ----------- | ----------------- | -------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
-| three       | 0.187.0           | MIT                                                            | The app, Stage 7 | WebGL renderer for the visualiser. Core only, named imports, no addons. No dependencies of its own.                      | The brief's default stack, ADR 0002   |
-| websockets  | pinned in Stage 4 | BSD-3-Clause                                                   | The server       | HTTP and WebSocket serving for the hardware server. No dependencies of its own. Its wheels carry an optional C speed-up. | The owner, 14 November 2026, ADR 0003 |
-| python-dali | 0.16              | LGPL-3.0                                                       | The server       | Frame decoding at run time. Used as a dependency, never copied.                                                          | The owner, 14 November 2026           |
-| hidapi      | 0.15.0            | BSD-3-Clause (offered beside GPL-3.0 and its original licence) | The server       | USB HID access to the hasseb.                                                                                            | The owner, with python-dali           |
+| Package | Version | Licence | Where            | Why                                                                                                 | Approved                            |
+| ------- | ------- | ------- | ---------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| three   | 0.187.0 | MIT     | The app, Stage 7 | WebGL renderer for the visualiser. Core only, named imports, no addons. No dependencies of its own. | The brief's default stack, ADR 0002 |
+
+## Installed: the hardware server's run-time dependencies
+
+In `server/.venv`, from `server/requirements.txt`. See "Python: the hardware server" below.
+
+| Package     | Version | Licence                                                        | Where      | Why                                                                                                                      | Approved                              |
+| ----------- | ------- | -------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| websockets  | 17.4    | BSD-3-Clause                                                   | The server | HTTP and WebSocket serving for the hardware server. No dependencies of its own. Its wheels carry an optional C speed-up. | The owner, 14 November 2026, ADR 0003 |
+| python-dali | 0.16    | LGPL-3.0                                                       | The server | Frame decoding at run time. Used as a dependency, never copied.                                                          | The owner, 14 November 2026           |
+| hidapi      | 0.15.0  | BSD-3-Clause (offered beside GPL-3.0 and its original licence) | The server | USB HID access to the hasseb.                                                                                            | The owner, with python-dali           |
 
 Fonts are assets, not packages: Inter and JetBrains Mono, both SIL Open Font License 1.1, added as WOFF2 files with their licence texts in Stage 5 (`docs/UI.md`).
 
@@ -39,6 +46,22 @@ Fonts are assets, not packages: Inter and JetBrains Mono, both SIL Open Font Lic
 | @stryker-mutator/vitest-runner | 10.1.1  | Apache-2.0 | Runs Stryker's mutants through Vitest.                                                |
 
 Versions are pinned exactly in `package.json`, and `pnpm-lock.yaml` is committed.
+
+## Python: the hardware server
+
+`server/requirements.txt` pins the server's three run-time dependencies, every file by hash: python-dali 0.16, hidapi 0.15.0 and websockets 17.4. They are listed above as approved. websockets 17.4 needs Python 3.11 or later, so the server does too. Install with `--require-hashes --only-binary :all:` into `server/.venv`, which is git-ignored.
+
+`server/requirements-dev.txt` pins the test runner and its own dependencies, also by hash. They run only in tests:
+
+| Package   | Version | Licence                    | Why                                      |
+| --------- | ------- | -------------------------- | ---------------------------------------- |
+| pytest    | 9.2.0   | MIT                        | The server's tests (U-server, G-hasseb). |
+| pluggy    | 1.7.0   | MIT                        | pytest's plugin system.                  |
+| iniconfig | 2.3.1   | MIT                        | pytest reads its settings with it.       |
+| packaging | 26.3    | Apache-2.0 or BSD-2-Clause | pytest's version handling.               |
+| pygments  | 2.21.0  | BSD-2-Clause               | pytest's coloured output.                |
+
+pip has no minimum release age. Each version above was at least seven days old when pinned (websockets 17.4 was released on 30 October 2026, pytest 9.2.0 on 27 October 2026). A new pin is made by hand after reading the release.
 
 ## Python (dev time only)
 
