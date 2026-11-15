@@ -8,7 +8,14 @@
 import { TimerClock } from '../bus/clock.ts';
 import { withFloors } from '../bus/timing.ts';
 import { Engine } from '../engine/engine.ts';
-import { parseToWorker, type Call, type CallResult, type FromWorker } from '../engine/protocol.ts';
+import {
+  parseToWorker,
+  type Call,
+  type CallResult,
+  type FromWorker,
+  type ToWorker,
+} from '../engine/protocol.ts';
+import { DEFAULT_SETUP, unitProfile } from '../sim/settings.ts';
 import { Simulator } from '../sim/simulator.ts';
 import { ServerTransport, type WebSocketLike } from '../transport/server.ts';
 import { SimTransport } from '../transport/sim.ts';
@@ -26,7 +33,8 @@ function post(m: FromWorker): void {
   scope.postMessage(m);
 }
 
-function start(token: Uint8Array | undefined): Engine {
+function start(m: Extract<ToWorker, { type: 'init' }>): Engine {
+  const token = m.token;
   const clock = new TimerClock({
     now: () => performance.now(),
     setTimer: (run, ms) => setTimeout(run, ms),
@@ -35,7 +43,12 @@ function start(token: Uint8Array | undefined): Engine {
     },
   });
   const timing = withFloors({});
-  const sim = Simulator.bench({ at: clock.now() });
+  const bench = { ...DEFAULT_SETUP, ...m.bench };
+  const sim = Simulator.bench({
+    at: clock.now(),
+    a: unitProfile('A', bench.A),
+    b: unitProfile('B', bench.B),
+  });
   const simTransport = new SimTransport(sim, clock, timing);
   let hardware: ServerTransport | undefined;
   if (token !== undefined) {
@@ -60,6 +73,8 @@ function start(token: Uint8Array | undefined): Engine {
     sim,
     simTransport,
     timing,
+    bench,
+    ...(m.ceilingArc === undefined ? {} : { ceilingArc: m.ceilingArc }),
     ...(hardware === undefined ? {} : { hardware }),
   });
   e.subscribe((snapshot) => {
@@ -111,6 +126,8 @@ async function handle(e: Engine, call: Call): Promise<CallResult> {
     case 'clearDivergences':
       e.clearDivergences();
       return { ok: true };
+    case 'bench':
+      return e.setBench(call.setup, src);
   }
 }
 
@@ -126,7 +143,7 @@ function receive(data: unknown): void {
       return;
     }
     case 'init':
-      engine ??= start(m.token);
+      engine ??= start(m);
       return;
     case 'heartbeat':
       engine?.heartbeat(m.visible);

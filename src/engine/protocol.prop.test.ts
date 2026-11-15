@@ -22,6 +22,8 @@ describe('parseToWorker', () => {
       id: fc.anything(),
       visible: fc.anything(),
       token: fc.anything(),
+      ceilingArc: fc.anything(),
+      bench: fc.anything(),
       call: fc.record({
         op: fc.constantFrom(
           'setTarget',
@@ -31,7 +33,9 @@ describe('parseToWorker', () => {
           'lock',
           'setCeiling',
           'commission',
+          'bench',
         ),
+        setup: fc.anything(),
         target: fc.anything(),
         intent: fc.anything(),
         unlock: fc.anything(),
@@ -200,6 +204,9 @@ describe('parseFromWorker', () => {
     monitor: [],
     notices: [],
     unlocks: [],
+    light: [],
+    feedback: [],
+    bench: [],
     latched: false,
     ceilingArc: 220,
   };

@@ -19,7 +19,8 @@ import {
   type Frame,
 } from '../dali/codec.ts';
 import { spec } from '../dali/commands.ts';
-import type { TxFrame } from '../dali/sequences.ts';
+import { DAPC_SEQUENCE_MS, extendedFadeMs } from '../dali/fade.ts';
+import { rgbwafCommands, tcCommands, type TxFrame } from '../dali/sequences.ts';
 import { lowerCeiling, raiseCeiling } from '../safety/ceiling.ts';
 import { DEFAULT_CEILING_ARC, Governor, type Outcome } from '../safety/governor.ts';
 import {
@@ -38,6 +39,9 @@ import {
   type Transaction,
   type Unlock,
 } from '../safety/types.ts';
+import { Da5l } from '../sim/gear.ts';
+import type { Terminal } from '../sim/profile.ts';
+import { DEFAULT_SETUP, unitProfile, type BenchUnit, type UnitSetup } from '../sim/settings.ts';
 import { Simulator } from '../sim/simulator.ts';
 import { Coalescer, type CoalescedResult } from './coalescer.ts';
 import { commission, type CommissionResult } from './commission.ts';
@@ -59,10 +63,40 @@ export type OutputTarget = 'simulator' | 'hardware' | 'both';
 /** The hardware connection as the top bar shows it. */
 export type Connection = 'none' | 'connecting' | 'ready' | 'no-hasseb' | 'disconnected';
 
+/** The six RGBWAF channel levels, 0 to 254, or 255 to leave a channel as it is. */
+export type Channels = readonly [number, number, number, number, number, number];
+
+/** A fade setting from the fade picker: a standard fade time 0 to 15, or an extended fade byte. */
+export type FadeSetting =
+  | { readonly kind: 'standard'; readonly value: number }
+  | { readonly kind: 'extended'; readonly value: number };
+
 export type Intent =
   | { readonly kind: 'commands'; readonly commands: readonly Command[]; readonly label?: string }
   | { readonly kind: 'raw'; readonly a: number; readonly b: number }
-  | { readonly kind: 'level'; readonly address: number; readonly arc: number };
+  /** A level. `live` marks a moving control: the DAPC sequence makes the gear dim smoothly. */
+  | {
+      readonly kind: 'level';
+      readonly address: number;
+      readonly arc: number;
+      readonly live?: boolean;
+    }
+  /** A colour temperature, loaded and activated. */
+  | { readonly kind: 'tc'; readonly address: number; readonly mirek: number }
+  /** RGBWAF channel levels, loaded and activated. */
+  | { readonly kind: 'rgbwaf'; readonly address: number; readonly channels: Channels }
+  /**
+   * Commit mode's Apply: the fade, then the colour loaded without ACTIVATE, then the level, in one
+   * transaction, so automatic activation brings colour and level in together.
+   */
+  | {
+      readonly kind: 'apply';
+      readonly address: number;
+      readonly fade?: FadeSetting;
+      readonly arc?: number;
+      readonly mirek?: number;
+      readonly channels?: Channels;
+    };
 
 export type Answer = number | 'none' | 'collision';
 
@@ -87,12 +121,47 @@ export interface DeviceView {
 }
 
 export interface MonitorLine {
+  /** Counts up from 1 for the session, so the page can keep more lines than a snapshot carries. */
+  readonly seq: number;
   readonly at: number;
+  /** Time on the wire, ms. */
+  readonly ms: number;
+  /** The address the frame names: A0 to A63, G0 to G15, all, or blank. */
+  readonly address: string;
   readonly target: 'simulator' | 'hardware';
   readonly source: Source;
   readonly frame: string;
   readonly text: string;
   readonly result: string;
+}
+
+/** What a simulated or shadow unit is doing now, for the bench preview and the playground. */
+export interface LightView {
+  readonly address: number;
+  /** The unit's stable name: A or B on the bench, hw0 and up for the hardware shadow. */
+  readonly unit: string;
+  /** Arc level now, fractional during a fade. 0 is off. */
+  readonly level: number;
+  /** The level the gear is heading for. */
+  readonly target: number;
+  readonly mirek: number;
+  readonly channels: readonly number[];
+  readonly fadeTime: number;
+  readonly extendedFade: number;
+  readonly fastFade: number;
+  readonly fading: boolean;
+  /** Drive on each output terminal, 0 to 1, and what each carries. */
+  readonly terminals: readonly number[];
+  readonly labels: readonly Terminal[];
+}
+
+/** What happened to the newest value of a live control (SPEC R13.5). */
+export interface ControlFeedback {
+  /** The control and address, as `level:0`, `tc:0` or `rgbwaf:1`. */
+  readonly key: string;
+  readonly at: number;
+  readonly state: 'sent' | 'clamped' | 'waiting' | 'refused';
+  readonly text: string;
 }
 
 export interface JobView {
@@ -123,6 +192,11 @@ export interface Snapshot {
   readonly monitor: readonly MonitorLine[];
   readonly notices: readonly string[];
   readonly busUse: number;
+  /** The active connection's units: the bench in Simulator, the hardware shadow otherwise. */
+  readonly light: readonly LightView[];
+  readonly feedback: readonly ControlFeedback[];
+  /** The simulated bench's units and how each is set up (SPEC R1.6). */
+  readonly bench: readonly { readonly unit: BenchUnit; readonly setup: UnitSetup }[];
 }
 
 export interface EngineOptions {
@@ -134,6 +208,8 @@ export interface EngineOptions {
   /** Present only when the page came from the server with a token (SPEC R1.3). */
   readonly hardware?: HardwareTransport;
   readonly ceilingArc?: number;
+  /** How the bench's units were built, when not from the defaults (SPEC R1.6). */
+  readonly bench?: Partial<Record<BenchUnit, UnitSetup>>;
   /** Scan the simulated bench and write its profile at start. On by default. */
   readonly startScan?: boolean;
 }
@@ -159,11 +235,11 @@ interface Job {
   aborted: boolean;
 }
 
-interface LevelValue {
-  readonly address: number;
-  readonly arc: number;
-  readonly source: Source;
-}
+type LiveValue = (
+  | { readonly kind: 'level'; readonly arc: number; readonly live: boolean }
+  | { readonly kind: 'tc'; readonly mirek: number }
+  | { readonly kind: 'rgbwaf'; readonly channels: Channels }
+) & { readonly address: number; readonly source: Source };
 
 /** A visible page sends a heartbeat every second. Three seconds without one stops runners (SPEC S4.6). */
 export const HEARTBEAT_LIMIT_MS = 3000;
@@ -177,6 +253,12 @@ const DIVERGENCES = 200;
 const NOTICES = 20;
 
 const OK: Outcome = { ok: true };
+
+function checkChannels(ch: readonly number[]): string | undefined {
+  if (ch.length !== 6 || ch.some((v) => !Number.isInteger(v) || v < 0 || v > 255))
+    return 'Channels are six levels from 0 to 254, or 255 to leave one as it is.';
+  return undefined;
+}
 const no = (reason: string): Outcome => ({ ok: false, reason });
 
 function resultText(r: SendResult): string {
@@ -240,12 +322,17 @@ export class Engine {
   private askCanSee = false;
   private canSee: boolean | undefined;
   private connCount = 0;
-  private readonly simConn: Conn;
+  private simConn: Conn;
   private hwConn: Conn | undefined;
   /** Panic only, for the hardware transport while no hardware connection is in use. */
   private readonly standby: Scheduler | undefined;
   private readonly jobs = new Set<Job>();
-  private readonly coalescer: Coalescer<LevelValue>;
+  private readonly coalescer: Coalescer<LiveValue>;
+  private readonly feedback = new Map<string, ControlFeedback>();
+  /** When each address last took a live DAPC, for the DAPC sequence. */
+  private readonly lastLiveDapc = new Map<number, number>();
+  private monitorSeq = 0;
+  private benchSetup: Readonly<Record<BenchUnit, UnitSetup>>;
   private readonly divergences: Divergence[] = [];
   private readonly monitor: MonitorLine[] = [];
   private readonly notices: string[] = [];
@@ -270,10 +357,11 @@ export class Engine {
     this.hardware = o.hardware;
     this.timing = withFloors(o.timing ?? {});
     this.ceiling = o.ceilingArc ?? DEFAULT_CEILING_ARC;
+    this.benchSetup = { ...DEFAULT_SETUP, ...o.bench };
     this.lastBeat = this.clock.now();
     this.simConn = this.makeConn('simulator');
     if (this.hardware !== undefined) this.standby = this.makeStandby(this.hardware);
-    this.coalescer = new Coalescer(this.clock, (_key, v) => this.sendLevel(v));
+    this.coalescer = new Coalescer(this.clock, (key, v) => this.sendLive(key, v));
     this.scheduleTick();
     if (o.startScan !== false) void this.inventory(this.simConn);
   }
@@ -404,6 +492,7 @@ export class Engine {
       );
     this.stopRunners('The output target changed.');
     this.target = t;
+    this.feedback.clear();
     if (t === 'simulator') {
       // Anything the hardware connection still had queued must not go out after the change. The
       // server connection stays open and idle, so the real lights are not turned off by this.
@@ -803,11 +892,44 @@ export class Engine {
         if (!Number.isInteger(intent.arc) || intent.arc < 0 || intent.arc > 254)
           return { ok: false, reason: 'A level is an arc level from 0 to 254.' };
         this.coalescer.set(`level:${String(intent.address)}`, {
+          kind: 'level',
           address: intent.address,
           arc: intent.arc,
+          live: intent.live === true,
           source,
         });
         return { ok: true, answers: [], queued: true };
+      case 'tc': {
+        const bad = this.checkColour(conn, intent.address, 'tc');
+        if (bad !== undefined) return { ok: false, reason: bad };
+        if (!Number.isInteger(intent.mirek) || intent.mirek < 1 || intent.mirek > 0xfffe)
+          return { ok: false, reason: 'A colour temperature is 1 to 65534 mirek.' };
+        this.coalescer.set(`tc:${String(intent.address)}`, {
+          kind: 'tc',
+          address: intent.address,
+          mirek: intent.mirek,
+          source,
+        });
+        return { ok: true, answers: [], queued: true };
+      }
+      case 'rgbwaf': {
+        const bad =
+          this.checkColour(conn, intent.address, 'rgbwaf') ?? checkChannels(intent.channels);
+        if (bad !== undefined) return { ok: false, reason: bad };
+        this.coalescer.set(`rgbwaf:${String(intent.address)}`, {
+          kind: 'rgbwaf',
+          address: intent.address,
+          channels: intent.channels,
+          source,
+        });
+        return { ok: true, answers: [], queued: true };
+      }
+      case 'apply': {
+        const cmds = this.compileApply(conn, intent);
+        if (typeof cmds === 'string') return { ok: false, reason: cmds };
+        if (cmds.length === 0) return { ok: false, reason: 'Nothing to apply.' };
+        return fromTx(await conn.scheduler.submit(txOf(cmds, source, 'apply')));
+      }
       case 'raw': {
         const frame: Frame = { a: intent.a & 0xff, b: intent.b & 0xff };
         const s = decodeSpec(frame);
@@ -842,15 +964,158 @@ export class Engine {
     }
   }
 
-  private async sendLevel(v: LevelValue): Promise<CoalescedResult> {
+  /** SPEC D2: drive each address the way it reports it can be driven. */
+  private checkColour(conn: Conn, address: number, drive: 'tc' | 'rgbwaf'): string | undefined {
+    if (!Number.isInteger(address) || address < 0 || address > 63) return 'An address is 0 to 63.';
+    const facts = conn.facts.get(address);
+    if (facts === undefined) return `A${String(address)} has not been read yet.`;
+    if (facts.drive !== drive)
+      return drive === 'tc'
+        ? `A${String(address)} does not report colour temperature control.`
+        : `A${String(address)} does not report RGBWAF channels.`;
+    return undefined;
+  }
+
+  private compileApply(conn: Conn, i: Extract<Intent, { kind: 'apply' }>): Command[] | string {
+    const n = i.address;
+    if (!Number.isInteger(n) || n < 0 || n > 63) return 'An address is 0 to 63.';
+    const a = short(n);
+    const cmds: Command[] = [];
+    if (i.fade !== undefined) {
+      const v = i.fade.value;
+      if (i.fade.kind === 'standard') {
+        if (!Number.isInteger(v) || v < 0 || v > 15) return 'A fade time is 0 to 15.';
+        cmds.push({ id: 'DTR0', value: v }, { id: 'SET_FADE_TIME', address: a });
+      } else {
+        if (!Number.isInteger(v) || v < 0 || extendedFadeMs(v) === 0)
+          return 'That is not an extended fade time.';
+        // The extended fade is used only while the fade time is 0 (dali.md section 7).
+        cmds.push(
+          { id: 'DTR0', value: 0 },
+          { id: 'SET_FADE_TIME', address: a },
+          { id: 'DTR0', value: v },
+          { id: 'SET_EXTENDED_FADE_TIME', address: a },
+        );
+      }
+    }
+    if (i.mirek !== undefined && i.channels !== undefined)
+      return 'Apply a colour temperature or channels, not both.';
+    const activate = i.arc === undefined;
+    if (i.mirek !== undefined) {
+      const bad = this.checkColour(conn, n, 'tc');
+      if (bad !== undefined) return bad;
+      if (!Number.isInteger(i.mirek) || i.mirek < 1 || i.mirek > 0xfffe)
+        return 'A colour temperature is 1 to 65534 mirek.';
+      cmds.push(...tcCommands(a, i.mirek, activate));
+    }
+    if (i.channels !== undefined) {
+      const bad = this.checkColour(conn, n, 'rgbwaf') ?? checkChannels(i.channels);
+      if (bad !== undefined) return bad;
+      cmds.push(...rgbwafCommands(a, i.channels, activate));
+    }
+    if (i.arc !== undefined) {
+      if (!Number.isInteger(i.arc) || i.arc < 0 || i.arc > 254)
+        return 'A level is an arc level from 0 to 254.';
+      cmds.push({ id: 'DAPC', address: a, value: i.arc });
+    }
+    return cmds;
+  }
+
+  private async sendLive(key: string, v: LiveValue): Promise<CoalescedResult> {
     const conn = this.active();
     if (conn === undefined) return { ok: false };
-    const tx = txOf([{ id: 'DAPC', address: short(v.address), value: v.arc }], v.source, 'level');
-    const r = await conn.scheduler.submit(tx);
-    if (r.kind === 'done') return { ok: true };
-    return r.kind === 'refused' && r.retryAt !== undefined
-      ? { ok: false, retryAt: r.retryAt }
-      : { ok: false };
+    const a = short(v.address);
+    const now = this.clock.now();
+    let cmds: Command[];
+    let label: string;
+    switch (v.kind) {
+      case 'level':
+        cmds = [];
+        // A moving control keeps a DAPC sequence going: the gear fades over 200 ms between them.
+        if (v.live && now - (this.lastLiveDapc.get(v.address) ?? -Infinity) > DAPC_SEQUENCE_MS)
+          cmds.push({ id: 'ENABLE_DAPC_SEQUENCE', address: a });
+        cmds.push({ id: 'DAPC', address: a, value: v.arc });
+        label = 'level';
+        break;
+      case 'tc':
+        cmds = tcCommands(a, v.mirek, true);
+        label = 'colour temperature';
+        break;
+      case 'rgbwaf':
+        cmds = rgbwafCommands(a, v.channels, true);
+        label = 'colour';
+        break;
+    }
+    const r = await conn.scheduler.submit(txOf(cmds, v.source, label));
+    const at = this.clock.now();
+    if (r.kind === 'done') {
+      if (v.kind === 'level') {
+        if (v.live) this.lastLiveDapc.set(v.address, at);
+        else this.lastLiveDapc.delete(v.address);
+      }
+      const sent = r.tx.frames.map((f) => decode(f.frame)).filter((c) => c?.id === 'DAPC');
+      const what =
+        v.kind === 'level'
+          ? `level ${String(sent[0]?.value ?? v.arc)}`
+          : v.kind === 'tc'
+            ? `${String(v.mirek)} mirek`
+            : `channels ${v.channels.join(' ')}`;
+      this.setFeedback(
+        key,
+        at,
+        r.note !== undefined && r.note !== '' ? 'clamped' : 'sent',
+        r.note !== undefined && r.note !== '' ? `Sent ${what}. ${r.note}` : `Sent ${what}.`,
+      );
+      return { ok: true };
+    }
+    if (r.kind === 'refused' && r.retryAt !== undefined) {
+      this.setFeedback(key, at, 'waiting', `Waiting: ${r.reason}`);
+      return { ok: false, retryAt: r.retryAt };
+    }
+    this.setFeedback(key, at, 'refused', `Refused: ${r.reason}`);
+    return { ok: false };
+  }
+
+  private setFeedback(
+    key: string,
+    at: number,
+    state: ControlFeedback['state'],
+    text: string,
+  ): void {
+    this.feedback.set(key, { key, at, state, text });
+    this.emitSoon();
+  }
+
+  /**
+   * Set up the simulated bench again (SPEC R1.6): each unit is rebuilt with its new profile and
+   * starts off, the simulator's governor starts afresh, and the bench is scanned and given its
+   * profile again. Nothing here reaches the hardware connection.
+   */
+  setBench(setup: Partial<Record<BenchUnit, UnitSetup>>, source: Source): Outcome {
+    if (!isPerson(source)) return no('Only a person changes the simulator settings.');
+    if (this.target === 'simulator') this.stopRunners('The simulator settings changed.');
+    const now = this.clock.now();
+    for (const unit of ['A', 'B'] as const) {
+      const next = setup[unit];
+      if (next === undefined) continue;
+      const old = this.sim.unit(unit)?.gear;
+      const gear = new Da5l(unitProfile(unit, next), {
+        shortAddress: old?.shortAddress ?? (unit === 'A' ? 0 : 1),
+        at: now,
+        ...(unit === 'B' ? { seed: 0x1234567 } : {}),
+      });
+      this.sim.replace({ id: unit, gear }, (u) => u.id === unit);
+      this.benchSetup = { ...this.benchSetup, [unit]: next };
+    }
+    const old = this.simConn;
+    old.governor.latch();
+    old.scheduler.close();
+    old.router.close();
+    this.simConn = this.makeConn('simulator');
+    for (const k of this.feedback.keys()) if (this.target === 'simulator') this.feedback.delete(k);
+    this.emit();
+    void this.inventory(this.simConn);
+    return OK;
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -977,8 +1242,21 @@ export class Engine {
       this.stopRunners(`A frame faulted: ${r.result.reason}`);
     const cmd = decode(r.frame.frame, conn.prev);
     conn.prev = r.frame.frame;
+    const a = cmd?.address;
     this.monitor.push({
+      seq: ++this.monitorSeq,
       at: r.wireStart,
+      ms: Math.max(0, r.end - r.wireStart),
+      address:
+        a === undefined
+          ? ''
+          : a.kind === 'short'
+            ? `A${String(a.n)}`
+            : a.kind === 'group'
+              ? `G${String(a.n)}`
+              : a.kind === 'broadcast'
+                ? 'all'
+                : 'unaddressed',
       target: conn.kind,
       source: r.source,
       frame: frameText(r.frame.frame),
@@ -1007,6 +1285,8 @@ export class Engine {
     if (this.listeners.size === 0) return;
     const s = this.snapshot();
     for (const l of this.listeners) l(s);
+    // The bench preview follows a fade at the snapshot rate, and stops when everything settles.
+    if (s.light.some((l) => l.fading)) this.emitSoon();
   }
 
   /** At most ten snapshots a second for frame-by-frame changes. */
@@ -1070,6 +1350,36 @@ export class Engine {
       monitor: this.monitor.slice(-50),
       notices: [...this.notices],
       busUse: conn?.scheduler.utilisation() ?? 0,
+      light: conn === undefined ? [] : this.lightOf(conn),
+      feedback: [...this.feedback.values()],
+      bench: (['A', 'B'] as const).map((unit) => ({ unit, setup: this.benchSetup[unit] })),
     };
+  }
+
+  private lightOf(conn: Conn): LightView[] {
+    const now = this.clock.now();
+    const out: LightView[] = [];
+    for (const u of conn.governor.shadow.all) {
+      const n = u.gear.shortAddress;
+      if (n === null) continue;
+      const st = u.gear.snapshot();
+      const colour = u.gear.colourAt(now);
+      const drive = u.gear.outputAt(now);
+      out.push({
+        address: n,
+        unit: u.id,
+        level: u.gear.levelAt(now),
+        target: u.gear.finalLevel(),
+        mirek: colour.tc,
+        channels: [...colour.ch],
+        fadeTime: st.fadeTime,
+        extendedFade: st.extendedFade,
+        fastFade: st.fastFade,
+        fading: u.gear.settlesAt() > now,
+        terminals: [...drive.terminals],
+        labels: [...drive.labels],
+      });
+    }
+    return out.sort((x, y) => x.address - y.address);
   }
 }
