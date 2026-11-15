@@ -27,3 +27,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The plan for Stages 3, 4, 5 and 12 follows the design: the governor as ADR 0004 sets it out, a Python hardware server before any WebHID transport, and the build settings the spike proved.
 - The governor works out the bus schedule once, for both the rule check and the plan, and drops checks that cannot fail.
 - A governor now refuses a starting ceiling outside arc levels 1 to 254, as `setCeiling` does.
+
+### Security
+
+- qs, a transitive dependency of Stryker, is overridden to 6.16.2 to clear four advisories. The two advisories left open (minimatch, deepmerge) are explained in `docs/DEPENDENCIES.md`.

@@ -10,3 +10,7 @@ savePrefix: ''
 # pulled in by svelte-check. See docs/DEPENDENCIES.md.
 trustPolicyExclude:
   - chokidar@4.0.3
+# typed-rest-client (pulled in by Stryker) pins qs 6.15.1, which has four
+# advisories. 6.16.2 is a patch release in the same line. See docs/DEPENDENCIES.md.
+overrides:
+  qs: 6.16.2
