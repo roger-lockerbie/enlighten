@@ -16,6 +16,7 @@ import pytest
 from .conftest import REPO
 
 PORT = 47821
+URL = "http://127.0.0.1:47821/#t="
 
 
 def port_free() -> bool:
@@ -27,7 +28,7 @@ def port_free() -> bool:
     return True
 
 
-def start(dist: Path) -> subprocess.Popen[str]:
+def start(dist: Path) -> tuple[subprocess.Popen[str], str]:
     if not port_free():
         pytest.skip(f"port {PORT} is in use")
     proc = subprocess.Popen(
@@ -40,18 +41,29 @@ def start(dist: Path) -> subprocess.Popen[str]:
         env={**os.environ, "PYTHONUNBUFFERED": "1"},
     )
     assert proc.stdout is not None
+    first = next_url(proc)
+    if first is None:
+        proc.kill()
+        raise AssertionError("the server did not print its URL")
+    return proc, first
+
+
+def next_url(proc: subprocess.Popen[str]) -> str | None:
+    """The next URL the server prints, skipping status lines, which can come at any time."""
+    assert proc.stdout is not None
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         line = proc.stdout.readline()
-        if line.startswith("http://127.0.0.1:47821/#t="):
-            return proc
-    proc.kill()
-    raise AssertionError("the server did not print its URL")
+        if line == "":
+            return None
+        if line.startswith(URL):
+            return line.strip()
+    return None
 
 
 @pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM, signal.SIGHUP])
 def test_each_signal_stops_the_bus(dist: Path, sig: signal.Signals) -> None:
-    proc = start(dist)
+    proc, _ = start(dist)
     time.sleep(0.3)
     proc.send_signal(sig)
     out, _ = proc.communicate(timeout=10)
@@ -63,12 +75,13 @@ def test_each_signal_stops_the_bus(dist: Path, sig: signal.Signals) -> None:
 
 
 def test_enter_prints_a_fresh_url(dist: Path) -> None:
-    proc = start(dist)
-    assert proc.stdin is not None and proc.stdout is not None
+    proc, first = start(dist)
+    assert proc.stdin is not None
     proc.stdin.write("\n")
     proc.stdin.flush()
-    line = proc.stdout.readline()
-    assert line.startswith("http://127.0.0.1:47821/#t=") and len(line.strip()) == len("http://127.0.0.1:47821/#t=") + 64
+    url = next_url(proc)
+    assert url is not None and len(url) == len(URL) + 64
+    assert url != first
     proc.send_signal(signal.SIGTERM)
     proc.communicate(timeout=10)
 
