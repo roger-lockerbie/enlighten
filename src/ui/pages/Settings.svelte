@@ -1,7 +1,8 @@
 <!--
   Settings (docs/UI.md section 1): preferences, workspace export and import, records set aside, and
-  the key legend. An import lists what will change and asks first. It never sends a frame, never
-  raises the ceiling, and its preferences can only make the app more careful (SPEC section 8).
+  the key legend. An import lists what will change and asks first. It never raises the ceiling. A
+  lower ceiling is applied as the ceiling control applies it, which writes MAX LEVEL to every driver
+  through the governor. Nothing else it holds reaches the lights (SPEC section 8).
 -->
 <script lang="ts">
   import { MAX_BYTES } from '../../store/validate.ts';
@@ -189,8 +190,9 @@
     <h2 id="ws-h">Workspace</h2>
     <p class="muted">
       A workspace file holds the ceiling, these preferences, device names and the simulator
-      settings. Importing one lists what will change first. It never sends anything to the lights,
-      and a higher ceiling in the file is not applied.
+      settings. Importing one lists what will change first. A lower ceiling in the file is applied
+      at once, which rewrites MAX LEVEL in every driver. A higher one is not applied. Nothing else
+      in the file reaches the lights.
     </p>
     <div class="row">
       <a class="button" href={exportHref} download="enlighten-workspace.json" data-testid="export"
@@ -259,10 +261,12 @@
       <p>The file changes nothing.</p>
     {:else}
       <ul data-testid="import-changes">
-        {#each plan?.changes ?? [] as c (c)}<li>{c}</li>{/each}
+        {#each plan?.changes ?? [] as c, i (i)}<li>{c}</li>{/each}
       </ul>
     {/if}
-    <p class="muted small">Nothing is sent to the lights by importing.</p>
+    <p class="muted small">
+      Only a lower ceiling reaches the lights: it rewrites MAX LEVEL in every driver.
+    </p>
     <div class="row end">
       <button
         type="button"

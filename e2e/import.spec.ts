@@ -111,6 +111,10 @@ test('refuses oversized, malformed, foreign, newer and hostile files, and change
       '{"format":"enlighten-workspace","version":1,"devices":[{"address":64}]}',
       'devices[0].address',
     ],
+    [
+      '{"format":"enlighten-workspace","version":1,"devices":[{"address":0,"alias":"x"},{"address":0,"alias":"x"}]}',
+      'address 0 appears twice',
+    ],
   ];
   for (const [text, why] of cases) {
     await importText(page, text);

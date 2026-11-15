@@ -83,7 +83,7 @@ const validContent = fc.record(
       },
       { requiredKeys: [] },
     ),
-    devices: fc.array(
+    devices: fc.uniqueArray(
       fc.record(
         {
           address: fc.integer({ min: 0, max: 63 }),
@@ -93,7 +93,7 @@ const validContent = fc.record(
         },
         { requiredKeys: ['address'] },
       ),
-      { maxLength: 64 },
+      { maxLength: 64, selector: (d) => d.address },
     ),
   },
   { requiredKeys: [] },

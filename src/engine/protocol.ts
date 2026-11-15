@@ -7,7 +7,7 @@
  */
 import type { Address } from '../dali/address.ts';
 import type { Command } from '../dali/codec.ts';
-import type { Outcome } from '../safety/governor.ts';
+import { DEFAULT_CEILING_ARC, type Outcome } from '../safety/governor.ts';
 import type { Unlock } from '../safety/types.ts';
 import { parseUnitSetup, type UnitSetup } from '../sim/settings.ts';
 import type {
@@ -121,7 +121,7 @@ function parseFade(x: unknown): FadeSetting | undefined {
 }
 
 function parseBench(x: unknown): Partial<Record<'A' | 'B', UnitSetup>> | undefined {
-  if (!isObj(x)) return undefined;
+  if (!isObj(x) || Object.keys(x).length === 0) return undefined;
   const out: Partial<Record<'A' | 'B', UnitSetup>> = {};
   for (const k of Object.keys(x)) {
     if (k !== 'A' && k !== 'B') return undefined;
@@ -265,7 +265,9 @@ export function parseToWorker(x: unknown): ToWorker | undefined {
       const arc = x['ceilingArc'];
       const b = x['bench'];
       if (t !== undefined && !(t instanceof Uint8Array && t.length === 32)) return undefined;
-      if (arc !== undefined && !isInt(arc, 1, 254)) return undefined;
+      // A session never starts above the default ceiling: a higher one needs a person's
+      // confirmation once the app is running (ADR 0013, security review S5-L2).
+      if (arc !== undefined && !isInt(arc, 1, DEFAULT_CEILING_ARC)) return undefined;
       const bench = b === undefined ? undefined : parseBench(b);
       if (b !== undefined && bench === undefined) return undefined;
       return {

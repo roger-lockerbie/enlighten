@@ -69,6 +69,7 @@ describe('Stage 5 messages to the worker', () => {
     expect(call({ op: 'bench', setup: { C: setup.A } })).toBeUndefined();
     expect(call({ op: 'bench', setup: { A: { presentation: 'xy' } } })).toBeUndefined();
     expect(call({ op: 'bench', setup: 'A' })).toBeUndefined();
+    expect(call({ op: 'bench', setup: {} })).toBeUndefined();
     expect(
       call({ op: 'bench', setup: { A: { presentation: 'tc', settings: { tcLimits: {} } } } }),
     ).toBeUndefined();
@@ -83,6 +84,12 @@ describe('Stage 5 messages to the worker', () => {
     expect(parseToWorker({ type: 'init', bench })).toEqual({ type: 'init', bench });
     expect(parseToWorker({ type: 'init', ceilingArc: 0 })).toBeUndefined();
     expect(parseToWorker({ type: 'init', ceilingArc: 255 })).toBeUndefined();
+    // Above the default needs a person's confirmation in the running app, so init refuses it.
+    expect(parseToWorker({ type: 'init', ceilingArc: 220 })).toEqual({
+      type: 'init',
+      ceilingArc: 220,
+    });
+    expect(parseToWorker({ type: 'init', ceilingArc: 221 })).toBeUndefined();
     expect(parseToWorker({ type: 'init', bench: { A: 1 } })).toBeUndefined();
   });
 });

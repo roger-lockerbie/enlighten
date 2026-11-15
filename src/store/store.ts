@@ -146,7 +146,7 @@ const pct = (arc: number) => `${percentText(arc)}%`;
 
 /**
  * Read a workspace file: size, parse, tree check, migrate, validate. Nothing is applied: the plan
- * lists what would change. A higher ceiling is never applied, and import never sends a frame.
+ * lists what would change. A higher ceiling is never applied. Reading sends nothing.
  */
 export function readWorkspace(
   text: string,

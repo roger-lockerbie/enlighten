@@ -15,6 +15,7 @@ import {
   opt,
   req,
   str,
+  uniqueBy,
   type Result,
   type Schema,
 } from './validate.ts';
@@ -40,7 +41,7 @@ const preferencesV1 = object({
   drawerOpen: req(bool),
   drawerHeight: req(int(DRAWER_MIN, DRAWER_MAX)),
   reducedMotion: req(oneOf('system', 'always')),
-  aliases: req(arrayOf(alias, 64)),
+  aliases: req(uniqueBy(arrayOf(alias, 64), (a) => a.address, 'address')),
   bench: req(object({ A: opt(unitSetup), B: opt(unitSetup) })),
 });
 
@@ -93,7 +94,7 @@ const workspaceV1 = object({
       reducedMotion: opt(oneOf('system', 'always')),
     }),
   ),
-  devices: opt(arrayOf(workspaceDevice, 64)),
+  devices: opt(uniqueBy(arrayOf(workspaceDevice, 64), (d) => d.address, 'address')),
 });
 
 export type Workspace = Extract<ReturnType<typeof workspaceV1>, { ok: true }>['value'];

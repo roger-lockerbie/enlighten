@@ -322,7 +322,7 @@ export class Engine {
   private askCanSee = false;
   private canSee: boolean | undefined;
   private connCount = 0;
-  private simConn: Conn;
+  private readonly simConn: Conn;
   private hwConn: Conn | undefined;
   /** Panic only, for the hardware transport while no hardware connection is in use. */
   private readonly standby: Scheduler | undefined;
@@ -1094,6 +1094,7 @@ export class Engine {
    */
   setBench(setup: Partial<Record<BenchUnit, UnitSetup>>, source: Source): Outcome {
     if (!isPerson(source)) return no('Only a person changes the simulator settings.');
+    if (setup.A === undefined && setup.B === undefined) return no('Nothing to change.');
     if (this.target === 'simulator') this.stopRunners('The simulator settings changed.');
     const now = this.clock.now();
     for (const unit of ['A', 'B'] as const) {
@@ -1108,12 +1109,12 @@ export class Engine {
       this.sim.replace({ id: unit, gear }, (u) => u.id === unit);
       this.benchSetup = { ...this.benchSetup, [unit]: next };
     }
-    const old = this.simConn;
-    old.governor.latch();
-    old.scheduler.close();
-    old.router.close();
-    this.simConn = this.makeConn('simulator');
-    for (const k of this.feedback.keys()) if (this.target === 'simulator') this.feedback.delete(k);
+    // The simulated connection keeps its governor, so the rate guard's history carries over and a
+    // settings change cannot be used to start a swing early (security review S5-L5). The governor
+    // reads the new gear through its shadow, and the scan and profile verify it again.
+    this.simConn.facts.clear();
+    this.simConn.profiles.clear();
+    if (this.target === 'simulator') this.feedback.clear();
     this.emit();
     void this.inventory(this.simConn);
     return OK;

@@ -40,7 +40,7 @@
 
 <Dialog {open} {title} onclose={oncancel} {testid}>
   <form class="stack" onsubmit={submit}>
-    {#each lines as l (l)}<p>{l}</p>{/each}
+    {#each lines as l, i (i)}<p>{l}</p>{/each}
     <label class="stack typed">
       <span>Type {expect} to confirm</span>
       <input type="text" autocomplete="off" spellcheck="false" bind:value={typed} />

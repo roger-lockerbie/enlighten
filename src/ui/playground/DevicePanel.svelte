@@ -141,6 +141,20 @@
     holding = undefined;
   }
 
+  // Leaving the page, or the page losing focus, ends a hold (security review S5-L3).
+  $effect(() => {
+    const stop = () => {
+      stopDim();
+    };
+    window.addEventListener('blur', stop);
+    document.addEventListener('visibilitychange', stop);
+    return () => {
+      stopDim();
+      window.removeEventListener('blur', stop);
+      document.removeEventListener('visibilitychange', stop);
+    };
+  });
+
   function holdKeys(id: 'UP' | 'DOWN') {
     return {
       onkeydown: (e: KeyboardEvent) => {

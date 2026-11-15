@@ -9,6 +9,7 @@ import {
   int,
   MAX_BYTES,
   MAX_DEPTH,
+  MAX_NODES,
   object,
   oneOf,
   opt,
@@ -52,6 +53,14 @@ describe('the validator', () => {
         ok: false,
         error: `a[0]: the key ${k} is not allowed.`,
       });
+  });
+
+  it('refuses a tree with too many values, and shortens long keys in its messages', () => {
+    expect(checkTree(new Array(MAX_NODES + 1).fill(0))).toMatch(/more than 100000 values/);
+    expect(checkTree(new Array(MAX_NODES - 1).fill(0))).toBeUndefined();
+    const long = 'k'.repeat(500);
+    const msg = checkTree({ [long]: { __proto__x: 1, constructor: 1 } }) ?? '';
+    expect(msg.length).toBeLessThan(120);
   });
 
   it('refuses what JSON cannot carry', () => {
@@ -262,6 +271,15 @@ describe('workspace files (SPEC section 8)', () => {
       ok: false,
       error: 'The file is larger than 2 MB.',
     });
+  });
+
+  it('refuses a device or a name listed twice for one address', () => {
+    expect(
+      readWorkspace(
+        '{"format":"enlighten-workspace","version":1,"devices":[{"address":0,"alias":"x"},{"address":0,"alias":"x"}]}',
+        { ceilingArc: 220 },
+      ),
+    ).toEqual({ ok: false, error: 'devices: address 0 appears twice.' });
   });
 
   it('lists a device with only settings at their defaults', () => {

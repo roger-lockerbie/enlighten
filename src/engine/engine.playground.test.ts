@@ -378,6 +378,7 @@ describe('start and set-up', () => {
       ok: false,
       reason: 'Only a person changes the simulator settings.',
     });
+    expect(engine.setBench({}, 'ui')).toEqual({ ok: false, reason: 'Nothing to change.' });
     const r = engine.setBench(
       { B: { presentation: 'tc', settings: { maxLowerPullsDown: false } } },
       'ui',

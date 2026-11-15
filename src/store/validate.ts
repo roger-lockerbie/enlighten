@@ -9,6 +9,8 @@
 export const MAX_BYTES = 2 * 1024 * 1024;
 /** Objects and arrays nest at most this deep. */
 export const MAX_DEPTH = 8;
+/** Values in one tree at most, so a stored record cannot be huge before the schema's limits apply. */
+export const MAX_NODES = 100_000;
 const FORBIDDEN = new Set(['__proto__', 'constructor', 'prototype']);
 
 export type Result<T> =
@@ -38,7 +40,9 @@ export function utf8Bytes(text: string): number {
  */
 export function checkTree(value: unknown): string | undefined {
   const stack: { v: unknown; depth: number; path: string }[] = [{ v: value, depth: 0, path: '' }];
+  let nodes = 0;
   while (stack.length > 0) {
+    if (++nodes > MAX_NODES) return `The file has more than ${String(MAX_NODES)} values.`;
     const top = stack.pop();
     if (top === undefined) break;
     const { v, depth, path } = top;
@@ -57,7 +61,11 @@ export function checkTree(value: unknown): string | undefined {
       return `${where(path)}: not a plain object.`;
     for (const k of Object.keys(v)) {
       if (FORBIDDEN.has(k)) return `${where(path)}: the key ${k} is not allowed.`;
-      stack.push({ v: (v as Record<string, unknown>)[k], depth: depth + 1, path: `${path}.${k}` });
+      stack.push({
+        v: (v as Record<string, unknown>)[k],
+        depth: depth + 1,
+        path: `${path}.${k.slice(0, 40)}`,
+      });
     }
   }
   return undefined;
@@ -159,6 +167,21 @@ export const object =
       out[k] = r.value;
     }
     return ok(out as FromFields<F>);
+  };
+
+/** A list whose items are unique by one key. */
+export const uniqueBy =
+  <T>(list: Schema<T[]>, key: (item: T) => unknown, what: string): Schema<T[]> =>
+  (x, path) => {
+    const r = list(x, path);
+    if (!r.ok) return r;
+    const seen = new Set<unknown>();
+    for (const item of r.value) {
+      const k = key(item);
+      if (seen.has(k)) return fail(`${where(path)}: ${what} ${String(k)} appears twice.`);
+      seen.add(k);
+    }
+    return r;
   };
 
 /** A schema from a check function that returns a fresh value or a reason. */
