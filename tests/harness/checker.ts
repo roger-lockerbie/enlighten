@@ -48,20 +48,26 @@ export class TraceRecorder {
     }
   }
 
-  /** Sample every unit from the last recorded time to `to`. */
+  /**
+   * Sample every unit from the last recorded time to `to`. Every unit is sampled at every unit's
+   * breakpoints, so the room's sum adds outputs from the same moment. Summing one unit's fresh value
+   * with another's older one shows a step in the room that the light never made.
+   */
   record(to: number): void {
     if (to <= this.last) return;
+    const times = new Set<number>();
     for (const u of this.sim.all) {
-      const times = new Set<number>();
       for (const b of u.gear.breakpoints(this.last, to)) {
         if (b > this.last) times.add(b);
         if (b - 0.001 > this.last) times.add(b - 0.001);
       }
-      for (let t = this.last + 25; t < to; t += 25) times.add(t);
-      times.add(to);
+    }
+    for (let t = this.last + 25; t < to; t += 25) times.add(t);
+    times.add(to);
+    const sorted = [...times].filter((t) => t <= to).sort((a, b) => a - b);
+    for (const u of this.sim.all) {
       const list = this.points.get(u.id) ?? [];
-      for (const t of [...times].sort((a, b) => a - b))
-        list.push({ t, d: u.gear.outputAt(t).terminals });
+      for (const t of sorted) list.push({ t, d: u.gear.outputAt(t).terminals });
       this.points.set(u.id, list);
     }
     this.last = to;

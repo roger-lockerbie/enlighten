@@ -90,3 +90,100 @@ export class VirtualClock implements Clock {
     }
   }
 }
+
+/** What the real clock needs from its host. The bus worker passes `performance.now` and `setTimeout`. */
+export interface TimerHost {
+  now(): number;
+  setTimer(run: () => void, ms: number): unknown;
+  clearTimer(handle: unknown): void;
+}
+
+/**
+ * The real clock (ADR 0010). Timers are wake-ups only: when one fires, the clock reads the time and
+ * runs every task that is due, in order. Nothing counts ticks, so a late wake-up delays work and never
+ * distorts the time. One timer is armed at a time, for the earliest task.
+ */
+export class TimerClock implements Clock {
+  private readonly host: TimerHost;
+  private seq = 0;
+  private tasks: Task[] = [];
+  private handle: unknown;
+  private armedFor: number | undefined;
+  private running = false;
+  /** Called when a task throws, so one failure does not stop the tasks after it. */
+  onError: ((e: unknown) => void) | undefined;
+
+  constructor(host: TimerHost) {
+    this.host = host;
+  }
+
+  now(): number {
+    return this.host.now();
+  }
+
+  at(time: number, run: () => void): Cancel {
+    const task: Task = { time, seq: this.seq++, run, cancelled: false };
+    this.tasks.push(task);
+    this.tasks.sort((a, b) => a.time - b.time || a.seq - b.seq);
+    this.arm();
+    return () => {
+      if (task.cancelled) return;
+      task.cancelled = true;
+      this.tasks = this.tasks.filter((t) => t !== task);
+      this.arm();
+    };
+  }
+
+  /** Tasks still waiting. */
+  pending(): number {
+    return this.tasks.length;
+  }
+
+  private arm(): void {
+    if (this.running) return;
+    const next = this.tasks[0];
+    if (next === undefined) {
+      this.disarm();
+      return;
+    }
+    if (this.armedFor === next.time) return;
+    this.disarm();
+    this.armedFor = next.time;
+    this.handle = this.host.setTimer(
+      () => {
+        this.wake();
+      },
+      Math.max(0, next.time - this.host.now()),
+    );
+  }
+
+  private disarm(): void {
+    if (this.armedFor === undefined) return;
+    this.host.clearTimer(this.handle);
+    this.armedFor = undefined;
+    this.handle = undefined;
+  }
+
+  private wake(): void {
+    this.armedFor = undefined;
+    this.handle = undefined;
+    this.running = true;
+    try {
+      // A task may add tasks that are already due: they run in this wake-up too.
+      for (;;) {
+        const task = this.tasks[0];
+        if (task === undefined || task.time > this.host.now()) break;
+        this.tasks.shift();
+        if (task.cancelled) continue;
+        try {
+          task.run();
+        } catch (e) {
+          this.onError?.(e);
+        }
+      }
+    } finally {
+      this.running = false;
+    }
+    this.arm();
+  }
+}

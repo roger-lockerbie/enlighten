@@ -23,7 +23,14 @@ export default defineConfig({
     // src/safety. `pnpm coverage` runs the unit and property tests together against them.
     coverage: {
       provider: 'v8',
-      include: ['src/dali/**/*.ts', 'src/sim/**/*.ts', 'src/bus/**/*.ts', 'src/safety/**/*.ts'],
+      include: [
+        'src/dali/**/*.ts',
+        'src/sim/**/*.ts',
+        'src/bus/**/*.ts',
+        'src/safety/**/*.ts',
+        'src/engine/**/*.ts',
+        'src/transport/**/*.ts',
+      ],
       exclude: ['**/*.test.ts', '**/index.ts'],
       reporter: ['text-summary', 'text'],
       thresholds: {

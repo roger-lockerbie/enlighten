@@ -2,7 +2,7 @@
 
 Enlighten is a browser app for designing and testing DALI lighting on a two-tape test bench. It will run a simulator and a rendered hallway, drive the real tapes through a hasseb USB DALI Master, or do both at once.
 
-This is the Stage 0 baseline: the tooling, the security headers and the guards, with a placeholder page and no features yet. See `docs/BRIEF.md` for the goal and `docs/STAGES.md` for the build plan. `docs/STATUS.md` says where the build is up to.
+The build is in stages. Stage 4 has the DALI core, the simulator, the safety governor, the bus worker, and a small hardware server with a fake hasseb, behind an interim page. See `docs/BRIEF.md` for the goal and `docs/STAGES.md` for the build plan. `docs/STATUS.md` says where the build is up to.
 
 ## Run it
 
@@ -13,7 +13,21 @@ pnpm install --frozen-lockfile
 pnpm start
 ```
 
-`pnpm start` builds the site and serves it at http://127.0.0.1:47821 with the full security headers. The app is a static site with no backend. Hardware access will use WebHID, which needs Chrome, Edge or another Chromium browser on a desktop.
+`pnpm start` builds the site and serves it at http://127.0.0.1:47821 with the full security headers. That is the simulator alone, with no backend.
+
+## Hardware
+
+Hardware goes through a small Python server on the same address. It serves the built app and relays frames to the hasseb, and turns the lights off whenever the page goes away. Set it up once as `server/README.md` says, then:
+
+```bash
+pnpm build
+```
+
+```bash
+pnpm server
+```
+
+Open the address it prints. `pnpm server:demo` runs the same path with a fake hasseb and a fake bench, so it works with no hardware. Remote use is an SSH port forward, also in `server/README.md`. Keep a way to stop the server within reach of the bench.
 
 ## Commands
 

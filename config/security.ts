@@ -9,8 +9,11 @@ export const HOST = '127.0.0.1';
 
 export type Mode = 'strict' | 'dev';
 
-/** The one Trusted Types policy Svelte 5 creates, for its compiled static templates. */
-export const TRUSTED_TYPES_POLICY = 'svelte-trusted-html';
+/**
+ * The one Trusted Types policy (ADR 0002). It is made in `src/workers/policy.ts` and passes only the
+ * worker URLs fixed at build time. Svelte compiles with `fragments: 'tree'`, so it makes no policy.
+ */
+export const TRUSTED_TYPES_POLICY = 'enlighten-worker';
 
 /** Features turned off for every origin. */
 const DISABLED_FEATURES = [
@@ -18,8 +21,10 @@ const DISABLED_FEATURES = [
   'bluetooth',
   'camera',
   'display-capture',
+  'fullscreen',
   'geolocation',
   'gyroscope',
+  'hid',
   'magnetometer',
   'microphone',
   'midi',
@@ -30,17 +35,17 @@ const DISABLED_FEATURES = [
   'xr-spatial-tracking',
 ];
 
-/** Features the app uses, for its own origin only. */
-const SELF_FEATURES = ['hid', 'screen-wake-lock', 'fullscreen'];
+/**
+ * Features the app uses, for its own origin only. `hid` is off until a WebHID transport is built
+ * (ADR 0003), so no device grant can exist on the app's origin. `fullscreen` is off because element
+ * fullscreen would hide the Panic button and take Escape (SPEC S4.1).
+ */
+const SELF_FEATURES = ['screen-wake-lock'];
 
-/** The dev server is a separate origin, so it gets no device features at all. */
-export function permissionsPolicy(mode: Mode = 'strict'): string {
-  const off = (mode === 'dev' ? [...DISABLED_FEATURES, 'hid'] : DISABLED_FEATURES).map(
-    (f) => `${f}=()`,
-  );
-  const self = (mode === 'dev' ? SELF_FEATURES.filter((f) => f !== 'hid') : SELF_FEATURES).map(
-    (f) => `${f}=(self)`,
-  );
+/** The same for the dev server and for production: neither origin gets device features. */
+export function permissionsPolicy(): string {
+  const off = DISABLED_FEATURES.map((f) => `${f}=()`);
+  const self = SELF_FEATURES.map((f) => `${f}=(self)`);
   return [...off, ...self].join(', ');
 }
 
@@ -81,7 +86,7 @@ export function securityHeaders(mode: Mode): Record<string, string> {
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Cross-Origin-Resource-Policy': 'same-origin',
-    'Permissions-Policy': permissionsPolicy(mode),
+    'Permissions-Policy': permissionsPolicy(),
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
@@ -95,4 +100,12 @@ export function metaFallbackTags(): string[] {
     `<meta http-equiv="Content-Security-Policy" content="${cspDirectives('strict', { forMeta: true })}" />`,
     '<meta name="referrer" content="no-referrer" />',
   ];
+}
+
+/**
+ * The header set the hardware server sends, as JSON. The build writes it to dist/headers.json, so the
+ * server and `vite preview` send the same headers from one source (ADR 0003).
+ */
+export function serverHeadersJson(): string {
+  return `${JSON.stringify(securityHeaders('strict'), null, 2)}\n`;
 }

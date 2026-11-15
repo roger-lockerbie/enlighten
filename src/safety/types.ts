@@ -37,6 +37,8 @@ declare const approvedBrand: unique symbol;
 export interface Approved {
   readonly [approvedBrand]: true;
   readonly tx: Transaction;
+  /** The time `judge` was asked about. The router refuses an approval used long after it (S3-M1). */
+  readonly issuedAt: number;
 }
 
 export type Verdict =

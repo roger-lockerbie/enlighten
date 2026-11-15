@@ -57,6 +57,8 @@ export type TxResult =
 /** The longest panic waits for a frame already on the wire: a send-twice pair with its reply window. */
 export const PANIC_WAIT_MS = 100;
 
+const CLOSED_REASON = 'The connection was replaced.';
+
 /** Panic's transaction: TERMINATE, then broadcast OFF (SPEC S4.3). */
 export const PANIC_FRAMES: readonly TxFrame[] = framesForAll([
   { id: 'TERMINATE' },
@@ -86,6 +88,8 @@ export interface SchedulerOptions {
   readonly timing?: Partial<BusTiming>;
   /** Called with each frame once it is done. */
   readonly onFrame?: (r: BusRecord) => void;
+  /** Called as each approved frame is handed to the sink, before its result. */
+  readonly onStart?: (frame: TxFrame, source: Source) => void;
 }
 
 export class Scheduler {
@@ -94,6 +98,7 @@ export class Scheduler {
   private readonly gate: Gate;
   readonly timing: BusTiming;
   private readonly onFrame: ((r: BusRecord) => void) | undefined;
+  private readonly onStart: ((frame: TxFrame, source: Source) => void) | undefined;
   private readonly interactive: Queued[] = [];
   private readonly background: Queued[] = [];
   private busy = false;
@@ -108,6 +113,8 @@ export class Scheduler {
   /** The frame on the wire, if any. Panic waits for it and nothing else. */
   private inFlight: Promise<unknown> | undefined;
   private readonly busyLog: { from: number; to: number }[] = [];
+  /** Set by `close`: the connection was replaced, and nothing more goes out from here. */
+  private closed = false;
 
   constructor(o: SchedulerOptions) {
     this.clock = o.clock;
@@ -115,6 +122,7 @@ export class Scheduler {
     this.gate = o.gate;
     this.timing = withFloors(o.timing ?? DEFAULT_TIMING);
     this.onFrame = o.onFrame;
+    this.onStart = o.onStart;
   }
 
   get queued(): number {
@@ -123,6 +131,8 @@ export class Scheduler {
 
   /** Queue a transaction. It is judged when it reaches the head of the queue. */
   submit(tx: Transaction, priority: Priority = 'interactive'): Promise<TxResult> {
+    if (this.closed)
+      return Promise.resolve({ kind: 'dropped', reason: CLOSED_REASON, results: [] });
     return new Promise((resolve) => {
       if (priority === 'urgent') this.interactive.unshift({ tx, resolve });
       else (priority === 'interactive' ? this.interactive : this.background).push({ tx, resolve });
@@ -146,7 +156,7 @@ export class Scheduler {
   }
 
   private pump(): void {
-    if (this.busy || this.panicking !== undefined) return;
+    if (this.busy || this.panicking !== undefined || this.closed) return;
     const next = this.interactive.shift() ?? this.background.shift();
     if (next === undefined) return;
     this.busy = true;
@@ -202,12 +212,14 @@ export class Scheduler {
       const go = await this.waitUntil(
         Math.max(at.wireStart, this.freeAt + settleMs(f, k === 0, this.timing)),
       );
-      if (!go || this.panics !== epoch) {
-        q.resolve({ kind: 'dropped', reason: 'Panic dropped this transaction.', results });
+      if (!go || this.panics !== epoch || this.closed) {
+        const reason = this.closed ? CLOSED_REASON : 'Panic dropped this transaction.';
+        q.resolve({ kind: 'dropped', reason, results });
         return;
       }
       const wireStart = this.clock.now();
       const sending = this.sink.send(f, verdict.approval);
+      this.onStart?.(f, tx.source);
       this.inFlight = sending;
       const result = await sending;
       this.inFlight = undefined;
@@ -230,6 +242,26 @@ export class Scheduler {
       results,
       ...(verdict.kind === 'clamp' ? { note: verdict.note } : {}),
     });
+  }
+
+  /**
+   * Close the scheduler when its connection is replaced (ADR 0012): drop everything queued, stop the
+   * transaction in progress at its next frame, and refuse new work. The frame on the wire finishes.
+   * Panic is not sent from here: the connection that replaces this one has its own.
+   */
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.panics++;
+    this.wake?.();
+    this.current?.abort();
+    for (const q of [...this.interactive.splice(0), ...this.background.splice(0)]) {
+      q.resolve({ kind: 'dropped', reason: CLOSED_REASON, results: [] });
+    }
+  }
+
+  get isClosed(): boolean {
+    return this.closed;
   }
 
   /**

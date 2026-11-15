@@ -116,8 +116,8 @@ interface Transport {
   state(): 'down' | 'connecting' | 'ready' | 'fault';
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  send(frame: Frame, flags: { sendTwice: boolean; expectReply: boolean }): Promise<SendResult>;
-  panic(): Promise<void>;
+  send(frame: TxFrame): Promise<SendResult>; // the TxFrame carries send-twice and reply flags
+  sendPanic(frame: TxFrame): Promise<SendResult>; // TERMINATE, then broadcast OFF
 }
 type SendResult =
   | { kind: 'sent' }
@@ -128,7 +128,7 @@ type SendResult =
   | { kind: 'refused'; reason: string };
 ```
 
-`SimTransport` wraps the simulator and takes as long as the real bus would. `ServerTransport` speaks the protocol in `docs/SPEC.md` section 9. `webhid` is reserved (ADR 0003). No transport retries by itself. Only `src/engine/router.ts` calls `send`, and it needs an `Approved` value that only the governor's `judge` creates. The worker shell constructs transports and passes them to the router.
+`SimTransport` wraps the simulator and takes as long as the real bus would. `ServerTransport` speaks the protocol in `docs/SPEC.md` section 9 over a socket the worker shell opens, and sends one PANIC message for panic's two frames. `webhid` is reserved (ADR 0003). No transport retries by itself. Only `src/engine/router.ts` calls `send`, and it needs an `Approved` value that only the governor's `judge` creates, used once per frame, in order, in time (ADR 0012). The worker shell constructs transports and passes them to the engine, which gives each connection its own router.
 
 ### `Router`
 
@@ -191,14 +191,18 @@ After the router, every frame that was sent reaches `observe`, the shadow, the b
 
 ## 4. The hardware server
 
-`server/` is a Python package of four small modules:
+`server/` is a Python package of small modules (ADR 0012):
 
-| Module     | Job                                                                                                                           |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `__main__` | Arguments (the `dist` path, nothing network-related), token, start, and the stop on exit                                      |
-| `http`     | Host check, static files from `dist/` with a fixed list of types, the security headers, and the upgrade with its Origin check |
-| `session`  | One client, the token, the message parser, the queue of at most 8, the 3 second timer, and the stop                           |
-| `hasseb`   | Opens 04CC:0802 through hidapi, builds 10-byte reports, matches sequence numbers, times out, drops idle reports               |
+| Module     | Job                                                                                                                                     |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `__main__` | Arguments (the `dist` path and demo options, nothing network-related), the URL token, the terminal, and the stop on each signal         |
+| `app`      | The one way the server is built: 127.0.0.1 only, compression off, 64-byte messages                                                      |
+| `web`      | Host check, GET only, static files from `dist/` with a fixed list of types, the security headers, and the upgrade with its Origin check |
+| `session`  | One client, the tokens, the queue of at most 8, the 3 second timer, and the stop                                                        |
+| `protocol` | The SPEC section 9 messages                                                                                                             |
+| `frames`   | python-dali decoding, with the previous frame as device type context                                                                    |
+| `hasseb`   | Opens 04CC:0802 through hidapi, builds 10-byte reports, matches sequence numbers, times out, drops idle reports, notices an unplug      |
+| `fake`     | A fake hasseb and bench, for CI and `--demo`                                                                                            |
 
 python-dali decodes each frame, so the server knows by itself whether to send twice and whether to wait for a reply. The header values come from a JSON file that `config/security.ts` writes at build time, and a test checks the two match. The server refuses to start without it, and sends the headers on every response, worker scripts included, because a worker takes its CSP from its own response.
 
@@ -225,13 +229,14 @@ src/
   sim/             GearModel, Da5l, Simulator                       pure
   bus/             Scheduler, timing                                pure
   safety/          Governor, rate guard, safety profile, panic      pure
-  engine/          Engine, router, runners, coalescer, protocol     pure
+  engine/          Engine, router, runners, coalescer, protocol,    pure
+                   inventory, divergence, commissioning, hardware check
   console/         line editor, history, parser, completion         pure
   script/          script parser                                    pure
   switch/          part 301 event machine, presets                  pure
   light/           radiosity, direct term, emitters, colour         pure
   store/           validators, migrations, Store interface          pure, plus an IndexedDB adapter
-  transport/       SimTransport, ServerTransport                    ServerTransport uses WebSocket
+  transport/       SimTransport, ServerTransport, wire codec        pure: the worker passes the WebSocket
   workers/         bus worker and light worker shells, the Trusted Types policy
   ui/              Svelte components, stores, design tokens, the three.js renderer
 tests/             cross-module tests, lint tests, golden fixtures
