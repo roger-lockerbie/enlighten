@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arcToFraction, percentToArcFloor, percentToArcNearest } from './curve.ts';
+import { arcToFraction, percentText, percentToArcFloor, percentToArcNearest } from './curve.ts';
 import { extendedFadeMs, extendedFades, fadeInUse, fadeTimeMs, standardFades } from './fade.ts';
 
 describe('percentToArcNearest', () => {
@@ -22,6 +22,19 @@ describe('percentToArcNearest', () => {
       expect(percentToArcNearest(pct * 1.001)).toBeGreaterThanOrEqual(percentToArcFloor(pct));
     }
     expect(percentToArcNearest(10.1)).toBe(170);
+  });
+});
+
+describe('percentText', () => {
+  it('gives one decimal and drops a trailing .0', () => {
+    expect([0, 1, 148, 170, 220, 254].map(percentText)).toEqual([
+      '0',
+      '0.1',
+      '5.5',
+      '10.1',
+      '39.5',
+      '100',
+    ]);
   });
 });
 

@@ -1,13 +1,12 @@
 /** Text for the page. Every value from the engine reaches the page as text through Svelte. */
-import { arcToFraction } from '../dali/curve.ts';
+import { percentText } from '../dali/curve.ts';
 import { mirekToKelvin } from '../dali/sequences.ts';
 import type { Connection, OutputTarget } from '../engine/engine.ts';
 import type { DriveMode } from '../engine/inventory.ts';
 
 /** Output % for an arc level, as the top bar shows it. */
 export function percent(arc: number): string {
-  const p = arcToFraction(arc) * 100;
-  return p >= 10 ? p.toFixed(0) : p.toFixed(1);
+  return percentText(arc);
 }
 
 export function ceilingText(arc: number): string {

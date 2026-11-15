@@ -35,3 +35,9 @@ export function percentToArcNearest(percent: number): number {
   const exact = 1 + (253 / 3) * (Math.log10(percent) + 1);
   return Math.max(1, Math.min(254, Math.round(exact)));
 }
+
+/** An arc level's output as text: one decimal, without a trailing ".0", as in "39.5" or "100". */
+export function percentText(arc: number): string {
+  const p = Math.round(arcToFraction(arc) * 1000) / 10;
+  return Number.isInteger(p) ? p.toFixed(0) : p.toFixed(1);
+}
