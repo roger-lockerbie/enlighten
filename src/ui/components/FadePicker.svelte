@@ -12,6 +12,7 @@
     fadeTime,
     extendedFade,
     fastFade = 0,
+    fast27Ms,
     onchange,
     disabled = false,
     testid,
@@ -19,6 +20,8 @@
     fadeTime: number;
     extendedFade: number;
     fastFade?: number;
+    /** What a fast fade count of 27 means for this driver. */
+    fast27Ms?: number | undefined;
     onchange: (f: FadeSetting) => void;
     disabled?: boolean;
     testid?: string | undefined;
@@ -34,7 +37,11 @@
         ? `e:${String(extendedFade)}`
         : 'none',
   );
-  const inUse = $derived(fadeInUse(fadeTime, extendedFade, fastFade));
+  const inUse = $derived(
+    fast27Ms === undefined
+      ? fadeInUse(fadeTime, extendedFade, fastFade)
+      : fadeInUse(fadeTime, extendedFade, fastFade, fast27Ms),
+  );
 
   function choose(v: string): void {
     if (v === 'none') onchange({ kind: 'extended', value: 0 });

@@ -7,13 +7,19 @@ import { describe, expect, it } from 'vitest';
 import { flushMicrotasks, VirtualClock } from '../bus/clock.ts';
 import { withFloors } from '../bus/timing.ts';
 import { decode, type Frame } from '../dali/codec.ts';
+import { unitProfile } from '../sim/settings.ts';
 import { Simulator } from '../sim/simulator.ts';
 import { SimTransport } from '../transport/sim.ts';
 import { Engine, type Snapshot } from './engine.ts';
 
-function setup(o: { ceilingArc?: number } = {}) {
+function setup(o: { ceilingArc?: number; autoActivation?: boolean } = {}) {
   const clock = new VirtualClock(1000);
-  const sim = Simulator.bench({ at: 1000 });
+  const sim = Simulator.bench({
+    at: 1000,
+    ...(o.autoActivation === false
+      ? { a: unitProfile('A', { presentation: 'tc', settings: { autoActivation: false } }) }
+      : {}),
+  });
   const simTransport = new SimTransport(sim, clock, withFloors({}), { keepLog: true });
   const engine = new Engine({
     clock,
@@ -280,6 +286,30 @@ describe('Apply in Commit mode', () => {
     engine.dispose();
   });
 
+  it('activates the colour before the level when the driver does not report automatic activation', async () => {
+    const { engine, settle, drive, idle, simTransport, heard, sim } = setup({
+      autoActivation: false,
+    });
+    await settle();
+    await idle();
+    expect(
+      ((engine.snapshot().devices.find((d) => d.address === 0)?.facts?.gearFeatures ?? 0) & 1) ===
+        1,
+    ).toBe(false);
+    const from = simTransport.log.length;
+    const applied = await drive(
+      engine.request({ kind: 'apply', address: 0, mirek: 200, arc: 150 }, 'ui'),
+    );
+    expect(applied.ok ? 'ok' : applied.reason).toBe('ok');
+    const ids = heard(from);
+    expect(ids.indexOf('DT8_ACTIVATE')).toBeGreaterThan(-1);
+    expect(ids.indexOf('DT8_ACTIVATE')).toBeLessThan(ids.indexOf('DAPC'));
+    await idle(5000);
+    expect(sim.unit('A')?.gear.colourAt(1e12).tc).toBe(200);
+    expect(sim.unit('A')?.gear.levelAt(1e12)).toBe(150);
+    engine.dispose();
+  });
+
   it('refuses what it cannot apply', async () => {
     const { engine, settle, drive, idle } = setup();
     await settle();
@@ -374,14 +404,22 @@ describe('start and set-up', () => {
     await idle();
     expect(sim.unit('B')?.gear.levelAt(1e12)).toBeGreaterThan(0);
     expect(engine.snapshot().bench.map((b) => b.setup.presentation)).toEqual(['tc', 'rgbwaf']);
-    expect(engine.setBench({ B: { presentation: 'tc', settings: {} } }, 'script')).toEqual({
+    expect(
+      await drive(engine.setBench({ B: { presentation: 'tc', settings: {} } }, 'script')),
+    ).toEqual({
       ok: false,
       reason: 'Only a person changes the simulator settings.',
     });
-    expect(engine.setBench({}, 'ui')).toEqual({ ok: false, reason: 'Nothing to change.' });
-    const r = engine.setBench(
-      { B: { presentation: 'tc', settings: { maxLowerPullsDown: false } } },
-      'ui',
+    expect(await drive(engine.setBench({}, 'ui'))).toEqual({
+      ok: false,
+      reason: 'Nothing to change.',
+    });
+    const tooHigh = await drive(
+      engine.setBench({ B: { presentation: 'tc', settings: { physicalMinimum: 230 } } }, 'ui'),
+    );
+    expect(tooHigh.ok ? '' : tooHigh.reason).toContain('raise the ceiling to at least arc 230');
+    const r = await drive(
+      engine.setBench({ B: { presentation: 'tc', settings: { maxLowerPullsDown: false } } }, 'ui'),
     );
     expect(r.ok).toBe(true);
     expect(sim.unit('B')?.gear.levelAt(1e12)).toBe(0);
@@ -399,6 +437,64 @@ describe('start and set-up', () => {
     await drive(engine.request({ kind: 'apply', address: 1, arc: 254 }, 'ui'));
     await idle();
     expect(sim.unit('B')?.gear.levelAt(1e12)).toBeLessThanOrEqual(220);
+    engine.dispose();
+  });
+
+  it('cannot be used to flash the bench: each lit unit is turned off through the governor first, and the bench waits 2 s after a rebuild', async () => {
+    const { engine, settle, drive, idle, sim, clock } = setup();
+    await settle();
+    await idle();
+    const t0 = clock.now();
+    const changes: number[] = [];
+    let last = 0;
+    const watch = () => {
+      const l = sim.unit('A')?.gear.levelAt(clock.now()) ?? 0;
+      if (l > 0 !== last > 0) changes.push(Math.round(clock.now() - t0));
+      last = l;
+      if (clock.now() - t0 < 8000) clock.at(clock.now() + 5, watch);
+    };
+    watch();
+    // As the DALI review did: on, then a settings change 150 ms later, four times over.
+    for (let k = 0; k < 4; k++) {
+      await drive(engine.request({ kind: 'apply', address: 0, arc: 220 }, 'ui'));
+      await clock.advance(150);
+      await drive(
+        engine.setBench(
+          { A: { presentation: 'tc', settings: { minRaiseLifts: k % 2 === 0 ? false : true } } },
+          'ui',
+        ),
+      );
+      await clock.advance(100);
+    }
+    await clock.advance(8000);
+    // Every change of the light, on or off, is at least the hard step window apart (SPEC S3.3).
+    expect(changes.length).toBeGreaterThan(1);
+    for (let i = 1; i < changes.length; i++)
+      expect((changes[i] ?? 0) - (changes[i - 1] ?? 0)).toBeGreaterThanOrEqual(1990);
+    engine.dispose();
+  });
+
+  it('refuses commands and Apply with a retry time while the rebuilt bench waits', async () => {
+    const { engine, settle, drive, idle } = setup();
+    await settle();
+    await idle();
+    expect(
+      (await drive(engine.setBench({ A: { presentation: 'rgbwaf', settings: {} } }, 'ui'))).ok,
+    ).toBe(true);
+    const r = await drive(engine.request({ kind: 'apply', address: 1, arc: 100 }, 'ui'));
+    expect(r.ok ? '' : r.reason).toContain('just rebuilt');
+    expect(r.ok ? 0 : (r.retryAt ?? 0)).toBeGreaterThan(0);
+    // A query still goes out.
+    const q = await drive(
+      engine.request(
+        {
+          kind: 'commands',
+          commands: [{ id: 'QUERY_ACTUAL_LEVEL', address: { kind: 'short', n: 1 } }],
+        },
+        'ui',
+      ),
+    );
+    expect(q.ok).toBe(true);
     engine.dispose();
   });
 });

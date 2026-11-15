@@ -110,6 +110,10 @@ export function parseSettings(input: unknown): Partial<Da5lSettings> | string {
     if (!settingAllowed(key, value)) return `The setting ${key.slice(0, 40)} has no such value.`;
     if (DEFAULT_SETTINGS[key as keyof Da5lSettings] !== value) out[key] = value;
   }
+  // Gear built with its factory MAX LEVEL under its physical minimum has no level it can hold.
+  const min = (out['physicalMinimum'] as number | undefined) ?? DEFAULT_SETTINGS.physicalMinimum;
+  const max = (out['factoryMaxLevel'] as number | undefined) ?? DEFAULT_SETTINGS.factoryMaxLevel;
+  if (max < min) return 'The factory MAX LEVEL is below the physical minimum.';
   return out;
 }
 

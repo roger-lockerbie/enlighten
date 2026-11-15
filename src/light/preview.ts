@@ -1,8 +1,8 @@
 /**
  * The bench preview's colour (SPEC R13.6): a 2D estimate of what a tape shows, from the drive on
  * each terminal. Placeholder data, labelled "estimated" in the UI. Each terminal kind has an assumed
- * colour in linear sRGB, scaled so its luminance matches `LUMINANCE_WEIGHT`, and every terminal is
- * assumed to give the same flux at full drive. Stage 7 replaces this with ADR 0008's XYZ path.
+ * colour in linear sRGB, scaled so its luminance matches `LUMINANCE_WEIGHT`: each white gives a
+ * luminance of 1 at full drive, and red, green and blue together give the same as one white. Stage 7 replaces this with ADR 0008's XYZ path.
  */
 import type { Terminal } from '../sim/profile.ts';
 import { LUMINANCE_WEIGHT } from '../sim/profile.ts';

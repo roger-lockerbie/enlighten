@@ -43,6 +43,17 @@ describe('the editable simulator settings', () => {
     expect(parseSettings(JSON.parse('{"__proto__": {"a": 1}}'))).toMatch(/no such value/);
   });
 
+  it('refuses a factory MAX LEVEL below the physical minimum', () => {
+    expect(parseSettings({ physicalMinimum: 100, factoryMaxLevel: 90 })).toBe(
+      'The factory MAX LEVEL is below the physical minimum.',
+    );
+    expect(parseSettings({ factoryMaxLevel: 50 })).toMatch(/below the physical minimum/);
+    expect(parseSettings({ physicalMinimum: 50, factoryMaxLevel: 50 })).toEqual({
+      physicalMinimum: 50,
+      factoryMaxLevel: 50,
+    });
+  });
+
   it('checks a unit set-up', () => {
     expect(parseUnitSetup({ presentation: 'rgbwaf' })).toEqual({
       presentation: 'rgbwaf',

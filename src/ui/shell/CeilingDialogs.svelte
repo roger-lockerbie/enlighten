@@ -13,12 +13,13 @@
   let { app }: { app: AppState } = $props();
 
   const current = $derived(app.snap?.ceilingArc ?? app.prefs.ceilingArc);
-  let percentValue = $state(40);
-  const arc = $derived(Math.max(1, percentToArcFloor(percentValue)));
+  // The dialog holds an arc level. A typed % becomes the arc level it rounds down to. The present
+  // ceiling is shown as its own arc level, so opening and closing never moves it (DALI review S5-D5).
+  let arc = $state(220);
 
   $effect(() => {
     if (app.ceilingOpen) {
-      percentValue = Number(percentText(current));
+      arc = current;
       app.ceilingMessage = '';
     }
   });
@@ -52,14 +53,14 @@
     <div class="row">
       <NumberField
         label="New ceiling"
-        value={percentValue}
+        value={Number(percentText(arc))}
         min={0.1}
         max={100}
         step={0.5}
         decimals={1}
         unit="%"
         onchange={(v: number) => {
-          percentValue = v;
+          arc = Math.max(1, percentToArcFloor(v));
         }}
         testid="ceiling-percent"
       />

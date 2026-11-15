@@ -71,7 +71,13 @@ const settingsArb = fc
       ),
     ),
   )
-  .map((pairs) => Object.fromEntries(pairs));
+  .map((pairs) => Object.fromEntries(pairs) as Record<string, unknown>)
+  // A factory MAX LEVEL under the physical minimum is refused on its own.
+  .filter(
+    (o) =>
+      ((o['factoryMaxLevel'] as number | undefined) ?? 254) >=
+      ((o['physicalMinimum'] as number | undefined) ?? 85),
+  );
 
 const validContent = fc.record(
   {

@@ -48,8 +48,8 @@
     </div>
   {/each}
   <p class="muted small">
-    An estimate: placeholder tape colours, every channel assumed to give the same light at full, on
-    a scale shared by both tapes.
+    An estimate: placeholder tape colours, each white channel assumed to give as much light as red,
+    green and blue together, on a scale shared by both tapes.
   </p>
 </section>
 

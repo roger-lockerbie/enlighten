@@ -55,7 +55,8 @@ import {
 } from './hwcheck.ts';
 import { readFacts, type DriverFacts } from './inventory.ts';
 import { Router } from './router.ts';
-import { StepError, toSubmitted, txOf } from './submit.ts';
+import { send, StepError, toSubmitted, txOf } from './submit.ts';
+import { HARD_WINDOW_MS } from '../safety/rate/guard.ts';
 import type { HardwareTransport, Transport } from './transport.ts';
 
 export type OutputTarget = 'simulator' | 'hardware' | 'both';
@@ -149,6 +150,8 @@ export interface LightView {
   readonly fadeTime: number;
   readonly extendedFade: number;
   readonly fastFade: number;
+  /** What a fast fade count of 27 means for this gear, in ms. */
+  readonly fast27Ms: number;
   readonly fading: boolean;
   /** Drive on each output terminal, 0 to 1, and what each carries. */
   readonly terminals: readonly number[];
@@ -241,6 +244,9 @@ type LiveValue = (
   | { readonly kind: 'rgbwaf'; readonly channels: Channels }
 ) & { readonly address: number; readonly source: Source };
 
+/** How much sooner than the gear's 200 ms the engine starts a new DAPC sequence. */
+const SEQUENCE_MARGIN_MS = 100;
+
 /** A visible page sends a heartbeat every second. Three seconds without one stops runners (SPEC S4.6). */
 export const HEARTBEAT_LIMIT_MS = 3000;
 /** The background check in Both: at most one query a second, when the bus is idle (SPEC R1.5). */
@@ -253,6 +259,21 @@ const DIVERGENCES = 200;
 const NOTICES = 20;
 
 const OK: Outcome = { ok: true };
+
+/** A request that only asks: every command expects a reply, so none changes the light. */
+function queriesOnly(intent: Intent): boolean {
+  if (intent.kind === 'commands')
+    return intent.commands.every((c) => {
+      try {
+        return spec(c.id).reply !== 'none';
+      } catch {
+        return false;
+      }
+    });
+  if (intent.kind === 'raw')
+    return (decodeSpec({ a: intent.a & 0xff, b: intent.b & 0xff })?.reply ?? 'none') !== 'none';
+  return false;
+}
 
 function checkChannels(ch: readonly number[]): string | undefined {
   if (ch.length !== 6 || ch.some((v) => !Number.isInteger(v) || v < 0 || v > 255))
@@ -332,6 +353,8 @@ export class Engine {
   /** When each address last took a live DAPC, for the DAPC sequence. */
   private readonly lastLiveDapc = new Map<number, number>();
   private monitorSeq = 0;
+  /** After the bench is rebuilt, light changes on it wait until this time. */
+  private benchHoldUntil = -Infinity;
   private benchSetup: Readonly<Record<BenchUnit, UnitSetup>>;
   private readonly divergences: Divergence[] = [];
   private readonly monitor: MonitorLine[] = [];
@@ -885,6 +908,16 @@ export class Engine {
   async request(intent: Intent, source: Source): Promise<RequestResult> {
     const conn = this.active();
     if (conn === undefined) return { ok: false, reason: 'Hardware: disconnected.' };
+    if (!queriesOnly(intent)) {
+      const held = this.benchHeld(conn);
+      if (
+        held !== undefined &&
+        intent.kind !== 'level' &&
+        intent.kind !== 'tc' &&
+        intent.kind !== 'rgbwaf'
+      )
+        return held;
+    }
     switch (intent.kind) {
       case 'level':
         if (!Number.isInteger(intent.address) || intent.address < 0 || intent.address > 63)
@@ -1001,7 +1034,12 @@ export class Engine {
     }
     if (i.mirek !== undefined && i.channels !== undefined)
       return 'Apply a colour temperature or channels, not both.';
-    const activate = i.arc === undefined;
+    // The DAPC brings a loaded colour in only if the gear reports automatic activation (gear features
+    // bit 0, dali.md section 11). Otherwise, or if it was not read, the colour is activated before the
+    // level: from off that changes nothing visible, and the level then comes up in the new colour
+    // (DALI review S5-D3).
+    const auto = ((conn.facts.get(n)?.gearFeatures ?? 0) & 1) === 1;
+    const activate = i.arc === undefined || !auto;
     if (i.mirek !== undefined) {
       const bad = this.checkColour(conn, n, 'tc');
       if (bad !== undefined) return bad;
@@ -1025,6 +1063,11 @@ export class Engine {
   private async sendLive(key: string, v: LiveValue): Promise<CoalescedResult> {
     const conn = this.active();
     if (conn === undefined) return { ok: false };
+    const held = this.benchHeld(conn);
+    if (held !== undefined && !held.ok) {
+      this.setFeedback(key, this.clock.now(), 'waiting', `Waiting: ${held.reason}`);
+      return held.retryAt === undefined ? { ok: false } : { ok: false, retryAt: held.retryAt };
+    }
     const a = short(v.address);
     const now = this.clock.now();
     let cmds: Command[];
@@ -1033,7 +1076,13 @@ export class Engine {
       case 'level':
         cmds = [];
         // A moving control keeps a DAPC sequence going: the gear fades over 200 ms between them.
-        if (v.live && now - (this.lastLiveDapc.get(v.address) ?? -Infinity) > DAPC_SEQUENCE_MS)
+        // The time is taken when the last DAPC finished, which is later than the gear heard it, so a
+        // margin keeps a sequence going only while it surely is (DALI review S5-D4).
+        if (
+          v.live &&
+          now - (this.lastLiveDapc.get(v.address) ?? -Infinity) >
+            DAPC_SEQUENCE_MS - SEQUENCE_MARGIN_MS
+        )
           cmds.push({ id: 'ENABLE_DAPC_SEQUENCE', address: a });
         cmds.push({ id: 'DAPC', address: a, value: v.arc });
         label = 'level';
@@ -1092,12 +1141,38 @@ export class Engine {
    * starts off, the simulator's governor starts afresh, and the bench is scanned and given its
    * profile again. Nothing here reaches the hardware connection.
    */
-  setBench(setup: Partial<Record<BenchUnit, UnitSetup>>, source: Source): Outcome {
+  async setBench(setup: Partial<Record<BenchUnit, UnitSetup>>, source: Source): Promise<Outcome> {
     if (!isPerson(source)) return no('Only a person changes the simulator settings.');
     if (setup.A === undefined && setup.B === undefined) return no('Nothing to change.');
     if (this.target === 'simulator') this.stopRunners('The simulator settings changed.');
+    const units = (['A', 'B'] as const).filter((u) => setup[u] !== undefined);
+    for (const u of units) {
+      const min = setup[u]?.settings.physicalMinimum;
+      if (min !== undefined && min > this.ceiling)
+        return no(
+          `Unit ${u} could not go as low as the ceiling (arc ${String(this.ceiling)}) with a physical minimum of ${String(min)}. Lower the physical minimum, or raise the ceiling to at least arc ${String(min)} first.`,
+        );
+    }
+    // The rate guard reads each unit's history from its gear, and new gear has none. So each lit
+    // unit is first turned off through the governor, which judges that step and makes it wait if it
+    // must (DALI review S5-D1). Nothing about the light is then changed by the rebuild itself.
+    const off = await this.runJob(
+      this.simConn,
+      'settings',
+      'Simulator settings',
+      async (_job, submit) => {
+        for (const u of units) {
+          const g = this.sim.unit(u)?.gear;
+          const n = g?.shortAddress;
+          if (g === undefined || n === null || n === undefined) continue;
+          if (g.finalLevel() <= 0 && g.levelAt(this.clock.now()) <= 0) continue;
+          await send(submit, [{ id: 'OFF', address: short(n) }], source, 'off before the rebuild');
+        }
+      },
+    );
+    if (!off.ok) return no(`The simulated units could not be turned off first: ${off.reason}`);
     const now = this.clock.now();
-    for (const unit of ['A', 'B'] as const) {
+    for (const unit of units) {
       const next = setup[unit];
       if (next === undefined) continue;
       const old = this.sim.unit(unit)?.gear;
@@ -1109,15 +1184,27 @@ export class Engine {
       this.sim.replace({ id: unit, gear }, (u) => u.id === unit);
       this.benchSetup = { ...this.benchSetup, [unit]: next };
     }
-    // The simulated connection keeps its governor, so the rate guard's history carries over and a
-    // settings change cannot be used to start a swing early (security review S5-L5). The governor
-    // reads the new gear through its shadow, and the scan and profile verify it again.
+    // The new gear has no history for the rate guard, so light changes on the simulated bench wait
+    // for the hard step window to pass (SPEC S3.3). The simulated connection keeps its governor and
+    // scheduler, so no second frame can share the simulated bus with one already on it.
+    this.benchHoldUntil = now + HARD_WINDOW_MS;
+    this.lastLiveDapc.clear();
     this.simConn.facts.clear();
     this.simConn.profiles.clear();
     if (this.target === 'simulator') this.feedback.clear();
     this.emit();
     void this.inventory(this.simConn);
     return OK;
+  }
+
+  /** While the simulated bench is held after a rebuild, refuse light changes with a retry time. */
+  private benchHeld(conn: Conn): RequestResult | undefined {
+    if (conn !== this.simConn || this.clock.now() >= this.benchHoldUntil) return undefined;
+    return {
+      ok: false,
+      reason: 'The simulated bench was just rebuilt. Light changes wait 2 s.',
+      retryAt: this.benchHoldUntil,
+    };
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -1377,6 +1464,7 @@ export class Engine {
         fadeTime: st.fadeTime,
         extendedFade: st.extendedFade,
         fastFade: st.fastFade,
+        fast27Ms: u.gear.profile.settings.fastFade27Ms,
         fading: u.gear.settlesAt() > now,
         terminals: [...drive.terminals],
         labels: [...drive.labels],

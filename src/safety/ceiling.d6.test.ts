@@ -14,7 +14,11 @@ import { asSubmit, makeBench, type Bench } from '../../tests/harness/bench.ts';
 import { lowerCeiling } from './ceiling.ts';
 import type { Submit } from './profile.ts';
 
-async function litBench(target: 'hardware' | 'simulator', pulls: boolean): Promise<Bench> {
+async function litBench(
+  target: 'hardware' | 'simulator',
+  pulls: boolean,
+  fadeTime = 0,
+): Promise<Bench> {
   const sim = Simulator.of([
     { id: 'A', profile: benchA({ maxLowerPullsDown: pulls }), opts: { shortAddress: 0 } },
     { id: 'B', profile: benchB({ maxLowerPullsDown: pulls }), opts: { shortAddress: 1 } },
@@ -22,6 +26,17 @@ async function litBench(target: 'hardware' | 'simulator', pulls: boolean): Promi
   const b = makeBench({ target, sim });
   await b.ready();
   await b.clock.advance(3000);
+  if (fadeTime > 0)
+    for (const n of [0, 1]) {
+      const f = await b.run({
+        frames: framesForAll([
+          { id: 'DTR0', value: fadeTime },
+          { id: 'SET_FADE_TIME', address: short(n) },
+        ]),
+        source: 'ui',
+      });
+      expect(f.kind).toBe('done');
+    }
   for (const n of [0, 1]) {
     const lit = await b.run({
       frames: framesForAll([{ id: 'DAPC', address: short(n), value: 200 }]),
@@ -73,8 +88,8 @@ describe('lowering the ceiling turns lit gear down before the MAX LEVEL writes (
   for (const pulls of [true, false]) {
     it(`on hardware with colour unknown, one driver at once and the next a second later (pull-down ${String(pulls)})`, async () => {
       const { under, labels } = await lowerAndTime(await litBench('hardware', pulls));
-      expect(under[0]).toBeLessThan(100);
-      expect(under[1]).toBeLessThan(1200);
+      expect(under[0]).toBeLessThan(250);
+      expect(under[1]).toBeLessThan(1300);
       // Both pull-downs are sent before the first MAX LEVEL write.
       const firstMax = labels.findIndex((l) => l.startsWith('lower MAX LEVEL'));
       const holds = labels
@@ -87,8 +102,20 @@ describe('lowering the ceiling turns lit gear down before the MAX LEVEL writes (
 
   it('in the Simulator target, both drivers at once in one transaction', async () => {
     const { under, labels } = await lowerAndTime(await litBench('simulator', false));
-    expect(under[0]).toBeLessThan(100);
-    expect(under[1]).toBeLessThan(100);
-    expect(labels[0]).toBe('hold under the new ceiling: DAPC,DAPC: done');
+    expect(under[0]).toBeLessThan(250);
+    expect(under[1]).toBeLessThan(250);
+    expect(labels[0]).toBe(
+      'hold under the new ceiling: DTR0,SET_MAX_LEVEL,DAPC,DTR0,SET_MAX_LEVEL,DAPC: done',
+    );
+  });
+
+  it('with a fade time set, gear that pulls down lands at the ceiling and is not turned off', async () => {
+    const b = await litBench('simulator', true, 4);
+    const { under, labels } = await lowerAndTime(b);
+    expect(under[0]).toBeLessThan(250);
+    expect(under[1]).toBeLessThan(250);
+    expect(labels.some((l) => l.startsWith('off:'))).toBe(false);
+    expect(b.sim.unit('A')?.gear.levelAt(b.clock.now())).toBe(150);
+    expect(b.sim.unit('B')?.gear.levelAt(b.clock.now())).toBe(150);
   });
 });

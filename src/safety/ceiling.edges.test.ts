@@ -144,7 +144,7 @@ describe('lowering the ceiling', () => {
     // the hold. The owner chose to keep this: off is the safe choice (docs/STATUS.md).
     expect(levelCommands((await lower(b, 150)).log, 0)).toEqual([
       ['hold under the new ceiling', 'profile', 'DAPC', 100],
-      ['off: the colour mix cannot fit under the new ceiling', 'profile', 'OFF', undefined],
+      ['off: still above the new ceiling', 'profile', 'OFF', undefined],
     ]);
     b = await bench(unpulled());
     await b.run({ frames: framesForAll([{ id: 'DAPC', address: A, value: 100 }]), source: 'ui' });
@@ -239,13 +239,9 @@ describe('lowering the ceiling', () => {
     await b.run({ frames: framesForAll([{ id: 'DAPC', address: B, value: 150 }]), source: 'ui' });
     await b.clock.advance(3000);
     const { log } = await lower(b, 90);
-    const off = log.filter(
-      (l) => l.label === 'off: the colour mix cannot fit under the new ceiling',
-    );
+    const off = log.filter((l) => l.label === 'off: still above the new ceiling');
     expect(off.map((l) => [l.source, l.cmds.map((c) => c.id)])).toEqual([['profile', ['OFF']]]);
-    expect(levelCommands(log, 1).map((x) => x[0])).toContain(
-      'off: the colour mix cannot fit under the new ceiling',
-    );
+    expect(levelCommands(log, 1).map((x) => x[0])).toContain('off: still above the new ceiling');
     expect(levelCommands(log, 0)).toEqual([]);
   });
   it('skips the level step for an address the shadow has no gear for', async () => {

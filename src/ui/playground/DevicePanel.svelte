@@ -324,6 +324,7 @@
     {fadeTime}
     {extendedFade}
     fastFade={light?.fastFade ?? 0}
+    fast27Ms={light?.fast27Ms}
     onchange={setFade}
     testid={`fade-${String(n)}`}
   />
