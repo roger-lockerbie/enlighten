@@ -247,6 +247,8 @@ type LiveValue = (
 
 /** The longest the simulated bench's OFFs before a rebuild may take. */
 const REBUILD_HOLD_MS = 60_000;
+/** How soon work held during a rebuild asks again. */
+const REBUILD_RETRY_MS = 250;
 
 /** How much sooner than the gear's 200 ms the engine starts a new DAPC sequence. */
 const SEQUENCE_MARGIN_MS = 100;
@@ -1174,15 +1176,23 @@ export class Engine {
   async setBench(setup: Partial<Record<BenchUnit, UnitSetup>>, source: Source): Promise<Outcome> {
     if (!isPerson(source)) return no('Only a person changes the simulator settings.');
     if (setup.A === undefined && setup.B === undefined) return no('Nothing to change.');
-    if (this.target === 'simulator') this.stopRunners('The simulator settings changed.');
+    // One rebuild at a time, so one cannot end the other's hold (DALI review S5-D15).
+    if (this.benchHoldUntil === Infinity)
+      return no('The simulated bench is being rebuilt. Try again when it is done.');
     const units = (['A', 'B'] as const).filter((u) => setup[u] !== undefined);
-    for (const u of units) {
-      const min = setup[u]?.settings.physicalMinimum;
-      if (min !== undefined && min > this.ceiling)
-        return no(
-          `Unit ${u} could not go as low as the ceiling (arc ${String(this.ceiling)}) with a physical minimum of ${String(min)}. Lower the physical minimum, or raise the ceiling to at least arc ${String(min)} first.`,
-        );
-    }
+    const tooHigh = (): Outcome | undefined => {
+      for (const u of units) {
+        const min = setup[u]?.settings.physicalMinimum ?? DEFAULT_SETTINGS.physicalMinimum;
+        if (min > this.ceiling)
+          return no(
+            `Unit ${u} could not go as low as the ceiling (arc ${String(this.ceiling)}) with a physical minimum of ${String(min)}. Lower the physical minimum, or raise the ceiling to at least arc ${String(min)} first.`,
+          );
+      }
+      return undefined;
+    };
+    const early = tooHigh();
+    if (early !== undefined) return early;
+    if (this.target === 'simulator') this.stopRunners('The simulator settings changed.');
     // The rate guard reads each unit's history from its gear, and new gear has none. So each lit
     // unit is first turned off through the governor, which judges that step and makes it wait if it
     // must. While that happens, and for the hard step window after the rebuild, the governor lets
@@ -1190,7 +1200,13 @@ export class Engine {
     // review S5-D1). Nothing about the light is then changed by the rebuild itself.
     const reason = 'the simulated bench is being rebuilt';
     this.benchHoldUntil = Infinity;
-    this.simConn.governor.holdLightChanges(this.clock.now() + REBUILD_HOLD_MS, reason);
+    // The end is not known yet, so work held meanwhile asks again every quarter second, and a
+    // ceiling lowered now does not wait for the whole hold (DALI review S5-D13).
+    this.simConn.governor.holdLightChanges(
+      this.clock.now() + REBUILD_HOLD_MS,
+      reason,
+      REBUILD_RETRY_MS,
+    );
     // Any way out of the OFF job, a thrown error included, ends the open-ended hold.
     const release = () => {
       this.benchHoldUntil = -Infinity;
@@ -1233,6 +1249,12 @@ export class Engine {
       return no(
         `The simulated units could not be turned off first: ${off.ok ? `unit ${lit.join(', ')} is still lit` : off.reason}`,
       );
+    }
+    // The ceiling may have been lowered while the units were turned off (DALI review S5-D14).
+    const late = tooHigh();
+    if (late !== undefined) {
+      release();
+      return late;
     }
     const now = this.clock.now();
     for (const unit of units) {

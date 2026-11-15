@@ -585,3 +585,74 @@ describe('Apply on lit gear without automatic activation', () => {
     engine.dispose();
   });
 });
+
+describe('rebuilding the bench alongside other work (DALI second re-review)', () => {
+  it('lets a ceiling lowered during a rebuild land in seconds, not at the end of the open hold', async () => {
+    const { engine, settle, drive, idle, sim, clock } = setup();
+    await settle();
+    await idle();
+    await drive(engine.request({ kind: 'apply', address: 1, arc: 220 }, 'ui'));
+    await idle();
+    await drive(engine.request({ kind: 'apply', address: 0, arc: 200 }, 'ui'));
+    await clock.advance(100);
+    const t0 = clock.now();
+    const rebuild = engine.setBench(
+      { A: { presentation: 'tc', settings: { minRaiseLifts: false } } },
+      'ui',
+    );
+    await clock.advance(200);
+    const lowered = engine.setCeiling(120, 'ui');
+    let under: number | undefined;
+    const watch = () => {
+      if (under === undefined && (sim.unit('B')?.gear.levelAt(clock.now()) ?? 255) <= 120)
+        under = clock.now() - t0;
+      if (under === undefined && clock.now() - t0 < 70_000) clock.at(clock.now() + 10, watch);
+    };
+    watch();
+    expect((await drive(lowered)).ok).toBe(true);
+    expect((await drive(rebuild)).ok).toBe(true);
+    expect(under).toBeDefined();
+    expect(under ?? Infinity).toBeLessThan(5000);
+    engine.dispose();
+  });
+
+  it('refuses a second rebuild while one is under way', async () => {
+    const { engine, settle, drive, idle, clock } = setup();
+    await settle();
+    await idle();
+    await drive(engine.request({ kind: 'apply', address: 0, arc: 200 }, 'ui'));
+    await clock.advance(100);
+    const first = engine.setBench(
+      { A: { presentation: 'tc', settings: { minRaiseLifts: false } } },
+      'ui',
+    );
+    await clock.advance(50);
+    const second = await drive(engine.setBench({ A: { presentation: 'tc', settings: {} } }, 'ui'));
+    expect(second.ok ? '' : second.reason).toContain('being rebuilt');
+    expect((await drive(first)).ok).toBe(true);
+    engine.dispose();
+  });
+
+  it('counts the default physical minimum against a low ceiling', async () => {
+    const { engine, settle, drive, idle } = setup();
+    await settle();
+    await idle();
+    const low = { presentation: 'tc' as const, settings: { physicalMinimum: 1 } };
+    expect((await drive(engine.setBench({ A: low }, 'ui'))).ok).toBe(true);
+    expect(
+      (
+        await drive(
+          engine.setBench(
+            { B: { presentation: 'rgbwaf', settings: { physicalMinimum: 1 } } },
+            'ui',
+          ),
+        )
+      ).ok,
+    ).toBe(true);
+    await settle();
+    expect((await drive(engine.setCeiling(50, 'ui'))).ok).toBe(true);
+    const back = await drive(engine.setBench({ A: { presentation: 'tc', settings: {} } }, 'ui'));
+    expect(back.ok ? '' : back.reason).toContain('physical minimum of 85');
+    engine.dispose();
+  });
+});
