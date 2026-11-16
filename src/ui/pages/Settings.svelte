@@ -8,8 +8,12 @@
   import { MAX_BYTES } from '../../store/validate.ts';
   import { exportWorkspace, readWorkspace, type ImportPlan } from '../../store/store.ts';
   import { DEFAULT_SETUP, type BenchUnit, type UnitSetup } from '../../sim/settings.ts';
+  import { legend } from '../../console/keys.ts';
+  import { HISTORY_MAX, HISTORY_MIN, MAX_SCRIPTS } from '../../store/schema.ts';
   import Dialog from '../components/Dialog.svelte';
+  import NumberField from '../components/NumberField.svelte';
   import Segmented from '../components/Segmented.svelte';
+  import Toggle from '../components/Toggle.svelte';
   import type { AppState } from '../state.svelte.ts';
 
   let { app }: { app: AppState } = $props();
@@ -53,8 +57,12 @@
       preferences: {
         playgroundMode: app.prefs.playgroundMode,
         reducedMotion: app.prefs.reducedMotion,
+        historyLength: app.prefs.historyLength,
+        historyIgnoreSpace: app.prefs.historyIgnoreSpace,
+        verifyMode: app.prefs.verifyMode,
       },
       devices: devices.sort((x, y) => x.address - y.address),
+      ...(app.scripts.length === 0 ? {} : { scripts: app.scripts }),
     });
   });
   const exportHref = $derived(
@@ -80,7 +88,10 @@
       importError = 'The file could not be read.';
       return;
     }
-    const r = readWorkspace(text, { ceilingArc: app.snap?.ceilingArc ?? app.prefs.ceilingArc });
+    const r = readWorkspace(text, {
+      ceilingArc: app.snap?.ceilingArc ?? app.prefs.ceilingArc,
+      scripts: app.scripts.map((s) => s.name),
+    });
     if (!r.ok) {
       importError = r.error;
       return;
@@ -98,6 +109,25 @@
     if (prefs?.playgroundMode !== undefined) app.update({ playgroundMode: prefs.playgroundMode });
     // Reduced motion applies only when it makes the app more careful.
     if (prefs?.reducedMotion === 'always') app.update({ reducedMotion: 'always' });
+    if (prefs?.historyLength !== undefined) setHistory({ historyLength: prefs.historyLength });
+    if (prefs?.historyIgnoreSpace !== undefined)
+      setHistory({ historyIgnoreSpace: prefs.historyIgnoreSpace });
+    // An import can turn verify mode on, never off (SPEC section 8).
+    if (prefs?.verifyMode === true) app.update({ verifyMode: true });
+    if (w.scripts !== undefined) {
+      const next = [...app.scripts];
+      for (const s of w.scripts) {
+        const i = next.findIndex((x) => x.name.toLowerCase() === s.name.toLowerCase());
+        if (i >= 0) next.splice(i, 1, s);
+        else next.push(s);
+      }
+      if (next.length > MAX_SCRIPTS)
+        notes.push(`The scripts were not imported: at most ${String(MAX_SCRIPTS)} are stored.`);
+      else {
+        const why = await app.saveScripts(next);
+        if (why !== undefined) notes.push(`The scripts were not imported: ${why}`);
+      }
+    }
     const aliases = [...app.prefs.aliases];
     const bench: Partial<Record<BenchUnit, UnitSetup>> = {};
     for (const d of w.devices ?? []) {
@@ -132,10 +162,19 @@
     importDone = ['Imported.', ...notes].join(' ');
   }
 
+  function setHistory(
+    change: Partial<{ historyLength: number; historyIgnoreSpace: boolean }>,
+  ): void {
+    app.update(change);
+    app.console.setHistoryOptions(app.prefs.historyLength, app.prefs.historyIgnoreSpace);
+  }
+
+  const consoleKeys = $derived(legend(app.console.platform));
+
   const KEYS: readonly [string, string][] = [
     ['Escape, twice within 500 ms', 'Panic, from anywhere, including dialogs'],
     ['Ctrl `', 'Show or hide the console, and move focus to it'],
-    ['Alt 1 to Alt 4', 'Go to a page, in the order of the rail'],
+    ['Alt 1 to Alt 5', 'Go to a page, in the order of the rail'],
     ['F6, Shift F6', 'Move between regions: top bar, rail, main, inspector, console'],
     ['Tab, Shift Tab', 'Move between controls'],
     ['Left, Right, Up, Down', 'Step a slider or field by one unit'],
@@ -180,6 +219,35 @@
         testid="reduced-motion"
       />
     </div>
+    <div class="row">
+      <NumberField
+        label="Console history keeps"
+        value={app.prefs.historyLength}
+        min={HISTORY_MIN}
+        max={HISTORY_MAX}
+        unit="lines"
+        onchange={(v: number) => {
+          setHistory({ historyLength: v });
+        }}
+        testid="history-length"
+      />
+    </div>
+    <Toggle
+      label="Leave lines that start with a space out of console history"
+      checked={app.prefs.historyIgnoreSpace}
+      onchange={(v: boolean) => {
+        setHistory({ historyIgnoreSpace: v });
+      }}
+      testid="history-ignore-space"
+    />
+    <Toggle
+      label="Verify mode: show an expanded history line before it runs"
+      checked={app.prefs.verifyMode}
+      onchange={(v: boolean) => {
+        app.update({ verifyMode: v });
+      }}
+      testid="verify-mode"
+    />
     <p class="muted small">
       Preferences are kept in this browser only. Unlocks, the panic latch and the connection are not
       kept: a reload starts with none of them.
@@ -189,10 +257,11 @@
   <section class="stack" aria-labelledby="ws-h">
     <h2 id="ws-h">Workspace</h2>
     <p class="muted">
-      A workspace file holds the ceiling, these preferences, device names and the simulator
-      settings. Importing one lists what will change first. A lower ceiling in the file is applied
-      at once, which rewrites MAX LEVEL in every driver. A higher one is not applied. Nothing else
-      in the file reaches the lights.
+      A workspace file holds the ceiling, these preferences, device names, the simulator settings
+      and your scripts. A script in it is only text: it runs when you type run, never on import.
+      Importing one lists what will change first. A lower ceiling in the file is applied at once,
+      which rewrites MAX LEVEL in every driver. A higher one is not applied. Nothing else in the
+      file reaches the lights.
     </p>
     <div class="row">
       <a class="button" href={exportHref} download="enlighten-workspace.json" data-testid="export"
@@ -242,6 +311,29 @@
       <tbody>
         {#each KEYS as [k, d] (k)}
           <tr><td><kbd>{k}</kbd></td><td>{d}</td></tr>
+        {/each}
+      </tbody>
+    </table>
+    <h3 id="console-keys-h">In the console</h3>
+    <p class="muted small">
+      The console keeps the emacs keys of zsh. Cmd is left to the browser and the system.
+      {app.console.platform === 'other'
+        ? 'In a browser tab here, the browser keeps Ctrl-W, Ctrl-N and Ctrl-T, so the console uses the keys listed first.'
+        : ''}
+    </p>
+    <table aria-labelledby="console-keys-h" data-testid="console-key-legend">
+      <thead><tr><th scope="col">Keys</th><th scope="col">Does</th></tr></thead>
+      <tbody>
+        {#each consoleKeys as row (row.does)}
+          <tr>
+            <td
+              >{#each row.keys as k, i (k)}{i > 0 ? ', ' : ''}<kbd>{k}</kbd
+                >{/each}{#if row.elsewhere.length > 0}<span class="muted small">
+                  (also {row.elsewhere.join(', ')} on a Mac or in an app window)</span
+                >{/if}</td
+            >
+            <td>{row.does}</td>
+          </tr>
         {/each}
       </tbody>
     </table>

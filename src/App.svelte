@@ -7,8 +7,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { DEFAULT_PREFERENCES, type Page } from './store/schema.ts';
-  import { Store, type Loaded } from './store/store.ts';
-  import type { Preferences } from './store/schema.ts';
+  import { Store } from './store/store.ts';
   import { BusClient, readToken } from './ui/bus.ts';
   import { IdbBackend } from './ui/idb.ts';
   import BusMonitor from './ui/pages/BusMonitor.svelte';
@@ -22,7 +21,9 @@
   import Rail from './ui/shell/Rail.svelte';
   import { RAIL } from './ui/shell/rail.ts';
   import TopBar from './ui/shell/TopBar.svelte';
-  import { AppState, startCeiling } from './ui/state.svelte.ts';
+  import Scripts from './ui/pages/Scripts.svelte';
+  import { AppState, startCeiling, type Stored } from './ui/state.svelte.ts';
+  import { ScreenWake } from './ui/wakelock.ts';
 
   // The token leaves the address bar at once, goes to the bus worker, and the page keeps no copy.
   const read = readToken();
@@ -31,15 +32,32 @@
 
   let app = $state<AppState | undefined>(undefined);
 
-  /** Preferences, or the defaults if IndexedDB is slow or blocked. */
-  function loadPreferences(): Promise<Loaded<Preferences>> {
-    const late: Loaded<Preferences> = {
-      value: DEFAULT_PREFERENCES,
+  /** Preferences, history and scripts, or the defaults if IndexedDB is slow or blocked. */
+  async function loadStored(): Promise<Stored> {
+    const [p, h, s] = await Promise.all([
+      store.loadPreferences(),
+      store.loadHistory(),
+      store.loadScripts(),
+    ]);
+    const problem = [p.problem, h.problem, s.problem].filter((x) => x !== undefined).join(' ');
+    return {
+      prefs: p.value,
+      history: h.value,
+      scripts: s.value,
+      ...(problem === '' ? {} : { problem }),
+    };
+  }
+
+  function load(): Promise<Stored> {
+    const late: Stored = {
+      prefs: DEFAULT_PREFERENCES,
+      history: [],
+      scripts: [],
       problem: 'Stored preferences took too long to read, so the defaults are in use.',
     };
     return Promise.race([
-      store.loadPreferences(),
-      new Promise<Loaded<Preferences>>((resolve) => {
+      loadStored(),
+      new Promise<Stored>((resolve) => {
         setTimeout(() => {
           resolve(late);
         }, 2000);
@@ -47,11 +65,10 @@
     ]);
   }
 
-  void loadPreferences().then((loaded) => {
-    const prefs = loaded.value;
-    const start = startCeiling(prefs.ceilingArc);
-    const client = new BusClient(read.token, { ceilingArc: start, bench: prefs.bench });
-    app = new AppState(client, store, prefs, start, loaded.problem);
+  void load().then((stored) => {
+    const start = startCeiling(stored.prefs.ceilingArc);
+    const client = new BusClient(read.token, { ceilingArc: start, bench: stored.prefs.bench });
+    app = new AppState(client, store, stored, start);
   });
 
   const page = $derived<Page>(app?.prefs.page ?? 'playground');
@@ -62,6 +79,19 @@
 
   function panic(): void {
     app?.client.panic();
+  }
+
+  // A screen wake lock while a script runs (SPEC S5.2).
+  const wake = new ScreenWake((why) => {
+    app?.console.print('note', why);
+  });
+  $effect(() => {
+    wake.want(app?.snap?.script !== undefined);
+  });
+
+  /** Ask before leaving with a half-typed console line or a script running. */
+  function beforeUnload(e: BeforeUnloadEvent): void {
+    if (app?.console.guarded === true) e.preventDefault();
   }
 
   // Less motion when asked for in Settings, as well as when the system asks (SPEC S6.2).
@@ -133,7 +163,7 @@
   };
 </script>
 
-<svelte:window onkeydowncapture={onKey} />
+<svelte:window onkeydowncapture={onKey} onbeforeunload={beforeUnload} />
 <svelte:head><title>{TITLES[page]}: Enlighten</title></svelte:head>
 
 {#if app === undefined}
@@ -167,6 +197,8 @@
         <Devices {app} />
       {:else if page === 'monitor'}
         <BusMonitor {app} />
+      {:else if page === 'scripts'}
+        <Scripts {app} />
       {:else}
         <Settings {app} />
       {/if}

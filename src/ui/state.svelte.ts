@@ -6,9 +6,20 @@
 import { DEFAULT_CEILING_ARC } from '../safety/governor.ts';
 import type { MonitorLine, Snapshot } from '../engine/engine.ts';
 import type { CallResult } from '../engine/protocol.ts';
-import { DEFAULT_PREFERENCES, type Preferences } from '../store/schema.ts';
+import type { StoredLine } from '../console/history.ts';
+import { DEFAULT_PREFERENCES, type Preferences, type StoredScript } from '../store/schema.ts';
 import type { Store } from '../store/store.ts';
 import type { BusClient } from './bus.ts';
+import { ConsoleState, platform } from './console.svelte.ts';
+
+/** What the page loads from the store before it starts. */
+export interface Stored {
+  readonly prefs: Preferences;
+  readonly history: readonly StoredLine[];
+  readonly scripts: readonly StoredScript[];
+  /** Records that could not be used, for the banner. */
+  readonly problem?: string;
+}
 
 /** Lines the bus monitor keeps in the page. The worker sends its newest 50 with each snapshot. */
 export const MONITOR_KEEP = 2000;
@@ -32,23 +43,23 @@ export class AppState {
   raiseTo = $state<number | undefined>(undefined);
   /** The last answer to a ceiling change, shown in its dialog. */
   ceilingMessage = $state('');
+  /** Stored scripts, by name. The built-in ones are in `src/script/builtin.ts`. */
+  scripts = $state<StoredScript[]>([]);
+  readonly console: ConsoleState;
   /** The ceiling the worker started with, so it is not saved over a pending restore offer. */
   private readonly startCeiling: number;
   private lastSeq = 0;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(
-    client: BusClient,
-    store: Store,
-    prefs: Preferences,
-    startCeiling: number,
-    problem?: string,
-  ) {
+  constructor(client: BusClient, store: Store, stored: Stored, startCeiling: number) {
+    const prefs = stored.prefs;
     this.client = client;
     this.store = store;
     this.prefs = prefs;
+    this.scripts = [...stored.scripts];
     this.startCeiling = startCeiling;
-    this.storeProblem = problem;
+    this.storeProblem = stored.problem;
+    this.console = new ConsoleState(this, stored.history, platform());
     if (prefs.ceilingArc > startCeiling) this.savedCeiling = prefs.ceilingArc;
     client.onSnapshot((s) => {
       this.onSnapshot(s);
@@ -60,6 +71,7 @@ export class AppState {
 
   private onSnapshot(s: Snapshot): void {
     this.snap = s;
+    this.console.onSnapshot(s);
     if (!this.monitorPaused) {
       const fresh = s.monitor.filter((l) => l.seq > this.lastSeq);
       if (fresh.length > 0) {
@@ -109,6 +121,17 @@ export class AppState {
     this.ceilingMessage = r.ok ? '' : 'reason' in r ? r.reason : 'Refused.';
     if (r.ok && arc > current) this.savedCeiling = undefined;
     return r.ok;
+  }
+
+  /** Save the stored scripts. Returns a reason when they could not be saved. */
+  async saveScripts(next: StoredScript[]): Promise<string | undefined> {
+    try {
+      await this.store.saveScripts(next);
+    } catch (e) {
+      return e instanceof Error ? e.message : 'The scripts could not be saved.';
+    }
+    this.scripts = next;
+    return undefined;
   }
 
   clearMonitor(): void {

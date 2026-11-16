@@ -240,6 +240,11 @@ function parseAliases(x: unknown): Alias[] | undefined {
   return out;
 }
 
+/** A parse context with aliases and no `use` default. */
+export function aliasContext(aliases: readonly Alias[]): ParseContext {
+  return { aliases: new Map(aliases.map(([name, n]) => [name.toLowerCase(), n])) };
+}
+
 /**
  * The parse context for a console line or a script, built in the worker from what the page sent. A
  * `use` default that does not parse is an error, not a silent change of target.
@@ -248,7 +253,7 @@ export function consoleContext(
   aliases: readonly Alias[],
   use?: string,
 ): { ok: true; ctx: ParseContext } | { ok: false; reason: string } {
-  const map = new Map(aliases.map(([name, n]) => [name.toLowerCase(), n]));
+  const map = aliasContext(aliases).aliases;
   if (use === undefined) return { ok: true, ctx: { aliases: map } };
   const t = parseTarget(use, { aliases: map });
   if (!t.ok) return { ok: false, reason: `The use default: ${t.error}` };

@@ -1605,7 +1605,9 @@ export class Engine {
       for (const [i, s] of steps.entries()) {
         if (stopped()) break;
         this.scriptView = { name, line: s.line, step: i + 1, steps: steps.length };
-        this.say({ kind: 'step', text: `${String(s.line)}: ${s.text}` });
+        // A pause shows its own message, so its line is not echoed as well.
+        if (s.command.cmd !== 'pause')
+          this.say({ kind: 'step', text: `${String(s.line)}: ${s.text}` });
         if (s.command.cmd === 'pause') {
           const text = s.command.text ?? 'Paused.';
           this.scriptView = { ...this.scriptView, paused: text };

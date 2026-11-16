@@ -4,7 +4,7 @@
  * happened. Every frame goes through `Engine.request`, so through the scheduler and the governor, like
  * any other source (SPEC S2.2). Nothing here sends a frame itself.
  */
-import { addressText, type Address } from '../dali/address.ts';
+import type { Address } from '../dali/address.ts';
 import { decodeSpec, type Command } from '../dali/codec.ts';
 import { spec } from '../dali/commands.ts';
 import { percentText } from '../dali/curve.ts';
@@ -75,6 +75,16 @@ const TARGET_OF: Readonly<Record<TargetName, OutputTarget>> = {
   hardware: 'hardware',
   both: 'both',
 };
+
+/** An address as the console's own words name it: A0, G0, all, unaddressed. */
+const addressText = (a: Address): string =>
+  a.kind === 'short'
+    ? `A${String(a.n)}`
+    : a.kind === 'group'
+      ? `G${String(a.n)}`
+      : a.kind === 'broadcast'
+        ? 'all'
+        : 'unaddressed';
 
 const levelText = (arc: number) =>
   arc === 0 ? '0 (off)' : `${String(arc)} (${percentText(arc)}%)`;
