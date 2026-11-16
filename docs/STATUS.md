@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 4 are merged. Stage 5 (app shell, design system and playground) is done on `stage-5-shell`, on Opus by the owner's choice (the plan said Sonnet), and waiting for review in its PR.
+Stages 0 to 5 are merged. Stage 6 (console and scripts) is on `stage-6-console`, on Opus by the owner's choice (the plan said Sonnet). The build is done and the stage close is under way.
 
 ## Done in Stage 0
 
@@ -88,7 +88,7 @@ Open, for the owner or later stages:
 - S4-P2 and S4-P3 are accepted, with property generators as follow-ups.
 - WebHID is not built. The Stage 4 page is interim, and Stage 5 builds the shell.
 
-## Stage 5 (app shell, design system and playground), done and waiting for review
+## Stage 5 (app shell, design system and playground), merged
 
 Branch `stage-5-shell`. ADR 0013 records what was built and the owner's four planning decisions. What is in it:
 
@@ -134,11 +134,24 @@ Open, for the owner or later stages:
 
 - Tests aimed at the 57 mutants that only the old checker killed (`docs/MUTATION.md`, last group), starting with the sampling in `src/safety/rate/trace.ts`.
 - Groups as a target for the playground's controls are not built.
-- A script raising the ceiling (E-ceiling) and panic mid-script (E-panic) wait for the console in Stage 6.
 - The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove only the built-in Chromium.
 - three.js waits for Stage 7. `e2e/bundle.spec.ts` checks that the entry chunk stays free of lazy chunks and under 250 kB.
 - S4-R9 (the hardware shadow assumes automatic activation is on) is unchanged. Apply no longer relies on it.
 
+## Stage 6 (console and scripts), stage close under way
+
+Branch `stage-6-console`. ADR 0014 records what was built and the owner's five planning decisions. What is in it:
+
+- `src/console/`, pure: the binding table, the line editor (kill ring, undo and redo, search, word moves as zsh does them), history with expansion and the zsh error texts, the lexer and values, DALI names from the command table, the line parser, completion, reply texts and help.
+- `src/script/`, pure: the script parser with ADR 0007's limits, the printer, and the built-in `first-light`, which follows `tools/first_light.py` and never passes the ceiling.
+- `src/engine/console.ts`: `ConsoleExec`, which runs every friendly and DALI command through `Engine.request` and the governor. The engine runs lines and scripts as jobs that panic, a target change, the watchdog and Ctrl-C stop. The worker parses every line and script again. New protocol calls: `console`, `runScript`, `scriptContinue` and `stopConsole`.
+- `src/store`: preferences version 2 (history length, the leading-space rule, verify mode), the history and scripts records, and workspace version 2 with its migration.
+- The UI: the console drawer, the Scripts page (Alt-5), a screen wake lock while a script runs, an unload guard, and the history settings and key legend in Settings.
+- e2e: E-console, E-keys and E-script, a script that tries to raise the ceiling, and panic mid-script.
+- SPEC sections 6, 7 and 8, `docs/UI.md` and `docs/TEST_PLAN.md` follow what was built.
+
+Stage close: to be filled in as the steps finish.
+
 ## Next
 
-Review and merge the Stage 5 PR. Then Stage 6 (console and scripts) on Sonnet, in plan mode.
+Review and merge the Stage 6 PR. Then Stage 7 (visualiser engine: light and colour) on Fable, in plan mode.

@@ -291,13 +291,17 @@ An alias starts with a letter, is not a command name or keyword, and does not ma
 
 ### DALI commands
 
-Every supported command is available under python-dali's class name in kebab case: `dapc 0 128`, `recall-max-level 0`, `dtr0 220`, `set-max-level 0`, `query-actual-level 0`, `go-to-scene 0 3`, `set-temporary-colour-temperature-tc 0`, `activate 0`. Device type commands get their ENABLE DEVICE TYPE frame added, and send-twice commands are sent twice. Both show in the trace.
+Every supported command is available under python-dali's class name in kebab case: `dapc 0 128`, `recall-max-level 0`, `dtr0 220`, `set-max-level 0`, `query-actual-level 0`, `go-to-scene 0 3`, `set-temporary-colour-temperature 0`, `activate 0`. Device type commands get their ENABLE DEVICE TYPE frame added, and send-twice commands are sent twice. Both show in the trace.
 
-`raw <hex> <hex> [x2]` sends one 16-bit frame as given, twice with `x2`. It is judged like any other frame.
+Two names are shared by a general command and a device type one: `query-operating-mode` and `query-extended-version-number`. The bare name is the general command. Every device type command also answers to its name with a `dt6-` or `dt8-` prefix, such as `dt8-query-operating-mode`. `set-temporary-colour-temperature-tc` is kept as another name for `set-temporary-colour-temperature` (ADR 0014).
+
+`raw <hex> <hex> [x2]` sends one 16-bit frame as given. It is judged like any other frame. A send-twice command is always sent twice, and the console says so. `x2` is accepted only on a send-twice command, and refused on any other frame.
+
+A step the rate guard holds with a retry time waits for it, up to 10 s, and prints `waiting` with the time and the reason. Ctrl-C ends the wait. Any other refusal ends the line.
 
 ### Replies
 
-A query prints the decoded meaning and the raw byte, for example `actual level 170 (10.1%) [0xAA]`. No reply prints `no reply`. A collision prints `framing error (more than one device answered?)`. A transport fault prints as a fault, never as "no reply". A refusal prints `refused:` and the reason.
+A query prints the decoded meaning and the raw byte, for example `actual level 170 (10.1%) [0xAA]`. No reply prints `no reply`. A collision prints `framing error (more than one device answered?)`. A transport fault prints `fault:`, never "no reply". A refusal prints `refused:` and the reason. A step stopped by panic or Ctrl-C prints `stopped:`.
 
 ## 7. Script format
 
@@ -314,7 +318,7 @@ end        = "end"
 command    = any console command except those listed below
 ```
 
-Not allowed in a script: `unlock`, `lock`, `target`, `run`, `history`, `clear`, `use`, `resume`, and `cap` with a value above the present ceiling. Limits are in ADR 0007. `pause` shows its message and waits for Enter. A refused step stops the script and reports the line. The built-in `first-light` follows `tools/first_light.py` step for step, using `level` and `tc` and `rgb` so every level is clamped.
+Not allowed in a script: `unlock`, `lock`, `target`, `run`, `history`, `clear`, `use`, `resume`, `scripts`, and `cap` with a value above the present ceiling, which is refused when the step runs. Limits are in ADR 0007. Each step is echoed with its line number before it runs. `pause` is not echoed: it shows its message and waits for Enter. A refused step stops the script and reports the line. A script runs from the store or the built-ins, never from unsaved text in the editor. The built-in `first-light` follows `tools/first_light.py` step for step, using `level` and `tc` and `rgb` so every level is clamped.
 
 ## 8. Workspace file
 
@@ -338,7 +342,7 @@ JSON, at most 2 MB, with these top-level keys and no others:
 
 Names are at most 60 characters. Numbers have ranges. Enumerations are closed. Validation follows ADR 0009. An import replaces the library and set-up after a confirmation that lists what will change. It sends nothing of its own. A lower ceiling in the file is applied as the ceiling control applies it (R6.2), which writes MAX LEVEL through the governor. Imported preferences cannot turn off verify mode or override reduced motion: those two apply only when they make the app more careful. Simulator profile settings in `devices` apply to the simulated bench only (R1.6).
 
-Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013).
+Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Version 2, from Stage 6, adds `scripts`, and `preferences` gains the history length, the leading-space rule and verify mode. A version 1 file migrates to version 2. Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013, ADR 0014).
 
 ## 9. Server protocol
 

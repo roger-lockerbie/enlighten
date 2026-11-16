@@ -41,6 +41,15 @@ All notable changes to this project are recorded here. The format follows Keep a
 - A `max-level` quirk in the fake server, for the mismatch test.
 - ADR 0013: the shell and playground as built.
 
+- Stage 6 console: a zsh-style line editor in the drawer with the emacs keymap from one binding table, a kill ring, undo and redo, incremental search, completion, and history with `!` expansion and verify mode.
+- The console language from SPEC section 6: friendly commands, every DALI command by python-dali's name, `raw`, decoded replies, and typed confirmations at a `confirm>` prompt. Every frame goes through the governor with the source `console`.
+- Scripts: the parser with ADR 0007's limits, the built-in `first-light`, and a runner in the bus worker with the source `script`, which panic, Ctrl-C, a target change and the watchdog stop. A step held by the rate guard waits up to 10 s.
+- The Scripts page (Alt-5): list, edit with parse errors by line, save, delete, import and export. A screen wake lock while a script runs.
+- History settings in Settings, and a key legend built from the binding table.
+- Preferences version 2, the history and scripts records, and workspace version 2 with its migration.
+- U-console, U-script, P-history, P-parser, P-ceiling for console lines and scripts, E-console, E-keys, E-script, a script that tries to raise the ceiling, and panic mid-script.
+- ADR 0014: the console and scripts as built.
+
 ### Changed
 
 - The plan for Stages 3, 4, 5 and 12 follows the design: the governor as ADR 0004 sets it out, a Python hardware server before any WebHID transport, and the build settings the spike proved.
@@ -55,6 +64,9 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The page imports the hardware check's step list without its runners.
 - Output percentages show one decimal everywhere, as 39.5% for arc 220.
 - The e2e tests run at 1440 by 900, with a 90 s limit for the start-up scan.
+- The DALI name for the temporary colour temperature is python-dali's `set-temporary-colour-temperature`. The spec's `set-temporary-colour-temperature-tc` still works. Shared names go to the general command, and `dt6-` or `dt8-` reaches the device type one.
+- The engine's failed results say whether they were refused, dropped or a fault, so the console prints a fault as a fault.
+- Several IndexedDB records share one object store, each under its own key and schema version (ADR 0014).
 
 ### Fixed
 

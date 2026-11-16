@@ -14,21 +14,22 @@ Wireframes are in `docs/wireframes/`. They show layout and content, not final st
 
 ## 1. Information architecture
 
-One window, no routes that need a server. Nine pages in a rail on the left:
+One window, no routes that need a server. Ten pages in a rail on the left:
 
-| Page        | Purpose                                                                                                       | Stage |
-| ----------- | ------------------------------------------------------------------------------------------------------------- | ----- |
-| Playground  | Drive one device or group with sliders and pickers. The bench preview sits below                              | 5     |
-| Looks       | The library of named looks, and each driver's 16 scene slots                                                  | 9     |
-| Sequences   | Build, preview and run timed plans. Night presets                                                             | 9     |
-| Effects     | Built-in effects with their parameters and bus cost                                                           | 9     |
-| Visualiser  | The hallway, mounts, cameras and the A/B view                                                                 | 7, 8  |
-| Switches    | Virtual plates and their mappings                                                                             | 10    |
-| Devices     | Inventory, the safety profile for each address, simulator profile settings, commissioning, the hardware check | 4, 5  |
-| Bus monitor | Every frame, decoded, with timing, source and verdict. The divergence log                                     | 5     |
-| Settings    | Preferences, workspace export and import, key legend                                                          | 5     |
+| Page        | Purpose                                                                                                        | Stage |
+| ----------- | -------------------------------------------------------------------------------------------------------------- | ----- |
+| Playground  | Drive one device or group with sliders and pickers. The bench preview sits below                               | 5     |
+| Looks       | The library of named looks, and each driver's 16 scene slots                                                   | 9     |
+| Sequences   | Build, preview and run timed plans. Night presets                                                              | 9     |
+| Effects     | Built-in effects with their parameters and bus cost                                                            | 9     |
+| Visualiser  | The hallway, mounts, cameras and the A/B view                                                                  | 7, 8  |
+| Switches    | Virtual plates and their mappings                                                                              | 10    |
+| Devices     | Inventory, the safety profile for each address, simulator profile settings, commissioning, the hardware check  | 4, 5  |
+| Bus monitor | Every frame, decoded, with timing, source and verdict. The divergence log                                      | 5     |
+| Settings    | Preferences, workspace export and import, key legend                                                           | 5     |
+| Scripts     | Built-in and stored scripts, an editor that shows parse errors by line, import, export, and Run in the console | 6     |
 
-Pages that a stage has not built yet are not shown. Stage 5 built Playground, Devices, Bus monitor and Settings, in that order in the rail, so Alt-1 to Alt-4 reach them. The Playground drives one address per panel: a group as the target is not built yet (ADR 0013).
+Pages that a stage has not built yet are not shown. Stage 5 built Playground, Devices, Bus monitor and Settings, in that order in the rail, so Alt-1 to Alt-4 reach them. Stage 6 added Scripts fifth, reached with Alt-5 (ADR 0014). The Playground drives one address per panel: a group as the target is not built yet (ADR 0013).
 
 ## 2. Layout
 
@@ -99,6 +100,15 @@ The emacs keymap in `docs/research/console.md` section 1, driven from one bindin
 | Leave the console      | Escape, then Tab              |                                  |
 
 `help keys` and the legend in Settings show the table as it applies to the platform in use.
+
+The drawer holds a scrollback with the role `log`, the input, a status line and an alert region read out for refusals and panic. Each output line has a text prefix (`>`, `refused:`, `fault:`, `+` for a script step, `||` for a pause), so colour is never the only cue. Moving to the drawer by Ctrl-` or F6 puts the caret in the input.
+
+- Tab is taken only when there is something to complete. A list of candidates shows under the scrollback.
+- The first Escape closes a search, a list or a confirmation. The next releases focus, and Tab then leaves.
+- Ctrl-C copies a selection. With none, it abandons the line and stops a running line or script.
+- Backspace and Delete with a selection are left to the browser.
+- While a script is paused, Enter goes on. The drawer's header shows the script, its step and line, with Go on and Stop.
+- An unlock, a raise of the ceiling and `history -c` ask at a `confirm>` prompt for the name, the value or `yes` to be typed (ADR 0014).
 
 ## 5. Design tokens
 
