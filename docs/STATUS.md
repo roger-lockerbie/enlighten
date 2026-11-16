@@ -81,7 +81,7 @@ Stage close:
 
 Open, for the owner or later stages:
 
-- **S5-P1 (High, open):** a gap in the rate guard on unseen DT8 hardware, from Stage 3 or 4. It needs a change to `src/safety` with property tests, and the owner's word before it is made.
+- **S5-P1 (High, open):** a gap in the rate guard on unseen DT8 hardware, from Stage 3 or 4. It needs a change to `src/safety` with property tests. On 2026-11-16 the owner chose to leave it for a later stage.
 
 - S4-D6: lowering the ceiling on hardware with a DT8 colour unknown landed late. Fixed in Stage 5 by the owner's choice (ADR 0013).
 - S4-R9: the hardware shadow assumes automatic activation is on and does not apply the gear features it reads. Needs a `src/safety` change once the DA5-L's setting is known.
@@ -130,7 +130,7 @@ Stage close:
 
 Open, for the owner or later stages:
 
-- **S5-P1 (High, open):** a gap in the rate guard on unseen DT8 hardware, from Stage 3 or 4. It needs a change to `src/safety` with property tests, and the owner's word before it is made.
+- **S5-P1 (High, open):** a gap in the rate guard on unseen DT8 hardware, from Stage 3 or 4. It needs a change to `src/safety` with property tests. On 2026-11-16 the owner chose to leave it for a later stage.
 
 - Tests aimed at the 57 mutants that only the old checker killed (`docs/MUTATION.md`, last group), starting with the sampling in `src/safety/rate/trace.ts`.
 - Groups as a target for the playground's controls are not built.
