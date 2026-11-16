@@ -1,8 +1,13 @@
 /**
  * The migrations for each kind of record, one file per step from version 2 on, each tested against a
- * fixture of the older shape. Version 1 is the first, so both lists are empty.
+ * fixture of the older shape.
  */
 import type { Migration } from '../migrate.ts';
+import { preferencesTo2 } from './preferences-2.ts';
+import { workspaceTo2 } from './workspace-2.ts';
 
-export const PREFERENCES_MIGRATIONS: readonly Migration[] = [];
-export const WORKSPACE_MIGRATIONS: readonly Migration[] = [];
+export const PREFERENCES_MIGRATIONS: readonly Migration[] = [preferencesTo2];
+export const WORKSPACE_MIGRATIONS: readonly Migration[] = [workspaceTo2];
+/** History and scripts start at version 1. */
+export const HISTORY_MIGRATIONS: readonly Migration[] = [];
+export const SCRIPTS_MIGRATIONS: readonly Migration[] = [];

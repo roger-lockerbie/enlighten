@@ -184,6 +184,15 @@ export const uniqueBy =
     return r;
   };
 
+/** Text with a further check, which returns a reason or nothing. */
+export const textWith =
+  (check: (x: string) => string | undefined): Schema<string> =>
+  (x, path) => {
+    if (typeof x !== 'string') return fail(`${where(path)}: text.`);
+    const bad = check(x);
+    return bad === undefined ? ok(x) : fail(`${where(path)}: ${bad}`);
+  };
+
 /** A schema from a check function that returns a fresh value or a reason. */
 export const custom =
   <T>(check: (x: unknown) => T | string): Schema<T> =>

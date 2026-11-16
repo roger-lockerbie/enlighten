@@ -129,6 +129,7 @@
     devices: 'Devices',
     monitor: 'Bus monitor',
     settings: 'Settings',
+    scripts: 'Scripts',
   };
 </script>
 

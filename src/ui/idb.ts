@@ -1,7 +1,7 @@
 /**
- * The IndexedDB backend for the store (ADR 0009). One database, `enlighten`. Version 1 has the
- * `preferences` store, which also holds set-aside records under their own keys. Later stages add
- * their stores with a version bump. Everything read here is checked by `src/store` before use.
+ * The IndexedDB backend for the store (ADR 0009). One database, `enlighten`, with one object store,
+ * `preferences`, that holds every record under its own key: preferences, console history, scripts,
+ * and set-aside records (ADR 0014). Everything read here is checked by `src/store` before use.
  */
 import type { Backend } from '../store/store.ts';
 
