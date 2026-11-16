@@ -15,7 +15,7 @@ Stage 6 builds R7 (the console) and R9 (scripts) from SPEC sections 6 and 7, ADR
 - The page holds the pure parts in `src/console/` and `src/script/`: the binding table, the line editor, history and its expansion, the lexer, values, DALI names, the line parser, completion, reply texts, help, the script parser and printer, and the built-in scripts. None of them touch the DOM or the clock.
 - The bus worker runs lines and scripts. The page sends the line's text with its context (aliases and the `use` default), and the worker parses it again with the same parser. A script goes to the worker as its text, and the worker parses that too. The worker never trusts a parse the page did, and untrusted text crosses the boundary only as a length-limited string checked in `parseToWorker`.
 - `src/engine/console.ts` holds `ConsoleExec`, which runs one parsed command against a `ConsoleHost` with a source. The engine runs a typed line as a job of kind `console` with source `console`, and a script as a job of kind `script` with source `script`. A script can never borrow the console's source. Panic, a target change, the watchdog and Ctrl-C stop both kinds, and a wait or a pause inside them wakes at once when stopped.
-- Console and script jobs do not count as busy for the inventory or the background check in Both, because they stop for anything that needs the bus to itself.
+- Console and script jobs do not count as busy for the inventory or the background check in Both, because they stop for anything that needs the bus to itself: commissioning, a hardware check step, and a scan or profile write started outside the console (security review S6-L1).
 - Page-only commands: `history`, `clear`, `help`, `use`, `scripts`, `trace` and the start of `run`, which reads the script from the store. `panic` calls the bus client's panic directly, so it skips the call queue.
 - The worker keeps the last 500 console lines and sends the newest 200 with each snapshot, numbered as monitor lines are. The page keeps 2,000 lines of scrollback.
 
@@ -30,7 +30,7 @@ Stage 6 builds R7 (the console) and R9 (scripts) from SPEC sections 6 and 7, ADR
 
 ### Confirmations
 
-`unlock <name>`, `cap` above the present ceiling and `history -c` print what will change and switch the prompt to `confirm>`. Only a typed line that matches (the unlock's name, the new value, or `yes`) goes on, and the page then sends the line with `confirmed: true`, as the Stage 5 dialogs do. Escape or Ctrl-C cancels. (Owner decision: inline in the console, not in a dialog, so it stays usable from the keyboard alone.)
+`unlock <name>`, `cap` above the present ceiling and `history -c` print what will change and switch the prompt to `confirm>`. Only a typed line that matches (the unlock's name, the new value, or `yes`) goes on, and the page then sends the line with `confirmed: true`, as the Stage 5 dialogs do. Escape or Ctrl-C cancels. A confirmation lapses after 60 s, closing the drawer or running a script from the Scripts page drops it, and a typed `panic` at the prompt is panic (security review S6-M1, S6-L4). (Owner decision: inline in the console, not in a dialog, so it stays usable from the keyboard alone.)
 
 A script cannot raise the ceiling. The runner refuses a `cap` above the present ceiling with `refused: a script cannot raise the ceiling.`, and the governor refuses it as well, because a script never sends `confirmed`.
 
