@@ -198,6 +198,7 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 ### Part 7: Both mode
 
 - [ ] Run the comparison set: `first-light`, each built-in night preset and each effect for one minute.
+- [ ] If driver A (C2) presents colour as RGBWAF rather than Tc, `first-light` stops at its first `tc 0` step, where `tools/first_light.py` would go on to tape B. Record it, and change the built-in script to match what the drivers report (DALI review S6-D10).
 - [ ] Every divergence is either fixed in the DA5-L profile or explained in the log. No special cases for hardware in the code.
 
 Done when the divergence log is clear or explained and the safety profile is verified on both drivers.

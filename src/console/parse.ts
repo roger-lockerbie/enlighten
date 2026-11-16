@@ -8,7 +8,7 @@ import { percentToArcFloor } from '../dali/curve.ts';
 import type { CommandSpec } from '../dali/commands.ts';
 import { lex, type Token } from './lex.ts';
 import { MAX_LINE } from './history.ts';
-import { byName } from './names.ts';
+import { byName, nameOf, sharedNames } from './names.ts';
 import {
   channel,
   colour,
@@ -381,9 +381,15 @@ function queryBody(rest: readonly Token[]): Parsed<QueryWhat> {
   if (rest.length > 1) return fail('query takes one thing to ask.');
   const known = QUERY_WORDS[w];
   if (known !== undefined) return { ok: true, value: known };
-  const s = byName(w.startsWith('query-') ? w : `query-${w}`);
-  if (s !== undefined && s.reply !== 'none' && s.kind !== 'special')
+  const s = w.startsWith('query-') || /^dt[68]-query-/.test(w) ? byName(w) : byName(`query-${w}`);
+  if (s !== undefined && s.reply !== 'none' && s.kind !== 'special') {
+    // A query that takes a number, or answers from a DTR, needs its own command (S6-D8).
+    if (s.param !== 'none' || s.reads.length > 0)
+      return fail(
+        `query cannot ask "${w}": it needs a value set first. Use scene <addr> list, query <addr> tc, or the command ${nameOf(s.id)} itself.`,
+      );
     return { ok: true, value: { id: s.id } };
+  }
   return fail(`"${w}" is not something query can ask. Try "help query".`);
 }
 
@@ -605,6 +611,11 @@ export function parseLine(line: string, ctx: ParseContext): ParseResult {
     default: {
       const s = byName(name);
       if (s !== undefined) return daliCommand(s, args, ctx);
+      const shared = sharedNames(name);
+      if (shared !== undefined)
+        return fail(
+          `"${head.text}" names commands for more than one device type. Type ${shared.join(' or ')}.`,
+        );
       return fail(`Unknown command "${head.text}". Type "help" for the list.`);
     }
   }

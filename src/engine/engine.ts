@@ -129,6 +129,10 @@ export interface DeviceView {
   readonly facts?: DriverFacts;
   /** On hardware: the shadow has a model built from read-backs. */
   readonly modelled: boolean;
+  /** Group bits as the governor tracks them now, or undefined when not known (S6-D2). */
+  readonly groups?: number;
+  /** The level the governor predicts now, for ordering a colour change (S6-D1). */
+  readonly level?: number;
 }
 
 export interface MonitorLine {
@@ -1493,6 +1497,7 @@ export class Engine {
       },
       devices: () => this.deviceViews(),
       ceilingArc: () => this.ceiling,
+      dtr: () => this.active()?.governor.dtrView() ?? [],
       target: () => this.target,
       connectionText: () =>
         this.target === 'simulator'
@@ -1807,6 +1812,8 @@ export class Engine {
       const facts = conn.facts.get(n);
       const verified = i?.verified === true;
       const mismatch = profile !== undefined && !profile.verified;
+      const groups = i?.groups ?? facts?.groups;
+      const level = g.shadow.byShortAddress(n)?.gear.levelAt(this.clock.now());
       devices.push({
         address: n,
         verified,
@@ -1814,6 +1821,8 @@ export class Engine {
         modelled: i?.modelled === true,
         ...(profile === undefined ? {} : { profile }),
         ...(facts === undefined ? {} : { facts }),
+        ...(groups === undefined ? {} : { groups }),
+        ...(level === undefined ? {} : { level }),
       });
     }
     return devices;

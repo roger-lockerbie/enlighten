@@ -21,7 +21,7 @@ Stage 6 builds R7 (the console) and R9 (scripts) from SPEC sections 6 and 7, ADR
 
 ### The command language
 
-- DALI commands answer to python-dali's class name in kebab case, built from the command table. Two names are shared by a general command and a device type one: `query-operating-mode` and `query-extended-version-number`. The bare name is the general command. Every device type command also answers to its name with a `dt6-` or `dt8-` prefix, which is how the shared ones are reached.
+- DALI commands answer to python-dali's class name in kebab case, built from the command table. Every device type command also answers to its name with a `dt6-` or `dt8-` prefix. `query-operating-mode` is shared by a general command and a DT6 one: the bare name is the general command. `query-extended-version-number` is shared by a DT6 and a DT8 command with no general one, so the bare name is refused and the console asks for the prefix (DALI review S6-D4).
 - SPEC section 6 gave `set-temporary-colour-temperature-tc` as an example. python-dali names that class `SetTemporaryColourTemperature`, so the console's name is `set-temporary-colour-temperature`, and the spec's name is kept as an alias.
 - `raw <hex> <hex>` sends a send-twice command twice, as the command needs, and says so. `x2` is accepted only on a send-twice command: on any other frame it is refused, because a repeated frame that is not a send-twice command would be two commands.
 - `tc` and `rgb` on a group or broadcast check every known member's colour features first (SPEC D2). `fade` picks the nearest value the driver has and says which. `scene store` reads the present level, stores it and reads it back.

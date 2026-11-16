@@ -326,6 +326,19 @@ describe('scripts', () => {
     expect(t.clock.now() - start).toBeLessThan(10_000);
   });
 
+  it('a group colour sees a group change made since the scan (S6-D2)', async () => {
+    const t = setup();
+    await t.settle();
+    expect((await t.type('tc g5 3000K')).out.at(-1)).toMatch(/no known gear at G5/);
+    expect((await t.type('group 0 add 5')).r.ok).toBe(true);
+    // The console sees A0 in g5 at once. The governor asks for a scan first.
+    expect((await t.type('tc g5 3000K')).out.at(-1)).toMatch(/Scan before using a group/);
+    expect((await t.type('scan')).r.ok).toBe(true);
+    const r = await t.type('tc g5 3000K');
+    expect(r.r.ok).toBe(true);
+    expect(r.out.at(-1)).toBe('G5 3003K (333 mirek)');
+  });
+
   it('a scan or profile write from the Devices page stops a script first (S6-L1)', async () => {
     const t = setup();
     await t.settle();
@@ -389,6 +402,7 @@ function fakeHost(results: RequestResult[], devices: DeviceView[] = []) {
     },
     devices: () => devices,
     ceilingArc: () => 200,
+    dtr: () => [220, undefined, undefined],
     target: () => 'simulator',
     connectionText: () => 'The simulated bench is in use.',
     setCeiling: () => Promise.resolve({ ok: true }),
@@ -444,6 +458,15 @@ describe('ConsoleExec', () => {
     expect(nearestFade(0, false).text).toBe('no fade');
     expect(nearestFade(2000, false)).toMatchObject({ ms: 2000, text: 'fade time 4' });
     expect(nearestFade(150, true).setting.kind).toBe('extended');
+    // No fade is a candidate: 100 ms is nearer 0 than 707 ms (S6-D6).
+    expect(nearestFade(100, false)).toMatchObject({ ms: 0, text: 'no fade' });
+    // A fast fade wins over the extended fade while the fade time is 0 (S6-D6).
+    expect(nearestFade(150, true, 4)).toMatchObject({
+      ms: 100,
+      text: 'fade time 0, so the fast fade',
+    });
+    expect(nearestFade(0, true, 4).ms).toBe(100);
+    expect(nearestFade(2000, true, 4).text).toBe('fade time 4');
   });
 
   it('sets a fade on a group with the commands intent, and reads a fade back', async () => {
@@ -459,19 +482,50 @@ describe('ConsoleExec', () => {
   });
 
   it('a group colour needs every known member to report it', async () => {
-    const dev = (address: number, drive: 'tc' | 'rgbwaf', groups: number): DeviceView =>
+    const dev = (
+      address: number,
+      drive: 'tc' | 'rgbwaf',
+      groups: number | undefined,
+      level = 0,
+    ): DeviceView =>
       ({
         address,
         verified: true,
         ceiling: 'verified',
         modelled: false,
-        facts: { drive, groups },
+        facts: { drive },
+        level,
+        ...(groups === undefined ? {} : { groups }),
       }) as unknown as DeviceView;
     const f = fakeHost([], [dev(0, 'tc', 2), dev(1, 'rgbwaf', 4)]);
     expect((await f.run('tc g1 3000K 50%')).ok).toBe(true);
     expect(f.sent[0]).toMatchObject({ kind: 'commands' });
     expect((await f.run('tc g5 3000K')).out[0]).toMatch(/no known gear at G5/);
     expect((await f.run('rgb all 1 2 3')).out[0]).toMatch(/A0 does not report RGBWAF/);
+    // Gear whose groups are not known may be a member (S6-D2).
+    const u = fakeHost([], [dev(0, 'tc', 2), dev(1, 'rgbwaf', undefined)]);
+    expect((await u.run('tc g1 3000K')).out[0]).toMatch(/A1 does not report colour temperature/);
+  });
+
+  it('a group colour with a lower level activates after the level (S5-D3, S6-D1)', async () => {
+    const ids = (f: { sent: Intent[] }) =>
+      f.sent.flatMap((i) => (i.kind === 'commands' ? i.commands.map((c) => c.id) : []));
+    const dev = (level: number): DeviceView =>
+      ({
+        address: 0,
+        verified: true,
+        ceiling: 'verified',
+        modelled: false,
+        facts: { drive: 'tc' },
+        groups: 2,
+        level,
+      }) as unknown as DeviceView;
+    const down = fakeHost([{ ok: true, answers: [] }], [dev(200)]);
+    await down.run('tc g1 6500K 50');
+    expect(ids(down).slice(-2)).toEqual(['DAPC', 'DT8_ACTIVATE']);
+    const up = fakeHost([{ ok: true, answers: [] }], [dev(20)]);
+    await up.run('tc g1 6500K 50');
+    expect(ids(up).slice(-2)).toEqual(['DT8_ACTIVATE', 'DAPC']);
   });
 
   it('a script cannot raise the ceiling, and pause is for scripts only', async () => {
@@ -496,7 +550,8 @@ describe('ConsoleExec, each command', () => {
       verified: true,
       ceiling: 'verified',
       modelled: false,
-      facts: { drive: 'tc', groups: 0b101, minLevel: 85, maxLevel: 200, extendedFade: 0 },
+      facts: { drive: 'tc', minLevel: 85, maxLevel: 200, extendedFade: 0 },
+      groups: 0b101,
       ...extra,
     }) as unknown as DeviceView;
 
@@ -525,6 +580,28 @@ describe('ConsoleExec, each command', () => {
     expect((await h.run('scene 0 list')).out).toEqual(['refused stopped: Stopped.']);
     const i = fakeHost([{ ok: false, kind: 'refused', reason: 'no' }]);
     expect((await i.run('scene 0 store 1 50')).out).toEqual(['refused refused: no']);
+    // MASK is not a level to store (S6-D11).
+    const m = fakeHost([{ ok: true, answers: [255] }]);
+    expect((await m.run('scene 0 store 3')).out).toEqual([
+      'error The driver reports MASK (starting up, or a lamp error), so nothing was stored.',
+    ]);
+    expect(m.sent).toHaveLength(1);
+    // After a wait for the rate guard, the level is read again and that one is stored (S6-D9).
+    const w = fakeHost([
+      { ok: true, answers: [100] },
+      { ok: false, kind: 'refused', reason: 'Too fast.', retryAt: 500 },
+      { ok: true, answers: [40] },
+      { ok: true, answers: [40] },
+    ]);
+    expect((await w.run('scene 0 store 3')).out).toEqual([
+      'note waiting 500 ms for the rate guard: Too fast.',
+      'out A0 scene 3 holds 40 (0.3%), read back',
+    ]);
+    const last = w.sent.at(-1);
+    expect(last?.kind === 'commands' ? last.commands[0] : undefined).toEqual({
+      id: 'DTR0',
+      value: 40,
+    });
   });
 
   it('asks for a summary, the groups and the colour temperature', async () => {
@@ -552,9 +629,19 @@ describe('ConsoleExec, each command', () => {
       { ok: false, kind: 'refused', reason: 'no' },
     ]);
     expect((await f.run('dtr0 7')).out).toEqual(['out sent dtr0 7']);
+    // A command that reads a DTR says which value it uses (S6-D3).
+    const d = fakeHost([]);
+    expect((await d.run('set-fade-time 0')).out).toEqual([
+      'note uses DTR0 = 220',
+      'out sent set fade time A0',
+    ]);
     expect((await f.run('dapc 0 254')).out).toEqual(['refused refused: no']);
-    expect((await f.run('raw 01 fe')).out).toEqual(['out sent raw 01 FE, clamped: held to 200']);
-    expect((await f.run('raw 01 fe')).out).toEqual(['refused refused: no']);
+    expect((await f.run('raw 00 fe')).out).toEqual(['out sent raw 00 FE, clamped: held to 200']);
+    expect((await f.run('raw 00 fe')).out).toEqual(['refused refused: no']);
+    // A device type opcode alone does not decode, so it is refused with that reason (S6-D7).
+    expect((await f.run('raw 01 f2 x2')).out).toEqual([
+      "refused refused: raw 01 F2 is not a supported command on its own. Use the command's name, which adds ENABLE DEVICE TYPE.",
+    ]);
   });
 
   it('sets levels and colours with fades on short addresses and groups', async () => {

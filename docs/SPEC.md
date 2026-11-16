@@ -293,7 +293,7 @@ An alias starts with a letter, is not a command name or keyword, and does not ma
 
 Every supported command is available under python-dali's class name in kebab case: `dapc 0 128`, `recall-max-level 0`, `dtr0 220`, `set-max-level 0`, `query-actual-level 0`, `go-to-scene 0 3`, `set-temporary-colour-temperature 0`, `activate 0`. Device type commands get their ENABLE DEVICE TYPE frame added, and send-twice commands are sent twice. Both show in the trace.
 
-Two names are shared by a general command and a device type one: `query-operating-mode` and `query-extended-version-number`. The bare name is the general command. Every device type command also answers to its name with a `dt6-` or `dt8-` prefix, such as `dt8-query-operating-mode`. `set-temporary-colour-temperature-tc` is kept as another name for `set-temporary-colour-temperature` (ADR 0014).
+Every device type command also answers to its name with a `dt6-` or `dt8-` prefix. `query-operating-mode` names a general command and a DT6 one: the bare name is the general command, and `dt6-query-operating-mode` the other. `query-extended-version-number` names a DT6 and a DT8 command and no general one, so the bare name is refused and the console asks for `dt6-` or `dt8-`. `set-temporary-colour-temperature-tc` is kept as another name for `set-temporary-colour-temperature` (ADR 0014).
 
 `raw <hex> <hex> [x2]` sends one 16-bit frame as given. It is judged like any other frame. A send-twice command is always sent twice, and the console says so. `x2` is accepted only on a send-twice command, and refused on any other frame.
 

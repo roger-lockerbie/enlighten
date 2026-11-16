@@ -89,7 +89,8 @@ const TOPICS: Readonly<Record<string, readonly string[]>> = {
     "Every DALI command the app supports, by python-dali's class name in kebab case:",
     'dapc 0 128, recall-max-level 0, dtr0 220, set-max-level 0, query-actual-level 0, go-to-scene 0 3.',
     'Device type commands get ENABLE DEVICE TYPE added, and send-twice commands go twice.',
-    'Where a general and a device type command share a name, dt6- or dt8- names the device type one.',
+    'dt6- or dt8- before a name reaches the device type command. A general command keeps a name it',
+    'shares, and a name only device type commands share needs the prefix.',
   ],
   scripts: [
     'scripts lists the scripts. The Scripts page edits, imports and exports them.',

@@ -80,7 +80,24 @@ describe('replies', () => {
   it('prints a level with its output and the raw byte', () => {
     expect(replyText('QUERY_ACTUAL_LEVEL', 170)).toBe('actual level 170 (10.1%) [0xAA]');
     expect(replyText('QUERY_ACTUAL_LEVEL', 0)).toBe('actual level 0 (off) [0x00]');
-    expect(replyText('QUERY_SCENE_LEVEL', 255)).toBe('scene level none (MASK) [0xFF]');
+    expect(replyText('QUERY_SCENE_LEVEL', 255)).toBe(
+      'scene level 255 (MASK: not in this scene) [0xFF]',
+    );
+    // 0 and 255 mean different things for different levels (S6-D5).
+    expect(replyText('QUERY_POWER_ON_LEVEL', 255)).toBe(
+      'power on level 255 (MASK: the last level before power was lost) [0xFF]',
+    );
+    expect(replyText('QUERY_POWER_ON_LEVEL', 0)).toBe(
+      'power on level 0 (stays off at power-on) [0x00]',
+    );
+    expect(replyText('QUERY_SYSTEM_FAILURE_LEVEL', 255)).toBe(
+      'system failure level 255 (MASK: no change) [0xFF]',
+    );
+    expect(replyText('QUERY_ACTUAL_LEVEL', 255)).toBe(
+      'actual level 255 (MASK: starting up, or a lamp error) [0xFF]',
+    );
+    expect(replyText('QUERY_MAX_LEVEL', 0)).toBe('max level 0 (off) [0x00]');
+    expect(replyText('QUERY_MAX_LEVEL', 255)).toBe('max level 255 (MASK) [0xFF]');
     expect(replyText('QUERY_ACTUAL_LEVEL', 'none')).toBe('actual level: no reply');
     expect(replyText('QUERY_ACTUAL_LEVEL', 'collision')).toBe(`actual level: ${COLLISION}`);
   });

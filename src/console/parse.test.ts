@@ -106,7 +106,13 @@ describe('names', () => {
     for (const c of COMMANDS) expect(reached.has(c.id)).toBe(true);
     expect(byName('query-operating-mode')?.id).toBe('QUERY_OPERATING_MODE');
     expect(byName('dt6-query-operating-mode')?.id).toBe('DT6_QUERY_OPERATING_MODE');
-    expect(byName('query-extended-version-number')?.deviceType).toBe(6);
+    expect(byName('query-extended-version-number')).toBeUndefined();
+    expect(byName('dt8-query-operating-mode')).toBeUndefined();
+    expect(parseLine('query-extended-version-number 0', ctx)).toEqual({
+      ok: false,
+      error:
+        '"query-extended-version-number" names commands for more than one device type. Type dt6-query-extended-version-number or dt8-query-extended-version-number.',
+    });
     expect(byName('dt8-query-extended-version-number')?.id).toBe(
       'DT8_QUERY_EXTENDED_VERSION_NUMBER',
     );
@@ -273,6 +279,13 @@ describe('friendly commands', () => {
     expect(err('query 0 nonsense')).toContain('not something query can ask');
     expect(err('query 0 short-address')).toContain('not something query can ask');
     expect(err('query 0 a b')).toBe('query takes one thing to ask.');
+    // A query that takes a number or reads a DTR needs its own command (S6-D8).
+    expect(err('query 0 scene-level')).toContain('needs a value set first');
+    expect(err('query 0 colour-value')).toContain('needs a value set first');
+    expect(err('query 0 dt8-query-colour-value')).toContain('needs a value set first');
+    expect(cmd('query 0 dt6-query-operating-mode')).toMatchObject({
+      what: { id: 'DT6_QUERY_OPERATING_MODE' },
+    });
   });
 
   it('commands with no arguments', () => {

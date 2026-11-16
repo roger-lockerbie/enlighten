@@ -44,6 +44,8 @@ export interface ConsoleHost {
   request(intent: Intent, source: Source): Promise<RequestResult>;
   devices(): readonly DeviceView[];
   ceilingArc(): number;
+  /** DTR0 to DTR2 as the governor knows them now, undefined where unknown. */
+  dtr(): readonly (number | undefined)[];
   target(): OutputTarget;
   connectionText(): string;
   setCeiling(arc: number, source: Source, confirmed: boolean): Promise<Outcome>;
@@ -89,19 +91,31 @@ const addressText = (a: Address): string =>
 const levelText = (arc: number) =>
   arc === 0 ? '0 (off)' : `${String(arc)} (${percentText(arc)}%)`;
 
-/** The fade setting nearest a time, from the values the driver has. */
+/**
+ * The fade setting nearest a time, from the values the driver has. "No fade" (fade time 0) is one of
+ * them. While the fade time is 0, a DT6 fast fade time above 0 wins over the extended fade (dali.md
+ * section 7), so on such gear the extended values are left out and fade time 0 means the fast fade
+ * (DALI review S6-D6).
+ */
 export function nearestFade(
   ms: number,
   extended: boolean,
+  fastFade = 0,
 ): { setting: FadeSetting; ms: number; text: string } {
-  if (ms === 0) return { setting: { kind: 'extended', value: 0 }, ms: 0, text: 'no fade' };
-  let best = { setting: { kind: 'standard', value: 1 } as FadeSetting, ms: Infinity, text: '' };
+  const fast = fastFade > 0 ? fastFade * 25 : 0;
+  const none = {
+    setting: { kind: 'extended', value: 0 } as FadeSetting,
+    ms: fast,
+    text: fast > 0 ? 'fade time 0, so the fast fade' : 'no fade',
+  };
+  if (ms === 0) return none;
+  let best = none;
   const consider = (setting: FadeSetting, optMs: number, text: string) => {
     if (Math.abs(optMs - ms) < Math.abs(best.ms - ms)) best = { setting, ms: optMs, text };
   };
   for (const f of standardFades())
     consider({ kind: 'standard', value: f.value }, f.ms, `fade time ${String(f.value)}`);
-  if (extended)
+  if (extended && fast === 0)
     for (const f of extendedFades())
       consider(
         { kind: 'extended', value: f.value },
@@ -275,9 +289,13 @@ export class ConsoleExec {
    * Submit an intent. A refusal with a retry time waits for it, up to RATE_WAIT_LIMIT_MS, so a step
    * the rate guard holds goes when the guard allows it. Any other refusal is final.
    */
-  private async submit(intent: Intent): Promise<RequestResult> {
+  private async submit(
+    first: Intent,
+    again?: () => Promise<Intent | undefined>,
+  ): Promise<RequestResult> {
     const start = this.host.now();
     let said = false;
+    let intent = first;
     for (;;) {
       const r = await this.host.request(intent, this.o.source);
       if (r.ok || r.retryAt === undefined || this.host.stopped()) return r;
@@ -289,6 +307,13 @@ export class ConsoleExec {
       }
       await this.host.sleep(Math.max(1, wait));
       if (this.host.stopped()) return { ok: false, reason: 'Stopped.', kind: 'dropped' };
+      // A step built from something read before the wait is built again from a fresh read.
+      if (again !== undefined) {
+        const next = await again();
+        if (next === undefined)
+          return { ok: false, reason: 'Nothing was sent after the wait.', kind: 'refused' };
+        intent = next;
+      }
     }
   }
 
@@ -346,7 +371,7 @@ export class ConsoleExec {
     let fade: ReturnType<typeof nearestFade> | undefined;
     if (fadeMs !== undefined) {
       const f = this.facts(a);
-      fade = nearestFade(fadeMs, f?.extendedFade !== undefined);
+      fade = nearestFade(fadeMs, f?.extendedFade !== undefined, f?.fastFade ?? 0);
       if (fade.ms !== fadeMs)
         this.out('note', `${this.prefix(a, many)}nearest fade is ${fade.text}, ${msText(fade.ms)}`);
     }
@@ -369,11 +394,15 @@ export class ConsoleExec {
     return this.sendAll(cmds, done, many, a);
   }
 
-  /** Members of a group or broadcast that the inventory knows. */
+  /**
+   * Members of a group or broadcast, from the groups the governor tracks now. Gear whose groups are
+   * not known counts as a possible member, as the governor counts it (S6-D2).
+   */
   private members(a: Address): DeviceView[] {
     const all = this.host.devices();
     if (a.kind === 'broadcast') return [...all];
-    if (a.kind === 'group') return all.filter((d) => ((d.facts?.groups ?? 0) & (1 << a.n)) !== 0);
+    if (a.kind === 'group')
+      return all.filter((d) => d.groups === undefined || (d.groups & (1 << a.n)) !== 0);
     return [];
   }
 
@@ -417,8 +446,16 @@ export class ConsoleExec {
       );
       return false;
     }
-    const cmds: Command[] = 'mirek' in c ? tcCommands(a, c.mirek) : rgbwafCommands(a, c.channels);
+    // ACTIVATE goes before the level when the light is off or getting brighter, and after it when
+    // it is getting dimmer, as the Apply intent does (S5-D3, S6-D1). The brightest member decides.
+    const present = Math.max(0, ...members.map((m) => m.level ?? 0));
+    const colourFirst = arc === undefined || present <= 0 || arc >= present;
+    const cmds: Command[] =
+      'mirek' in c
+        ? tcCommands(a, c.mirek, colourFirst)
+        : rgbwafCommands(a, c.channels, colourFirst);
     if (arc !== undefined) cmds.push({ id: 'DAPC', address: a, value: arc });
+    if (!colourFirst) cmds.push({ id: 'DT8_ACTIVATE', address: a });
     return this.sendAll(cmds, done, many, a);
   }
 
@@ -440,7 +477,8 @@ export class ConsoleExec {
         a,
       );
     if (ms !== undefined) {
-      const f = nearestFade(ms, this.facts(a)?.extendedFade !== undefined);
+      const facts = this.facts(a);
+      const f = nearestFade(ms, facts?.extendedFade !== undefined, facts?.fastFade ?? 0);
       return this.sendAll(
         fadeCommands(a, f.setting),
         `${addressText(a)} fade ${f.text}, ${msText(f.ms)}`,
@@ -514,31 +552,54 @@ export class ConsoleExec {
       return true;
     }
     // Store: the present level or the one given, then read it back.
-    let arc = c.arc;
-    if (arc === undefined) {
+    const readLevel = async (): Promise<number | undefined> => {
       const now = await this.ask(
         [{ id: 'QUERY_ACTUAL_LEVEL', address: a }],
         `level ${addressText(a)}`,
         a,
         many,
       );
-      if (now === undefined) return false;
+      if (now === undefined) return undefined;
       const v = now[0];
       if (typeof v !== 'number') {
         this.out('error', `${p}The driver did not say its level, so nothing was stored.`);
-        return false;
+        return undefined;
       }
-      arc = v;
-    }
-    const r = await this.submit({
+      // 255 is MASK: starting up, or a lamp error. Storing it would take the address out of the
+      // scene (DALI review S6-D11).
+      if (v === 255) {
+        this.out(
+          'error',
+          `${p}The driver reports MASK (starting up, or a lamp error), so nothing was stored.`,
+        );
+        return undefined;
+      }
+      return v;
+    };
+    let arc = c.arc ?? (await readLevel());
+    if (arc === undefined) return false;
+    const storeIntent = (v: number): Intent => ({
       kind: 'commands',
       commands: [
-        { id: 'DTR0', value: arc },
+        { id: 'DTR0', value: v },
         { id: 'SET_SCENE', address: a, value: c.n },
         { id: 'QUERY_SCENE_LEVEL', address: a, value: c.n },
       ],
       label: `scene store ${addressText(a)} ${String(c.n)}`,
     });
+    // The present level is read again after a wait for the rate guard, so a level from before the
+    // wait is never stored (DALI review S6-D9).
+    const r = await this.submit(
+      storeIntent(arc),
+      c.arc === undefined
+        ? async () => {
+            const v = await readLevel();
+            if (v === undefined) return undefined;
+            arc = v;
+            return storeIntent(v);
+          }
+        : undefined,
+    );
     if (!r.ok) return this.failed(r, p);
     const back = r.answers[0];
     if (back !== arc) {
@@ -635,6 +696,15 @@ export class ConsoleExec {
     ]
       .filter((x) => x !== '')
       .join(' ');
+    // A command that reads a DTR says the value it will use. Other work, such as a background read
+    // in Both or a live control, can set a DTR between two typed lines (DALI review S6-D3).
+    if (s.reads.length > 0) {
+      const d = this.host.dtr();
+      const text = s.reads
+        .map((n) => `DTR${String(n)} = ${d[n] === undefined ? 'unknown' : String(d[n])}`)
+        .join(', ');
+      this.out('note', `${this.prefix(a, many)}uses ${text}`);
+    }
     const r = await this.submit({ kind: 'commands', commands: [cmd], label });
     if (!r.ok) return this.failed(r, this.prefix(a, many));
     if (s.reply === 'none') {
@@ -650,14 +720,22 @@ export class ConsoleExec {
     const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
     const label = `raw ${hex(a)} ${hex(b)}`;
     // The server checks the flags against its own decoding, so x2 must match the command.
-    if (twice && s?.sendTwice !== true) {
+    if (s === undefined) {
+      // Device type opcodes decode only after ENABLE DEVICE TYPE (S6-D7).
+      this.out(
+        'refused',
+        `refused: ${label} is not a supported command on its own. Use the command's name, which adds ENABLE DEVICE TYPE.`,
+      );
+      return false;
+    }
+    if (twice && !s.sendTwice) {
       this.out('refused', `refused: ${label} is not a send-twice command, so x2 does not apply.`);
       return false;
     }
     const r = await this.submit({ kind: 'raw', a, b });
     if (!r.ok) return this.failed(r, '');
-    const note = s?.sendTwice === true && !twice ? ' (sent twice, as the command needs)' : '';
-    if (s === undefined || s.reply === 'none') {
+    const note = s.sendTwice && !twice ? ' (sent twice, as the command needs)' : '';
+    if (s.reply === 'none') {
       this.out('out', `sent ${label}${note}${r.note === undefined ? '' : `, clamped: ${r.note}`}`);
       return true;
     }
@@ -686,10 +764,11 @@ export class ConsoleExec {
       ];
       if (f?.minLevel !== undefined) parts.push(`min ${String(f.minLevel)}`);
       if (f?.maxLevel !== undefined) parts.push(`max ${String(f.maxLevel)}`);
-      if (f?.groups !== undefined && f.groups !== 0)
+      const groups = d.groups;
+      if (groups !== undefined && groups !== 0)
         parts.push(
           `groups ${Array.from({ length: 16 }, (_, i) => i)
-            .filter((i) => (f.groups ?? 0) & (1 << i))
+            .filter((i) => groups & (1 << i))
             .map((i) => `g${String(i)}`)
             .join(' ')}`,
         );

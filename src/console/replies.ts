@@ -16,7 +16,7 @@ export const COLLISION = 'framing error (more than one device answered?)';
 
 const hex = (b: number) => `0x${b.toString(16).toUpperCase().padStart(2, '0')}`;
 
-/** Levels: an arc level with its output, where 255 means "none" (MASK). */
+/** Levels: an arc level with its output. 0 and 255 have their own meaning for some (MASK_TEXT). */
 const LEVELS = new Set([
   'QUERY_ACTUAL_LEVEL',
   'QUERY_MAX_LEVEL',
@@ -34,14 +34,30 @@ export function replyName(id: string): string {
     .toLowerCase();
 }
 
-function levelText(v: number): string {
-  if (v === 255) return 'none (MASK)';
-  if (v === 0) return '0 (off)';
+/**
+ * What 0 and 255 mean depends on the query (dali.md section 3, DALI review S6-D5). POWER ON LEVEL
+ * 255 is the last level before power was lost (DALI-2), SYSTEM FAILURE LEVEL 255 leaves the output
+ * as it is, ACTUAL LEVEL 255 is start-up or a lamp error, and a scene level 255 is not in the scene.
+ */
+const MASK_TEXT: Readonly<Record<string, string>> = {
+  QUERY_ACTUAL_LEVEL: '255 (MASK: starting up, or a lamp error)',
+  QUERY_POWER_ON_LEVEL: '255 (MASK: the last level before power was lost)',
+  QUERY_SYSTEM_FAILURE_LEVEL: '255 (MASK: no change)',
+  QUERY_SCENE_LEVEL: '255 (MASK: not in this scene)',
+};
+const OFF_TEXT: Readonly<Record<string, string>> = {
+  QUERY_POWER_ON_LEVEL: '0 (stays off at power-on)',
+  QUERY_SYSTEM_FAILURE_LEVEL: '0 (off on a system failure)',
+};
+
+function levelText(id: string, v: number): string {
+  if (v === 255) return MASK_TEXT[id] ?? '255 (MASK)';
+  if (v === 0) return OFF_TEXT[id] ?? '0 (off)';
   return `${String(v)} (${percentText(v)}%)`;
 }
 
 function meaning(id: string, v: number): string {
-  if (LEVELS.has(id)) return levelText(v);
+  if (LEVELS.has(id)) return levelText(id, v);
   switch (id) {
     case 'QUERY_STATUS': {
       const s = decodeStatus(v);

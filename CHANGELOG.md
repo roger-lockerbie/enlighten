@@ -64,7 +64,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The page imports the hardware check's step list without its runners.
 - Output percentages show one decimal everywhere, as 39.5% for arc 220.
 - The e2e tests run at 1440 by 900, with a 90 s limit for the start-up scan.
-- The DALI name for the temporary colour temperature is python-dali's `set-temporary-colour-temperature`. The spec's `set-temporary-colour-temperature-tc` still works. Shared names go to the general command, and `dt6-` or `dt8-` reaches the device type one.
+- The DALI name for the temporary colour temperature is python-dali's `set-temporary-colour-temperature`. The spec's `set-temporary-colour-temperature-tc` still works. A name shared with a general command goes to the general command, `dt6-` or `dt8-` reaches a device type one, and a name only device type commands share needs the prefix.
 - The engine's failed results say whether they were refused, dropped or a fault, so the console prints a fault as a fault.
 - Several IndexedDB records share one object store, each under its own key and schema version (ADR 0014).
 
