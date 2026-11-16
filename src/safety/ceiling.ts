@@ -11,9 +11,9 @@ import type { Source } from './types.ts';
 export type CeilingChange = Outcome & { readonly profiles?: readonly ProfileResult[] };
 
 /**
- * How long one step of lowering the ceiling waits for the rate guard before the next fallback. It is
- * a time, not a count of attempts, because the hold while the simulated bench is rebuilt asks again
- * every quarter second until it ends (DALI re-review S5-D19).
+ * How long the steps that hold lit gear under a lowered ceiling wait for the rate guard, together,
+ * before the OFF that is the last resort. It is a time, not a count of attempts, because the hold while
+ * the simulated bench is rebuilt asks again every quarter second until it ends (DALI re-review S5-D19).
  */
 export const PATIENCE_MS = 5000;
 /** A limit on attempts as well, in case a refusal keeps asking to be tried again at once. */
@@ -23,7 +23,7 @@ export const MAX_TRIES = 40;
  * Send what `build` says, as one transaction, until it is done or needs nothing more. The commands are
  * worked out again before each attempt, so a wait for the rate guard never sends a stale command:
  * gear a person has turned off meanwhile is left alone (security review S5-L4). It gives up when the
- * rate guard's next retry time is more than `PATIENCE_MS` after it started.
+ * rate guard's next retry time is after `deadline`, but always makes the first attempt.
  */
 export async function sendFresh(
   submit: Submit,
@@ -31,15 +31,15 @@ export async function sendFresh(
   label: string,
   now: () => number,
   wait: (ms: number) => Promise<void>,
+  deadline: number,
 ): Promise<'done' | 'nothing' | 'refused'> {
-  const start = now();
   for (let i = 0; i < MAX_TRIES; i++) {
     const cmds = build();
     if (cmds.length === 0) return 'nothing';
     const r = await submit({ frames: framesForAll(cmds), source: 'profile', label });
     if (r.kind === 'done') return 'done';
     if (r.kind !== 'refused' || r.retryAt === undefined) return 'refused';
-    if (r.retryAt > start + PATIENCE_MS) return 'refused';
+    if (r.retryAt > deadline) return 'refused';
     await wait(Math.max(1, r.retryAt - now()));
   }
   return 'refused';
@@ -95,22 +95,20 @@ export async function lowerCeiling(
       : [{ id: 'DTR0', value: arc }, { id: 'SET_MAX_LEVEL', address: short(n) }, h];
   };
 
-  const all = await sendFresh(
-    raw,
-    () => addresses.flatMap(withMax),
-    'hold under the new ceiling',
-    now,
-    wait,
-  );
+  // One deadline for every way of holding lit gear, so the OFF below is never more than about
+  // `PATIENCE_MS` away, however many addresses there are.
+  const deadline = now() + PATIENCE_MS;
+  const label = 'hold under the new ceiling';
+  const all = await sendFresh(raw, () => addresses.flatMap(withMax), label, now, wait, deadline);
   if (all === 'refused') {
     for (const n of addresses) {
-      const one = await sendFresh(raw, () => withMax(n), 'hold under the new ceiling', now, wait);
+      const one = await sendFresh(raw, () => withMax(n), label, now, wait, deadline);
       if (one === 'refused') {
         const h = (): Command[] => {
           const c = hold(n);
           return c === undefined ? [] : [c];
         };
-        await sendFresh(raw, h, 'hold under the new ceiling', now, wait);
+        await sendFresh(raw, h, label, now, wait, deadline);
       }
     }
   }
@@ -119,7 +117,8 @@ export async function lowerCeiling(
   for (const n of addresses) {
     const off = (): Command[] =>
       governor.overCeiling(n, now()) ? [{ id: 'OFF', address: short(n) }] : [];
-    await sendFresh(raw, off, 'off: still above the new ceiling', now, wait);
+    // The last resort waits for the rate guard however long it asks, up to `MAX_TRIES` attempts.
+    await sendFresh(raw, off, 'off: still above the new ceiling', now, wait, Infinity);
   }
   const profiles: ProfileResult[] = [];
   for (const n of addresses) {

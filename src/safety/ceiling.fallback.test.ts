@@ -1,6 +1,6 @@
 /**
  * The ceiling's retries and its last fallback (S4-D6, S5-L4). `sendFresh` works the commands out
- * again before each attempt and gives up after `PATIENCE_MS`. When the governor will not take a driver's
+ * again before each attempt and gives up at its deadline. When the governor will not take a driver's
  * MAX LEVEL write with its hold, the hold still goes alone.
  */
 import { describe, expect, it } from 'vitest';
@@ -27,7 +27,11 @@ function scripted(answers: Submitted[], clock: { t: number }) {
 }
 
 describe('sendFresh', () => {
-  const run = (answers: Submitted[], build: () => Command[] = () => [DAPC]) => {
+  const run = (
+    answers: Submitted[],
+    build: () => Command[] = () => [DAPC],
+    deadline = 1000 + PATIENCE_MS,
+  ) => {
     const clock = { t: 1000 };
     const { submit, calls } = scripted(answers, clock);
     const waits: number[] = [];
@@ -36,7 +40,11 @@ describe('sendFresh', () => {
       clock.t += ms;
       return Promise.resolve();
     };
-    return sendFresh(submit, build, 'test', () => clock.t, wait).then((r) => ({ r, calls, waits }));
+    return sendFresh(submit, build, 'test', () => clock.t, wait, deadline).then((r) => ({
+      r,
+      calls,
+      waits,
+    }));
   };
 
   it('sends once and reports done', async () => {
@@ -64,20 +72,36 @@ describe('sendFresh', () => {
     expect(waits).toEqual([1]);
   });
 
-  it('keeps trying while the retry time is within its patience', async () => {
+  it('keeps trying while the retry time is not after its deadline', async () => {
     const held = (t: number): Submitted => ({ kind: 'refused', reason: 'held', retryAt: t });
     const { r, calls } = await run([held(1250), held(1500), held(1000 + PATIENCE_MS)]);
     expect(r).toBe('done');
     expect(calls).toEqual([1000, 1250, 1500, 1000 + PATIENCE_MS]);
   });
 
-  it('gives up when the retry time is past its patience', async () => {
+  it('gives up when the retry time is after its deadline', async () => {
     const { r, calls, waits } = await run([
       { kind: 'refused', reason: 'held', retryAt: 1000 + PATIENCE_MS + 1 },
     ]);
     expect(r).toBe('refused');
     expect(calls).toHaveLength(1);
     expect(waits).toEqual([]);
+  });
+
+  it('with no deadline, waits however long the rate guard asks', async () => {
+    const { r, calls } = await run(
+      [{ kind: 'refused', reason: 'held', retryAt: 60_000 }],
+      () => [DAPC],
+      Infinity,
+    );
+    expect(r).toBe('done');
+    expect(calls).toEqual([1000, 60_000]);
+  });
+
+  it('always makes the first attempt, even past its deadline', async () => {
+    const { r, calls } = await run([], () => [DAPC], 0);
+    expect(r).toBe('done');
+    expect(calls).toEqual([1000]);
   });
 
   it(`gives up after ${String(MAX_TRIES)} attempts`, async () => {
