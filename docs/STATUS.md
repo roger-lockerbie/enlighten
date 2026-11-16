@@ -81,6 +81,8 @@ Stage close:
 
 Open, for the owner or later stages:
 
+- **S5-P1 (High, open):** a gap in the rate guard on unseen DT8 hardware, from Stage 3 or 4. It needs a change to `src/safety` with property tests, and the owner's word before it is made.
+
 - S4-D6: lowering the ceiling on hardware with a DT8 colour unknown landed late. Fixed in Stage 5 by the owner's choice (ADR 0013).
 - S4-R9: the hardware shadow assumes automatic activation is on and does not apply the gear features it reads. Needs a `src/safety` change once the DA5-L's setting is known.
 - S4-P2 and S4-P3 are accepted, with property generators as follow-ups.
@@ -119,14 +121,18 @@ Stage close:
   - 2,438 unit and property tests, at 98.46% line coverage and 92.19% branch coverage on the pure core
   - the build
   - 26 preview e2e tests and 16 against the server's fake
-- `PROP_RUNS=1000 pnpm test:prop` passed on the S4-D6 fix.
+- `PROP_RUNS=1000 pnpm test:prop` passed on the S4-D6 fix. A second 1,000-run pass at the end of the stage found S5-P1: P-rate on unseen hardware, two swings in a second on a C5 driver through automatic activation. It fails on `main` too, so it predates this stage. It is open, for the owner, with the counterexample saved.
 - V-ui baselines for macOS are in `e2e/visual/` (`pnpm e2e:visual`, by hand, not in CI).
-- `security-reviewer` passed the stage with follow-ups. `dali-reviewer` failed it on S5-D1: changing a simulator setting could flash the bench past the rate guard. Every finding is fixed or accepted with a reason in `docs/SECURITY_FINDINGS.md` (S5-M1 to S5-D10). Two fixes changed the design in ADR 0013:
+- `pnpm mutate` scores 93.92% (93.61% on `src/safety`), past the 85% target, on a fresh run at `76138cb`. The run found S5-D19: the S5-D13 fix had no effect. That is fixed, and targeted runs after the fix give `src/safety/ceiling.ts` 97.79%. Every survivor in `src/safety` is listed in `docs/MUTATION.md`. 57 of them are in unchanged code that Stage 4's run killed only through its checker's false failures (S4-P4). A spot check confirms this for one, and the rest are listed, not yet analysed one by one.
+- `security-reviewer` passed the stage with follow-ups. `dali-reviewer` passed the S5-D19 fix and its re-check with follow-ups, all taken. Before that, `dali-reviewer` failed the stage on S5-D1: changing a simulator setting could flash the bench past the rate guard. Every finding is fixed or accepted with a reason in `docs/SECURITY_FINDINGS.md` (S5-M1 to S5-D19, and S5-P1 for the owner). Two fixes changed the design in ADR 0013:
   - the bench waits 2 s after a rebuild
   - Apply activates the colour before the level unless the driver reports automatic activation
 
 Open, for the owner or later stages:
 
+- **S5-P1 (High, open):** a gap in the rate guard on unseen DT8 hardware, from Stage 3 or 4. It needs a change to `src/safety` with property tests, and the owner's word before it is made.
+
+- Tests aimed at the 57 mutants that only the old checker killed (`docs/MUTATION.md`, last group), starting with the sampling in `src/safety/rate/trace.ts`.
 - Groups as a target for the playground's controls are not built.
 - A script raising the ceiling (E-ceiling) and panic mid-script (E-panic) wait for the console in Stage 6.
 - The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove only the built-in Chromium.

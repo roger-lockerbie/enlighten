@@ -59,6 +59,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 ### Fixed
 
 - S4-D6: lowering the ceiling on hardware with a DT8 colour unknown left a second lit driver above it for 3 to 5 s. Lit gear is now turned down before the MAX LEVEL writes: the first driver lands at once and the second one second later.
+- S5-D19: a ceiling lowered while the simulated bench was being rebuilt switched a lit unit off instead of holding it at the ceiling, because the governor dropped the rebuild hold's retry time. Found by mutation testing. The hold's retry time now reaches the ceiling's work, and the ceiling's holds wait for the rate guard by time, with one 5 s deadline before the OFF.
 
 - On hardware, the rate guard counted two opposite legs that start at the same moment as one leg when it united its faded and instant predictions, so a room could rise and fall from one command past the limit. Found by the 1,000-run property tests, present since Stage 3.
 - The property tests' trace checker summed each driver's last sample, taken at different times, so the room showed small steps the light never made. It now samples every driver at the same times.

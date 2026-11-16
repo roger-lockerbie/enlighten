@@ -180,6 +180,47 @@ describe('lowering the ceiling when the governor will not take a MAX LEVEL write
   });
 });
 
+describe('lowering the ceiling when the light goes out before the hold alone', () => {
+  it('sends no hold for gear a person turned off meanwhile', async () => {
+    const b = makeBench({ target: 'simulator', sim: Simulator.bench({ at: 1000 }) });
+    await b.ready();
+    await b.clock.advance(3000);
+    const lit = await b.run({
+      frames: framesForAll([{ id: 'DAPC', address: short(0), value: 200 }]),
+      source: 'ui',
+    });
+    expect(lit.kind).toBe('done');
+    await b.clock.advance(3000);
+    const inner = asSubmit(b);
+    const holds: string[] = [];
+    const submit: Submit = async (tx, p) => {
+      if (tx.label === 'hold under the new ceiling') {
+        holds.push(String(tx.frames.length));
+        // Only A is lit, so the all-addresses try and A's own try both carry its three frames.
+        if (holds.length === 2) {
+          // A person's OFF lands while the address alone is refused.
+          const off = await inner(
+            { frames: framesForAll([{ id: 'OFF', address: short(0) }]), source: 'ui' },
+            p,
+          );
+          expect(off.kind).toBe('done');
+        }
+        if (holds.length <= 2) return { kind: 'refused', reason: 'not this one' };
+      }
+      return inner(tx, p);
+    };
+    const wait = (ms: number) =>
+      new Promise<void>((r) => {
+        b.clock.at(b.clock.now() + ms, r);
+      });
+    const r = await b.drive(lowerCeiling(b.governor, 150, submit, 'ui', () => b.clock.now(), wait));
+    expect(r.ok).toBe(true);
+    // The all-addresses try and the address alone, then nothing: the light is already off.
+    expect(holds).toEqual(['3', '3']);
+    expect(b.sim.unit('A')?.gear.levelAt(b.clock.now())).toBe(0);
+  });
+});
+
 describe('lowering the ceiling during an open-ended hold', () => {
   it('waits for the hold through its quarter-second retries and sends both drivers as one', async () => {
     const b = makeBench({ target: 'simulator', sim: Simulator.bench({ at: 1000 }) });
