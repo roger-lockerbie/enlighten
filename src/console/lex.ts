@@ -49,8 +49,3 @@ export function lex(line: string): Lexed {
   }
   return { ok: true, tokens };
 }
-
-/** Put a string back in double quotes when it needs them, for printing a script. */
-export function quote(text: string): string {
-  return text === '' || /[\s#"]/.test(text) ? `"${text}"` : text;
-}

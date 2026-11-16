@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { broadcast, group, short, unaddressed } from '../dali/address.ts';
 import { COMMANDS, spec } from '../dali/commands.ts';
-import { lex, quote } from './lex.ts';
+import { lex } from './lex.ts';
 import { byName, DALI_NAMES, kebab, nameOf } from './names.ts';
 import { aliasProblem, FRIENDLY, parseLine, parseTarget, type ParseContext } from './parse.ts';
 import { channel, colour, hexByte, level, msText, temperature, time } from './values.ts';
@@ -46,13 +46,6 @@ describe('lex', () => {
       error: 'Put a space after a closing double quote.',
     });
     expect(lex('echo a"b"')).toEqual({ ok: false, error: 'A double quote starts inside a word.' });
-  });
-
-  it('quotes a string only when it needs it', () => {
-    expect(quote('hi')).toBe('hi');
-    expect(quote('two words')).toBe('"two words"');
-    expect(quote('')).toBe('""');
-    expect(quote('a#b')).toBe('"a#b"');
   });
 });
 
