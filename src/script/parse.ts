@@ -38,6 +38,8 @@ export const NOT_IN_SCRIPTS: readonly CommandName[] = [
 export interface Step {
   /** The line in the script, from 1. */
   readonly line: number;
+  /** The statement as written, without its comment, for the console. */
+  readonly text: string;
   readonly command: ConsoleCommand;
 }
 
@@ -67,6 +69,9 @@ export type ScriptResult =
 
 const encoder = new TextEncoder();
 
+/** A word as it was written: quoted words in double quotes. */
+export const tokenText = (t: Token): string => (t.quoted ? `"${t.text}"` : t.text);
+
 /** A script name: a letter or digit, then letters, digits, spaces, dots, hyphens and underscores. */
 export function scriptNameProblem(name: string): string | undefined {
   if (name.length === 0 || name.length > MAX_SCRIPT_NAME)
@@ -93,7 +98,8 @@ function count(items: readonly Item[]): number {
 
 function flatten(items: readonly Item[], out: Step[]): void {
   for (const it of items) {
-    if (it.kind === 'statement') out.push({ line: it.line, command: it.command });
+    if (it.kind === 'statement')
+      out.push({ line: it.line, text: it.tokens.map(tokenText).join(' '), command: it.command });
     else for (let i = 0; i < it.count; i++) flatten(it.body, out);
   }
 }

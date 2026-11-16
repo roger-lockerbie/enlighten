@@ -53,6 +53,9 @@ import {
   type CheckContext,
   type CheckResult,
 } from './hwcheck.ts';
+import { parseLine, type ParseContext } from '../console/parse.ts';
+import { parseScript } from '../script/parse.ts';
+import { ConsoleExec, type ConsoleHost, type ConsoleLine } from './console.ts';
 import { readFacts, type DriverFacts } from './inventory.ts';
 import { Router } from './router.ts';
 import { send, StepError, toSubmitted, txOf } from './submit.ts';
@@ -109,7 +112,13 @@ export type RequestResult =
       readonly note?: string;
       readonly queued?: boolean;
     }
-  | { readonly ok: false; readonly reason: string; readonly retryAt?: number };
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly retryAt?: number;
+      /** Why it failed: the governor refused it, a stop dropped it, or the bus faulted. Refused if absent. */
+      readonly kind?: 'refused' | 'dropped' | 'fault';
+    };
 
 export interface DeviceView {
   readonly address: number;
@@ -168,6 +177,22 @@ export interface ControlFeedback {
   readonly text: string;
 }
 
+/** A line of console output, numbered like the monitor so the page can keep its own scrollback. */
+export interface ConsoleOut extends ConsoleLine {
+  readonly seq: number;
+}
+
+/** The running script, for the console's status line. */
+export interface ScriptView {
+  readonly name: string;
+  /** The script line of the step running now, from 1. */
+  readonly line: number;
+  readonly step: number;
+  readonly steps: number;
+  /** The pause text while the script waits for Enter. */
+  readonly paused?: string;
+}
+
 export interface JobView {
   readonly kind: string;
   readonly label: string;
@@ -194,6 +219,8 @@ export interface Snapshot {
   readonly check: readonly CheckResult[];
   readonly commission?: CommissionResult;
   readonly monitor: readonly MonitorLine[];
+  readonly console: readonly ConsoleOut[];
+  readonly script?: ScriptView;
   readonly notices: readonly string[];
   readonly busUse: number;
   /** The active connection's units: the bench in Simulator, the hardware shadow otherwise. */
@@ -237,7 +264,14 @@ interface Job {
   readonly label: string;
   readonly conn: Conn;
   aborted: boolean;
+  /** Why it was stopped, for the console. */
+  why?: string;
+  /** Ends a console or script wait at once when the job is stopped. */
+  readonly wakers?: Set<() => void>;
 }
+
+/** Console lines and scripts are a person's or a script's work, not the engine's own (ADR 0014). */
+const CONSOLE_JOBS: readonly string[] = ['console', 'script'];
 
 type LiveValue = (
   | { readonly kind: 'level'; readonly arc: number; readonly live: boolean }
@@ -261,6 +295,9 @@ export const BACKGROUND_MS = 1000;
 export const RESCAN_MIN_MS = 10_000;
 
 const MONITOR_LINES = 300;
+const CONSOLE_LINES = 500;
+/** The console lines one snapshot carries. The page keeps its own scrollback. */
+const CONSOLE_SNAPSHOT = 200;
 const DIVERGENCES = 200;
 const NOTICES = 20;
 
@@ -325,12 +362,13 @@ function fromTx(r: TxResult): RequestResult {
     case 'refused':
       return {
         ok: false,
+        kind: 'refused',
         reason: r.reason,
         ...(r.retryAt === undefined ? {} : { retryAt: r.retryAt }),
       };
     case 'dropped':
     case 'fault':
-      return { ok: false, reason: r.reason };
+      return { ok: false, kind: r.kind, reason: r.reason };
   }
 }
 
@@ -359,6 +397,11 @@ export class Engine {
   /** When each address last took a live DAPC, for the DAPC sequence. */
   private readonly lastLiveDapc = new Map<number, number>();
   private monitorSeq = 0;
+  private consoleSeq = 0;
+  private readonly consoleOut: ConsoleOut[] = [];
+  private scriptView: ScriptView | undefined;
+  /** Continues a paused script. */
+  private continueScript: (() => void) | undefined;
   /** After the bench is rebuilt, light changes on it wait until this time. */
   private benchHoldUntil = -Infinity;
   private benchSetup: Readonly<Record<BenchUnit, UnitSetup>>;
@@ -644,8 +687,15 @@ export class Engine {
   /** Stop every runner: jobs end at their next frame, and waiting live values are dropped. */
   stopRunners(why: string): void {
     if (this.jobs.size > 0 || this.coalescer.waiting() > 0) this.notice(`Stopped: ${why}`);
-    for (const j of this.jobs) j.aborted = true;
+    for (const j of this.jobs) this.abort(j, why);
     this.coalescer.cancel();
+  }
+
+  private abort(j: Job, why: string): void {
+    if (!j.aborted) j.why = why;
+    j.aborted = true;
+    for (const w of j.wakers ?? []) w();
+    j.wakers?.clear();
   }
 
   /** The page's heartbeat, with whether it is visible (SPEC S4.6). */
@@ -704,7 +754,7 @@ export class Engine {
     label: string,
     fn: (job: Job, submit: Submit) => Promise<T>,
   ): Promise<{ ok: true; value: T } | { ok: false; reason: string }> {
-    const job: Job = { kind, label, conn, aborted: false };
+    const job: Job = { kind, label, conn, aborted: false, wakers: new Set() };
     this.jobs.add(job);
     this.emit();
     try {
@@ -722,7 +772,8 @@ export class Engine {
   }
 
   private inventoryRunning(conn: Conn): boolean {
-    for (const j of this.jobs) if (j.conn === conn && j.kind !== 'check') return true;
+    for (const j of this.jobs)
+      if (j.conn === conn && j.kind !== 'check' && !CONSOLE_JOBS.includes(j.kind)) return true;
     return false;
   }
 
@@ -788,7 +839,8 @@ export class Engine {
   private background(): void {
     const hw = this.hwConn;
     if (this.target !== 'both' || hw === undefined || this.latched || this.backgroundBusy) return;
-    if (hw.scheduler.queued > 0 || this.jobs.size > 0 || this.coalescer.waiting() > 0) return;
+    const busy = [...this.jobs].some((j) => !CONSOLE_JOBS.includes(j.kind));
+    if (hw.scheduler.queued > 0 || busy || this.coalescer.waiting() > 0) return;
     const now = this.clock.now();
     const n = [...this.pendingRescan].find(
       (a) => now - (this.lastRescan.get(a) ?? -Infinity) >= RESCAN_MIN_MS,
@@ -1414,6 +1466,211 @@ export class Engine {
   }
 
   // -----------------------------------------------------------------------------------------------
+  // The console and scripts (SPEC sections 6 and 7, ADR 0014)
+
+  private say(l: ConsoleLine): void {
+    this.consoleOut.push({ ...l, seq: ++this.consoleSeq });
+    if (this.consoleOut.length > CONSOLE_LINES) this.consoleOut.shift();
+    this.emitSoon();
+  }
+
+  private consoleBusy(): Job | undefined {
+    return [...this.jobs].find((j) => CONSOLE_JOBS.includes(j.kind));
+  }
+
+  /** The engine as the console's executor sees it, for one job. */
+  private consoleHost(job: Job): ConsoleHost {
+    const stopped = () => job.aborted;
+    return {
+      request: async (intent, source) => {
+        if (job.aborted) return { ok: false, kind: 'dropped', reason: job.why ?? 'Stopped.' };
+        return this.request(intent, source);
+      },
+      devices: () => this.deviceViews(),
+      ceilingArc: () => this.ceiling,
+      target: () => this.target,
+      connectionText: () =>
+        this.target === 'simulator'
+          ? 'The simulated bench is in use.'
+          : `Hardware: ${this.connection}${this.connectionReason === undefined ? '' : `, ${this.connectionReason}`}.`,
+      setCeiling: (arc, source, confirmed) => this.setCeiling(arc, source, confirmed),
+      setTarget: (t, source) => this.setTarget(t, source),
+      rescan: (source) => this.rescan(source),
+      reapplyProfile: (source) => this.reapplyProfile(source),
+      unlock: (u, source, confirmed) => this.unlock(u, source, confirmed),
+      lock: (u) => {
+        this.lock(u);
+      },
+      resume: (source) => this.resume(source),
+      panic: () => this.panic(),
+      now: () => this.clock.now(),
+      sleep: (ms) => this.sleepIn(job, ms),
+      stopped,
+    };
+  }
+
+  /** A wait that ends early when its job is stopped. */
+  private sleepIn(job: Job, ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      if (job.aborted) {
+        resolve();
+        return;
+      }
+      const done = () => {
+        cancel();
+        job.wakers?.delete(done);
+        resolve();
+      };
+      const cancel = this.clock.at(this.clock.now() + ms, done);
+      job.wakers?.add(done);
+    });
+  }
+
+  /**
+   * Run one typed console line with the source `console`. The worker parses the text again with the
+   * page's aliases, and never trusts a parse the page did. Output goes to the console stream.
+   */
+  async console(line: string, ctx: ParseContext, confirmed = false): Promise<Outcome> {
+    const busy = this.consoleBusy();
+    if (busy !== undefined) {
+      const why =
+        busy.kind === 'script'
+          ? 'A script is running. Ctrl-C stops it.'
+          : 'A line is still running. Ctrl-C stops it.';
+      this.say({ kind: 'refused', text: `refused: ${why}` });
+      return no(why);
+    }
+    const p = parseLine(line, ctx);
+    if (!p.ok) {
+      this.say({ kind: 'error', text: p.error });
+      this.emit();
+      return no(p.error);
+    }
+    if (p.command === undefined) return OK;
+    const command = p.command;
+    const conn = this.active() ?? this.simConn;
+    const r = await this.runJob(conn, 'console', line.slice(0, 60), async (job) => {
+      const exec = new ConsoleExec(this.consoleHost(job), {
+        source: 'console',
+        confirmed,
+        out: (l) => {
+          this.say(l);
+        },
+      });
+      const done = await exec.run(command);
+      if (job.aborted && command.cmd !== 'panic')
+        this.say({ kind: 'note', text: `Stopped: ${job.why ?? 'interrupted'}` });
+      return done;
+    });
+    this.emit();
+    return r.ok && r.value ? OK : no(r.ok ? 'The line did not finish.' : r.reason);
+  }
+
+  /**
+   * Run a script as a job with the source `script` (SPEC section 7). The text is parsed whole first,
+   * and nothing runs if any line has an error. Panic, Ctrl-C, a target change and the heartbeat
+   * watchdog stop it between steps and during a wait or a pause (S4.6).
+   */
+  async runScript(name: string, text: string, ctx: ParseContext): Promise<Outcome> {
+    if (this.consoleBusy() !== undefined) {
+      const why = 'A script or a line is running. Ctrl-C stops it.';
+      this.say({ kind: 'refused', text: `refused: ${why}` });
+      return no(why);
+    }
+    const parsed = parseScript(text, ctx);
+    if (!parsed.ok) {
+      for (const e of parsed.errors)
+        this.say({
+          kind: 'error',
+          text: e.line === 0 ? e.text : `line ${String(e.line)}: ${e.text}`,
+        });
+      this.emit();
+      return no(`The script ${name} has errors, so nothing ran.`);
+    }
+    const conn = this.active();
+    if (conn === undefined) {
+      this.say({ kind: 'refused', text: 'refused: Hardware: disconnected.' });
+      return no('Hardware: disconnected.');
+    }
+    const steps = parsed.steps;
+    this.say({ kind: 'note', text: `Running ${name}: ${String(steps.length)} steps.` });
+    const r = await this.runJob(conn, 'script', `Script ${name}`, async (job) => {
+      const exec = new ConsoleExec(this.consoleHost(job), {
+        source: 'script',
+        out: (l) => {
+          this.say(l);
+        },
+      });
+      const stopped = () => job.aborted;
+      for (const [i, s] of steps.entries()) {
+        if (stopped()) break;
+        this.scriptView = { name, line: s.line, step: i + 1, steps: steps.length };
+        this.say({ kind: 'step', text: `${String(s.line)}: ${s.text}` });
+        if (s.command.cmd === 'pause') {
+          const text = s.command.text ?? 'Paused.';
+          this.scriptView = { ...this.scriptView, paused: text };
+          this.say({ kind: 'pause', text: `${text} Press Enter to go on, Ctrl-C to stop.` });
+          this.emit();
+          await this.pauseIn(job);
+          continue;
+        }
+        this.emit();
+        if (!(await exec.run(s.command))) {
+          if (!stopped()) {
+            this.say({ kind: 'refused', text: `${name} stopped at line ${String(s.line)}.` });
+            return false;
+          }
+          break;
+        }
+      }
+      if (stopped()) {
+        this.say({ kind: 'note', text: `${name} stopped: ${job.why ?? 'interrupted'}` });
+        return false;
+      }
+      this.say({ kind: 'note', text: `${name} finished.` });
+      return true;
+    });
+    this.scriptView = undefined;
+    this.continueScript = undefined;
+    this.emit();
+    return r.ok && r.value ? OK : no(r.ok ? `${name} did not finish.` : r.reason);
+  }
+
+  private pauseIn(job: Job): Promise<void> {
+    return new Promise((resolve) => {
+      if (job.aborted) {
+        resolve();
+        return;
+      }
+      const done = () => {
+        this.continueScript = undefined;
+        job.wakers?.delete(done);
+        resolve();
+      };
+      this.continueScript = done;
+      job.wakers?.add(done);
+    });
+  }
+
+  /** Enter at a script's pause. */
+  scriptContinue(): Outcome {
+    const go = this.continueScript;
+    if (go === undefined) return no('No script is waiting.');
+    if (this.scriptView !== undefined) {
+      const v = this.scriptView;
+      this.scriptView = { name: v.name, line: v.line, step: v.step, steps: v.steps };
+    }
+    go();
+    return OK;
+  }
+
+  /** Ctrl-C: stop the running console line or script, and nothing else. */
+  stopConsole(): void {
+    for (const j of this.jobs) if (CONSOLE_JOBS.includes(j.kind)) this.abort(j, 'Ctrl-C.');
+    this.emit();
+  }
+
+  // -----------------------------------------------------------------------------------------------
   // What the page sees
 
   private onFrame(conn: Conn, r: BusRecord): void {
@@ -1482,27 +1739,7 @@ export class Engine {
     const conn = this.active();
     const g = conn?.governor;
     const info = this.hardware?.info();
-    const devices: DeviceView[] = [];
-    if (conn !== undefined && g !== undefined) {
-      const addresses = [...new Set([...conn.found, ...conn.profiles.keys()])].sort(
-        (x, y) => x - y,
-      );
-      for (const n of addresses) {
-        const i = g.addressInfo(n);
-        const profile = conn.profiles.get(n);
-        const facts = conn.facts.get(n);
-        const verified = i?.verified === true;
-        const mismatch = profile !== undefined && !profile.verified;
-        devices.push({
-          address: n,
-          verified,
-          ceiling: verified ? 'verified' : mismatch ? 'mismatch' : 'pending',
-          modelled: i?.modelled === true,
-          ...(profile === undefined ? {} : { profile }),
-          ...(facts === undefined ? {} : { facts }),
-        });
-      }
-    }
+    const devices = this.deviceViews();
     return {
       target: this.target,
       hardwareAvailable: this.hardware !== undefined,
@@ -1528,12 +1765,38 @@ export class Engine {
       check: [...this.checkResults],
       ...(this.lastCommission === undefined ? {} : { commission: this.lastCommission }),
       monitor: this.monitor.slice(-50),
+      console: this.consoleOut.slice(-CONSOLE_SNAPSHOT),
+      ...(this.scriptView === undefined ? {} : { script: this.scriptView }),
       notices: [...this.notices],
       busUse: conn?.scheduler.utilisation() ?? 0,
       light: conn === undefined ? [] : this.lightOf(conn),
       feedback: [...this.feedback.values()],
       bench: (['A', 'B'] as const).map((unit) => ({ unit, setup: this.benchSetup[unit] })),
     };
+  }
+
+  private deviceViews(): DeviceView[] {
+    const conn = this.active();
+    const g = conn?.governor;
+    const devices: DeviceView[] = [];
+    if (conn === undefined || g === undefined) return devices;
+    const addresses = [...new Set([...conn.found, ...conn.profiles.keys()])].sort((x, y) => x - y);
+    for (const n of addresses) {
+      const i = g.addressInfo(n);
+      const profile = conn.profiles.get(n);
+      const facts = conn.facts.get(n);
+      const verified = i?.verified === true;
+      const mismatch = profile !== undefined && !profile.verified;
+      devices.push({
+        address: n,
+        verified,
+        ceiling: verified ? 'verified' : mismatch ? 'mismatch' : 'pending',
+        modelled: i?.modelled === true,
+        ...(profile === undefined ? {} : { profile }),
+        ...(facts === undefined ? {} : { facts }),
+      });
+    }
+    return devices;
   }
 
   private lightOf(conn: Conn): LightView[] {

@@ -1,6 +1,7 @@
-/** The Stage 5 messages: colour and Apply intents, the bench set-up, and the start values. */
+/** The Stage 5 and 6 messages: colour and Apply intents, the bench set-up, the start values and the console. */
 import { describe, expect, it } from 'vitest';
-import { parseFromWorker, parseToWorker } from './protocol.ts';
+import { short } from '../dali/address.ts';
+import { consoleContext, parseFromWorker, parseToWorker } from './protocol.ts';
 
 const call = (c: unknown) => parseToWorker({ type: 'call', id: 1, call: c });
 const intent = (i: unknown) => call({ op: 'request', intent: i });
@@ -108,6 +109,7 @@ describe('Stage 5 snapshots from the worker', () => {
     jobs: [],
     check: [],
     monitor: [],
+    console: [],
     notices: [],
     unlocks: [],
     latched: false,
@@ -121,5 +123,57 @@ describe('Stage 5 snapshots from the worker', () => {
       }),
     ).toBeDefined();
     expect(parseFromWorker({ type: 'snapshot', snapshot: base })).toBeUndefined();
+  });
+});
+
+describe('Stage 6 console calls', () => {
+  it('accepts a console line with its aliases, use default and confirmation', () => {
+    expect(
+      call({
+        op: 'console',
+        line: 'level warm 50%',
+        aliases: [['warm', 0]],
+        use: '0,1',
+        confirmed: true,
+      }),
+    ).toEqual({
+      type: 'call',
+      id: 1,
+      call: {
+        op: 'console',
+        line: 'level warm 50%',
+        aliases: [['warm', 0]],
+        use: '0,1',
+        confirmed: true,
+      },
+    });
+    expect(call({ op: 'scriptContinue' })).toBeDefined();
+    expect(call({ op: 'stopConsole' })).toBeDefined();
+    expect(
+      call({ op: 'runScript', name: 'first-light', text: 'off 0', aliases: [] }),
+    ).toBeDefined();
+  });
+
+  it('refuses long lines, bad aliases and bad script names', () => {
+    expect(call({ op: 'console', line: 'x'.repeat(501), aliases: [] })).toBeUndefined();
+    expect(call({ op: 'console', line: 'off 0' })).toBeUndefined();
+    expect(call({ op: 'console', line: 'off 0', aliases: [['all', 0]] })).toBeUndefined();
+    expect(call({ op: 'console', line: 'off 0', aliases: [['ok', 64]] })).toBeUndefined();
+    expect(call({ op: 'console', line: 'off 0', aliases: [['ok', 0, 1]] })).toBeUndefined();
+    const many = Array.from({ length: 65 }, (_, i) => [`a${String(i)}`, 0]);
+    expect(call({ op: 'console', line: 'off 0', aliases: many })).toBeUndefined();
+    expect(call({ op: 'console', line: 'off 0', aliases: [], use: 7 })).toBeUndefined();
+    expect(call({ op: 'console', line: 'off 0', aliases: [], confirmed: 'yes' })).toBeUndefined();
+    expect(call({ op: 'runScript', name: '../x', text: '', aliases: [] })).toBeUndefined();
+    expect(
+      call({ op: 'runScript', name: 'x', text: 'x'.repeat(64 * 1024 + 1), aliases: [] }),
+    ).toBeUndefined();
+  });
+
+  it('builds the parse context in the worker, and refuses a use default that does not parse', () => {
+    const c = consoleContext([['Warm', 0]], 'warm,1');
+    expect(c.ok && [...c.ctx.aliases]).toEqual([['warm', 0]]);
+    expect(c.ok && c.ctx.use).toEqual([short(0), short(1)]);
+    expect(consoleContext([], 'nowhere').ok).toBe(false);
   });
 });
