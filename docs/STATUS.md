@@ -118,10 +118,10 @@ Stage close:
 
 - `pnpm verify` passes:
   - lint and the typecheck
-  - 2,438 unit and property tests, at 98.46% line coverage and 92.19% branch coverage on the pure core
+  - 2,463 unit and property tests, at 98.32% line coverage and 92.16% branch coverage on the pure core
   - the build
   - 26 preview e2e tests and 16 against the server's fake
-- `PROP_RUNS=1000 pnpm test:prop` passed on the S4-D6 fix. A second 1,000-run pass at the end of the stage found S5-P1: P-rate on unseen hardware, two swings in a second on a C5 driver through automatic activation. It fails on `main` too, so it predates this stage. It is open, for the owner, with the counterexample saved.
+- `PROP_RUNS=1000 pnpm test:prop` passed on the S4-D6 fix. A second 1,000-run pass at the end of the stage found S5-P1: P-rate on unseen hardware, two swings in a second on a C5 driver through automatic activation. It fails on `main` too, so it predates this stage. It is open, for the owner, with the counterexample saved. A third 1,000-run pass after the S5-D19 fix passed: the failure needs a seed that run did not draw.
 - V-ui baselines for macOS are in `e2e/visual/` (`pnpm e2e:visual`, by hand, not in CI).
 - `pnpm mutate` scores 93.92% (93.61% on `src/safety`), past the 85% target, on a fresh run at `76138cb`. The run found S5-D19: the S5-D13 fix had no effect. That is fixed, and targeted runs after the fix give `src/safety/ceiling.ts` 97.79%. Every survivor in `src/safety` is listed in `docs/MUTATION.md`. 57 of them are in unchanged code that Stage 4's run killed only through its checker's false failures (S4-P4). A spot check confirms this for one, and the rest are listed, not yet analysed one by one.
 - `security-reviewer` passed the stage with follow-ups. `dali-reviewer` passed the S5-D19 fix and its re-check with follow-ups, all taken. Before that, `dali-reviewer` failed the stage on S5-D1: changing a simulator setting could flash the bench past the rate guard. Every finding is fixed or accepted with a reason in `docs/SECURITY_FINDINGS.md` (S5-M1 to S5-D19, and S5-P1 for the owner). Two fixes changed the design in ADR 0013:
