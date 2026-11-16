@@ -1031,6 +1031,7 @@ export class Governor {
         {
           scope: 'bus',
           rule: this.holdReason,
+          hold: true,
           retryAt:
             this.holdRetryMs === undefined
               ? this.holdUntil
@@ -1086,6 +1087,11 @@ export class Governor {
 
   /** The earliest time the same transaction would pass, checked by judging it again then. */
   private retryAt(tx: Transaction, now: number, v: readonly Violation[]): { retryAt?: number } {
+    // A hold whose end is not known yet gives its own time to ask again. Judging further ahead would
+    // find only the hold, and give up before its end (DALI re-review S5-D13).
+    const [only] = v;
+    if (this.holdRetryMs !== undefined && v.length === 1 && only?.hold === true)
+      return { retryAt: Math.ceil(Math.max(now + 1, only.retryAt)) };
     let t = Math.max(now + 1, ...v.map((x) => x.retryAt));
     for (let i = 0; i < 16; i++) {
       const again = this.rateCheck(tx, t);

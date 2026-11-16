@@ -10,27 +10,36 @@ import type { Source } from './types.ts';
 
 export type CeilingChange = Outcome & { readonly profiles?: readonly ProfileResult[] };
 
-/** Attempts at one transaction the rate guard holds back, as `patient` allows. */
-const TRIES = 6;
+/**
+ * How long one step of lowering the ceiling waits for the rate guard before the next fallback. It is
+ * a time, not a count of attempts, because the hold while the simulated bench is rebuilt asks again
+ * every quarter second until it ends (DALI re-review S5-D19).
+ */
+export const PATIENCE_MS = 5000;
+/** A limit on attempts as well, in case a refusal keeps asking to be tried again at once. */
+export const MAX_TRIES = 40;
 
 /**
  * Send what `build` says, as one transaction, until it is done or needs nothing more. The commands are
  * worked out again before each attempt, so a wait for the rate guard never sends a stale command:
- * gear a person has turned off meanwhile is left alone (security review S5-L4).
+ * gear a person has turned off meanwhile is left alone (security review S5-L4). It gives up when the
+ * rate guard's next retry time is more than `PATIENCE_MS` after it started.
  */
-async function sendFresh(
+export async function sendFresh(
   submit: Submit,
   build: () => Command[],
   label: string,
   now: () => number,
   wait: (ms: number) => Promise<void>,
 ): Promise<'done' | 'nothing' | 'refused'> {
-  for (let i = 0; i < TRIES; i++) {
+  const start = now();
+  for (let i = 0; i < MAX_TRIES; i++) {
     const cmds = build();
     if (cmds.length === 0) return 'nothing';
     const r = await submit({ frames: framesForAll(cmds), source: 'profile', label });
     if (r.kind === 'done') return 'done';
     if (r.kind !== 'refused' || r.retryAt === undefined) return 'refused';
+    if (r.retryAt > start + PATIENCE_MS) return 'refused';
     await wait(Math.max(1, r.retryAt - now()));
   }
   return 'refused';

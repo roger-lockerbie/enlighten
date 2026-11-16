@@ -613,6 +613,9 @@ describe('rebuilding the bench alongside other work (DALI second re-review)', ()
     expect((await drive(rebuild)).ok).toBe(true);
     expect(under).toBeDefined();
     expect(under ?? Infinity).toBeLessThan(5000);
+    // Held at the new ceiling, not switched off: the governor's hold asked the ceiling's work to try
+    // again soon, so it did not give up and fall back to OFF.
+    expect(sim.unit('B')?.gear.levelAt(clock.now())).toBe(120);
     engine.dispose();
   });
 

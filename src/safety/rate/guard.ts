@@ -20,6 +20,8 @@ export interface Violation {
   readonly rule: string;
   /** When the same change could pass this rule. */
   readonly retryAt: number;
+  /** Set on the hold after a connect or during a rebuild, which a judge further ahead cannot see past. */
+  readonly hold?: true;
 }
 
 interface Tagged {
