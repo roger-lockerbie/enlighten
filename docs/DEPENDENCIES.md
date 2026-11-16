@@ -18,7 +18,15 @@ In `server/.venv`, from `server/requirements.txt`. See "Python: the hardware ser
 | python-dali | 0.16    | LGPL-3.0                                                       | The server | Frame decoding at run time. Used as a dependency, never copied.                                                          | The owner, 14 November 2026           |
 | hidapi      | 0.15.0  | BSD-3-Clause (offered beside GPL-3.0 and its original licence) | The server | USB HID access to the hasseb.                                                                                            | The owner, with python-dali           |
 
-Fonts are assets, not packages: Inter and JetBrains Mono, both SIL Open Font License 1.1, added as WOFF2 files with their licence texts in Stage 5 (`docs/UI.md`).
+## Fonts
+
+Assets, not packages, in `src/assets/fonts/` with their licence texts and SHA-256 sums. `tests/fonts.test.ts` checks the sums. Each file matched its git blob hash in the tagged repository when it was added (Stage 5, the owner's approval in planning).
+
+| File                          | Version | Licence                   | From                                                       |
+| ----------------------------- | ------- | ------------------------- | ---------------------------------------------------------- |
+| `Inter-Regular.woff2`         | 4.1     | SIL Open Font License 1.1 | `rsms/inter`, tag `v4.1`, `docs/font-files/`               |
+| `Inter-Medium.woff2`          | 4.1     | SIL Open Font License 1.1 | `rsms/inter`, tag `v4.1`, `docs/font-files/`               |
+| `JetBrainsMono-Regular.woff2` | 2.304   | SIL Open Font License 1.1 | `JetBrains/JetBrainsMono`, tag `v2.304`, `fonts/webfonts/` |
 
 ## Development dependencies
 

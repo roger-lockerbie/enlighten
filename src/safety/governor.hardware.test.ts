@@ -667,6 +667,49 @@ describe('the rate guard on hardware', () => {
     const now = 2000 - DEFAULT_TIMING.settleFirstMs - FORWARD_FRAME_MS + 0.5;
     expect(reason(g.judge(tx([c('DAPC', A, 100)]), now))).not.toMatch(/connecting/);
   });
+  it('a hold set by the engine names its reason and says when to ask again', () => {
+    const g = sim();
+    const dapc = tx([c('DAPC', A, 100)]);
+    // The first frame of a transaction judged at 1000 reaches the gear at this time.
+    const first = 1000 + DEFAULT_TIMING.settleFirstMs + FORWARD_FRAME_MS;
+    expect(g.judge(dapc, 1000).kind).toBe('allow');
+    // No retry time: ask again at the hold's end.
+    g.holdLightChanges(5000, 'the bench is being rebuilt');
+    expect(g.judge(dapc, 1000)).toEqual({
+      kind: 'refuse',
+      reason: 'Rate guard: the bench is being rebuilt (bus).',
+      retryAt: 5000,
+    });
+    // An open-ended hold asks waiting work to try again soon (S5-D13), even though judging that far
+    // ahead finds the hold still there.
+    g.holdLightChanges(60_000, 'rebuilding', 250);
+    expect(g.judge(dapc, 1000)).toEqual({
+      kind: 'refuse',
+      reason: 'Rate guard: rebuilding (bus).',
+      retryAt: Math.ceil(first + 250),
+    });
+    // A hold that ends sooner than that gives its end.
+    g.holdLightChanges(1100, 'rebuilding', 250);
+    expect(g.judge(dapc, 1000)).toMatchObject({ kind: 'refuse', retryAt: 1100 });
+    // OFF still goes.
+    expect(g.judge(tx([c('OFF', A)]), 1000).kind).toBe('allow');
+    // The hold ends when the first frame lands on its end.
+    g.holdLightChanges(first, 'rebuilding', 250);
+    expect(g.judge(dapc, 1000).kind).toBe('allow');
+  });
+  it('after a hold with a retry time has ended, a rate guard refusal gives a time that passes', () => {
+    const g = hw();
+    scanInto(g, 0, { level: 150 });
+    g.markInventoryFresh(false);
+    g.holdLightChanges(500, 'rebuilding', 250);
+    tell(g, c('DAPC', A, 160), undefined, 1000);
+    tell(g, c('DAPC', A, 150), undefined, 1300);
+    const v = g.judge(tx([c('DAPC', A, 160)]), 1580);
+    expect(reason(v)).toMatch(/swing/);
+    const retry = v.kind === 'refuse' ? v.retryAt : undefined;
+    expect(retry).toBeDefined();
+    expect(g.judge(tx([c('DAPC', A, 160)]), retry ?? 0).kind).toBe('allow');
+  });
   it('counts a fade as an instant step until fades are confirmed', () => {
     const g = hw();
     // Fade time 7 (5.7 s): faded, neither change is a hard step.

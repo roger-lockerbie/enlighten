@@ -86,6 +86,24 @@ describe('banned sinks in Svelte', () => {
     expect(ids).toContain('no-restricted-syntax');
   });
 
+  it('catches a style attribute, static or bound', async () => {
+    for (const markup of [
+      '<p style="color: red">hi</p>\n',
+      '<script lang="ts">let c = "red";</script>\n<p style={`color: ${c}`}>hi</p>\n',
+      '<p STYLE="color: red">hi</p>\n',
+    ]) {
+      expect(await ruleIds(markup, 'src/Fixture.svelte'), markup).toContain('no-restricted-syntax');
+    }
+  });
+
+  it('allows a style: directive (ADR 0002)', async () => {
+    const ids = await ruleIds(
+      '<script lang="ts">let c = "red";</script>\n<p style:color={c}>hi</p>\n',
+      'src/Fixture.svelte',
+    );
+    expect(ids).toEqual([]);
+  });
+
   it('lets ordinary markup through', async () => {
     const ids = await ruleIds(
       '<script lang="ts">let x = "a";</script>\n<p>{x}</p>\n',

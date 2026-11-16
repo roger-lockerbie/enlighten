@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 3 are merged. Stage 4 (transports and the hasseb) is done on `stage-4-transports`, on Opus, and waiting for review in its PR.
+Stages 0 to 4 are merged. Stage 5 (app shell, design system and playground) is done on `stage-5-shell`, on Opus by the owner's choice (the plan said Sonnet), and waiting for review in its PR.
 
 ## Done in Stage 0
 
@@ -27,7 +27,7 @@ Stages 0 to 3 are merged. Stage 4 (transports and the hasseb) is done on `stage-
 
 The ten documents are in `docs/research/`. `SUMMARY.md` lists the findings that change the brief and the owner's decisions on them. Each document lists what it could not confirm. Nothing has been measured on hardware.
 
-## Stage 2 (design), done and waiting for review
+## Stage 2 (design), merged
 
 Branch `stage-2-design`. From this stage on, these documents are the authority, and the brief and `CLAUDE.md` are background:
 
@@ -43,7 +43,7 @@ Decisions the owner made during this stage: panic's safe level is off, the serve
 
 `docs/STAGES.md` now matches the design for Stages 3, 4, 5 and 12.
 
-## Stage 3 (DALI core, simulator and safety governor), done and waiting for review
+## Stage 3 (DALI core, simulator and safety governor), merged
 
 Branch `stage-3-core`. What is in it:
 
@@ -60,7 +60,7 @@ Owner decision on the ceiling. When the ceiling is lowered while a driver is fad
 
 Carried to Stage 4: the router with single-use, time-bound approvals; `RealClock`; the hasseb report builder and its G-hasseb test; the transport keeping frames in order when panic stops waiting after 100 ms.
 
-## Stage 4 (transports and the hasseb), done and waiting for review
+## Stage 4 (transports and the hasseb), merged
 
 Branch `stage-4-transports`. ADR 0012 records what was built and the choices made. What is in it:
 
@@ -81,11 +81,64 @@ Stage close:
 
 Open, for the owner or later stages:
 
-- S4-D6: on hardware, while any DT8 driver's colour is unknown this session, lowering the ceiling below a lit driver's level lands late (about 9 s in the DALI review's run, where SPEC R6.2 says at once). The rate guard counts two hard steps across one send-twice SET MAX LEVEL. Two fixes are set out in ADR 0012 for the owner to choose: turn lit drivers down before the MAX LEVEL writes, or merge the two events across a send-twice pair in the governor.
+- **S5-P1 (High, open):** a gap in the rate guard on unseen DT8 hardware, from Stage 3 or 4. It needs a change to `src/safety` with property tests. On 2026-11-16 the owner chose to leave it for a later stage.
+
+- S4-D6: lowering the ceiling on hardware with a DT8 colour unknown landed late. Fixed in Stage 5 by the owner's choice (ADR 0013).
 - S4-R9: the hardware shadow assumes automatic activation is on and does not apply the gear features it reads. Needs a `src/safety` change once the DA5-L's setting is known.
 - S4-P2 and S4-P3 are accepted, with property generators as follow-ups.
 - WebHID is not built. The Stage 4 page is interim, and Stage 5 builds the shell.
 
+## Stage 5 (app shell, design system and playground), done and waiting for review
+
+Branch `stage-5-shell`. ADR 0013 records what was built and the owner's four planning decisions. What is in it:
+
+- The shell from `docs/UI.md`:
+  - The top bar: target and connection, the ceiling with its verified count, bus use, unlocks, and Panic.
+  - The rail for the four built pages, reached with Alt-1 to Alt-4.
+  - A collapsible inspector.
+  - A placeholder console drawer: Ctrl-` opens it and it remembers its height.
+  - F6 between regions, and the banner line.
+- The design system:
+  - The dark tokens.
+  - Inter and JetBrains Mono, self-hosted with their licences and checked sums.
+  - Accessible components: paired sliders, number fields, segmented controls, the colour and fade pickers, toggles, dialogs opened with `show()`, typed confirmations, and status chips.
+- The pages:
+  - Playground: one panel for each driver as it reports itself, Live and Commit, and feedback on what was sent, clamped, held or refused. The 2D bench preview sits below, labelled "estimated", or "prediction" on hardware.
+  - Devices: names, and the simulator's settings with each one's source and hardware-day check.
+  - Bus monitor: 2,000 frames, filters, and the divergence log.
+  - Settings: preferences, workspace export and import, records set aside, and the key legend.
+- The ceiling dialog: lowering takes effect at once, and raising needs the new value typed. A stored ceiling above the default is offered back, not applied, at start.
+- `src/store`: the hand-written validator, preferences, migrations and workspace version 1. IndexedDB goes through `src/ui/idb.ts`.
+- The engine gives the page live light, feedback, numbered monitor lines and the bench set-up. New intents: colour temperature, RGBWAF, and Apply. A moving level uses the DAPC sequence.
+- S4-D6 is fixed, the owner's choice: lit gear is turned down, with its MAX LEVEL write where the governor takes it, before the profile work.
+- The Permissions-Policy turns off 31 features. A style attribute in a component is a lint error. `src/light` and `src/store` joined the pure core.
+- The fake server has a `max-level` quirk, for the mismatch test.
+
+Stage close:
+
+- `pnpm verify` passes:
+  - lint and the typecheck
+  - 2,463 unit and property tests, at 98.32% line coverage and 92.16% branch coverage on the pure core
+  - the build
+  - 26 preview e2e tests and 16 against the server's fake
+- `PROP_RUNS=1000 pnpm test:prop` passed on the S4-D6 fix. A second 1,000-run pass at the end of the stage found S5-P1: P-rate on unseen hardware, two swings in a second on a C5 driver through automatic activation. It fails on `main` too, so it predates this stage. It is open, for the owner, with the counterexample saved. A third 1,000-run pass after the S5-D19 fix passed: the failure needs a seed that run did not draw.
+- V-ui baselines for macOS are in `e2e/visual/` (`pnpm e2e:visual`, by hand, not in CI).
+- `pnpm mutate` scores 93.92% (93.61% on `src/safety`), past the 85% target, on a fresh run at `76138cb`. The run found S5-D19: the S5-D13 fix had no effect. That is fixed, and targeted runs after the fix give `src/safety/ceiling.ts` 97.79%. Every survivor in `src/safety` is listed in `docs/MUTATION.md`. 57 of them are in unchanged code that Stage 4's run killed only through its checker's false failures (S4-P4). A spot check confirms this for one, and the rest are listed, not yet analysed one by one.
+- `security-reviewer` passed the stage with follow-ups. `dali-reviewer` passed the S5-D19 fix and its re-check with follow-ups, all taken. Before that, `dali-reviewer` failed the stage on S5-D1: changing a simulator setting could flash the bench past the rate guard. Every finding is fixed or accepted with a reason in `docs/SECURITY_FINDINGS.md` (S5-M1 to S5-D19, and S5-P1 for the owner). Two fixes changed the design in ADR 0013:
+  - the bench waits 2 s after a rebuild
+  - Apply activates the colour before the level unless the driver reports automatic activation
+
+Open, for the owner or later stages:
+
+- **S5-P1 (High, open):** a gap in the rate guard on unseen DT8 hardware, from Stage 3 or 4. It needs a change to `src/safety` with property tests. On 2026-11-16 the owner chose to leave it for a later stage.
+
+- Tests aimed at the 57 mutants that only the old checker killed (`docs/MUTATION.md`, last group), starting with the sampling in `src/safety/rate/trace.ts`.
+- Groups as a target for the playground's controls are not built.
+- A script raising the ceiling (E-ceiling) and panic mid-script (E-panic) wait for the console in Stage 6.
+- The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove only the built-in Chromium.
+- three.js waits for Stage 7. `e2e/bundle.spec.ts` checks that the entry chunk stays free of lazy chunks and under 250 kB.
+- S4-R9 (the hardware shadow assumes automatic activation is on) is unchanged. Apply no longer relies on it.
+
 ## Next
 
-Review and merge the Stage 4 PR. Then Stage 5 (app shell, design system and playground) on Sonnet, in plan mode.
+Review and merge the Stage 5 PR. Then Stage 6 (console and scripts) on Sonnet, in plan mode.

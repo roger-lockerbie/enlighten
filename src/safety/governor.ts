@@ -239,7 +239,10 @@ export class Governor {
   private synthetic: { t: number; scope: string; until: number; tx?: number | undefined }[] = [];
   /** The OFF that follows an unlocked RESET is part of the RESET's one swing (SPEC S3.10). */
   private resetOff: { targets: Set<number>; until: number } | undefined;
-  private readonly holdUntil: number;
+  private holdUntil: number;
+  private holdReason = 'nothing is known about the lights just after connecting';
+  /** If set, a refusal in the hold asks to be tried again this soon, not at the hold's end. */
+  private holdRetryMs: number | undefined;
   /** Addresses with a temporary colour set since their last ACTIVATE: 'tc', 'rgb', 'waf' parts seen. */
   private readonly tempSeen = new Map<number, Set<string>>();
   /** Approvals this governor issued, so a router can refuse another connection's (ADR 0012). */
@@ -260,6 +263,19 @@ export class Governor {
     }
     this.holdUntil =
       opts.target === 'hardware' ? (opts.connectedAt ?? 0) + CONNECT_HOLD_MS : -Infinity;
+  }
+
+  /**
+   * Hold every light change but OFF until a time, with a reason, as after a hardware connect. The
+   * engine uses it while the simulated bench is rebuilt: new gear has no history for the rate guard,
+   * so nothing may light it until the hard step window has passed (ADR 0013, DALI review S5-D1).
+   * It replaces any hold this governor had. Only the simulated bench's governor is given one. A hold
+   * whose end is not known yet gives `retryMs`, so waiting work asks again soon rather than at its end.
+   */
+  holdLightChanges(until: number, reason: string, retryMs?: number): void {
+    this.holdUntil = until;
+    this.holdReason = reason;
+    this.holdRetryMs = retryMs;
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -1014,8 +1030,12 @@ export class Governor {
       return [
         {
           scope: 'bus',
-          rule: 'nothing is known about the lights just after connecting',
-          retryAt: this.holdUntil,
+          rule: this.holdReason,
+          hold: true,
+          retryAt:
+            this.holdRetryMs === undefined
+              ? this.holdUntil
+              : Math.min(this.holdUntil, first + this.holdRetryMs),
         },
       ];
     }
@@ -1067,6 +1087,11 @@ export class Governor {
 
   /** The earliest time the same transaction would pass, checked by judging it again then. */
   private retryAt(tx: Transaction, now: number, v: readonly Violation[]): { retryAt?: number } {
+    // A hold whose end is not known yet gives its own time to ask again. Judging further ahead would
+    // find only the hold, and give up before its end (DALI re-review S5-D13).
+    const [only] = v;
+    if (this.holdRetryMs !== undefined && v.length === 1 && only?.hold === true)
+      return { retryAt: Math.ceil(Math.max(now + 1, only.retryAt)) };
     let t = Math.max(now + 1, ...v.map((x) => x.retryAt));
     for (let i = 0; i < 16; i++) {
       const again = this.rateCheck(tx, t);

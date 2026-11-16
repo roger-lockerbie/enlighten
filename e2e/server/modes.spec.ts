@@ -3,8 +3,9 @@
  * question, inventory, the safety profile, a divergence when the fake differs, the fallback when the
  * hasseb or the server goes away, commissioning, the hardware check, and panic reaching the bus.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { watch } from '../harness.ts';
+import { connect, goTo } from './connect.ts';
 import { startServer, type Server } from './fixture.ts';
 
 let server: Server | undefined;
@@ -13,22 +14,6 @@ test.afterEach(async () => {
   await server?.stop();
   server = undefined;
 });
-
-async function connect(page: Page, target: 'Hardware' | 'Both'): Promise<void> {
-  await page.getByRole('button', { name: target, exact: true }).click();
-  await expect(page.getByTestId('connection')).toHaveText(/Hardware: ready, hasseb firmware 2\.4/);
-  await page.getByRole('button', { name: 'Yes, I can see them' }).click();
-  // The scan, the safety profile and the reads finish with both drivers verified.
-  await expect(page.getByTestId('device-0').getByTestId('profile-status')).toHaveText('verified', {
-    timeout: 60_000,
-  });
-  await expect(page.getByTestId('device-1').getByTestId('profile-status')).toHaveText('verified', {
-    timeout: 60_000,
-  });
-  await expect(page.getByRole('status').filter({ hasText: 'Working' })).toHaveCount(0, {
-    timeout: 60_000,
-  });
-}
 
 test('connects, scans, writes the safety profile and shows what each driver reports', async ({
   page,
@@ -44,7 +29,7 @@ test('connects, scans, writes the safety profile and shows what each driver repo
   expect(h['cross-origin-embedder-policy']).toBe('require-corp');
   expect(h['x-frame-options']).toBe('DENY');
   expect(await page.evaluate(() => window.crossOriginIsolated)).toBe(true);
-  await expect(page.getByRole('heading', { name: 'Enlighten', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Playground', level: 1 })).toBeVisible();
   await expect(page.getByTestId('connection')).toHaveText('Simulator');
 
   await connect(page, 'Hardware');
@@ -73,12 +58,17 @@ test('logs a divergence in Both when the fake differs from the simulator', async
   const w = await watch(page);
   await page.goto(server.url);
   await connect(page, 'Both');
+  await goTo(page, 'Bus monitor');
+  await page.getByRole('button', { name: 'Divergence log' }).click();
   await expect(page.getByTestId('divergence-empty')).toBeVisible();
   // This hardware check step sets a level, so the fake's offset answer shows.
+  await goTo(page, 'Devices');
   const step = page.getByTestId('check-p4-max-below-level');
   await step.getByRole('checkbox').check();
   await step.getByRole('button', { name: 'Run' }).click();
   await expect(step.getByTestId('check-status')).toHaveText('done', { timeout: 60_000 });
+  await goTo(page, 'Bus monitor');
+  await page.getByRole('button', { name: 'Divergence log' }).click();
   const log = page.getByTestId('divergences');
   await expect(log).toContainText('QUERY_ACTUAL_LEVEL');
   await expect(log.locator('tbody tr').first()).toContainText('A0');

@@ -28,7 +28,7 @@ One window, no routes that need a server. Nine pages in a rail on the left:
 | Bus monitor | Every frame, decoded, with timing, source and verdict. The divergence log                                     | 5     |
 | Settings    | Preferences, workspace export and import, key legend                                                          | 5     |
 
-Pages that a stage has not built yet are not shown.
+Pages that a stage has not built yet are not shown. Stage 5 built Playground, Devices, Bus monitor and Settings, in that order in the rail, so Alt-1 to Alt-4 reach them. The Playground drives one address per panel: a group as the target is not built yet (ADR 0013).
 
 ## 2. Layout
 
@@ -45,18 +45,18 @@ Designed for a laptop at 1440 by 900 and up. No mobile layout.
 
 All are keyboard reachable, have a visible focus ring, a role and an accessible name.
 
-| Component         | Notes                                                                                                                                                                                                                         |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Paired slider     | A slider with two linked numeric fields: % and arc level, or K and mirek. Arrow keys step by one unit of the right-hand field. Markers show the driver's minimum and the ceiling. A clamped value shows what was sent and why |
-| Numeric field     | A number with its unit, a range, and Up and Down to step                                                                                                                                                                      |
-| Segmented control | For two to four exclusive choices: target, Live or Commit, Colour or Raw channels                                                                                                                                             |
-| Colour picker     | A hue and saturation field, with separate sliders for the two whites and a raw channel view. It carries a note that screens cannot show LED colours at full saturation                                                        |
-| Fade picker       | A list of the values the driver has, grouped as standard and extended, with a line saying which the driver will use                                                                                                           |
-| Toggle, menu      | Native elements, styled                                                                                                                                                                                                       |
-| Dialog            | The native `<dialog>` opened with `show()`, not `showModal()`, with its own focus trap, so the top bar and Panic stay live. Used for confirmations only. Its own key handler closes it on Escape                              |
-| Confirmation      | For raising the ceiling and for unlocks: states what changes, and asks for the new value or the unlock's name to be typed                                                                                                     |
-| Status chip       | Text with a small shape, never colour alone: verified, pending, mismatch, simulated only, estimated, prediction                                                                                                               |
-| Log row           | One line of the bus monitor or console output: text nodes only                                                                                                                                                                |
+| Component         | Notes                                                                                                                                                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Paired slider     | A slider with two linked numeric fields: % and arc level, or K and mirek. Arrow keys step by one unit of the right-hand field. Markers show the driver's minimum and the ceiling. A clamped value shows what was sent and why                              |
+| Numeric field     | A number with its unit, a range, and Up and Down to step                                                                                                                                                                                                   |
+| Segmented control | For two to four exclusive choices: target, Live or Commit, Colour or Raw channels                                                                                                                                                                          |
+| Colour picker     | A hue and saturation field, with separate sliders for the two whites and a raw channel view. It carries a note that screens cannot show LED colours at full saturation                                                                                     |
+| Fade picker       | A list of the values the driver has, grouped as standard and extended, with a line saying which the driver will use                                                                                                                                        |
+| Toggle, menu      | Native elements, styled                                                                                                                                                                                                                                    |
+| Dialog            | The native `<dialog>` opened with `show()`, not `showModal()`, with its own focus trap, so the top bar and Panic stay live. Used for confirmations only. Its own key handler closes it on Escape. A scrim below the top bar keeps the page behind it still |
+| Confirmation      | For raising the ceiling and for unlocks: states what changes, and asks for the new value or the unlock's name to be typed                                                                                                                                  |
+| Status chip       | Text with a small shape, never colour alone: verified, pending, mismatch, simulated only, estimated, prediction                                                                                                                                            |
+| Log row           | One line of the bus monitor or console output: text nodes only. In Stage 5 the bus monitor's rows are table rows                                                                                                                                           |
 
 Styling uses classes and CSS custom properties. Components contain no `style` attributes (ADR 0002).
 

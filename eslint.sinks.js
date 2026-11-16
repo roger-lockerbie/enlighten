@@ -96,6 +96,12 @@ export const bannedSinkRules = {
       message: 'srcdoc is banned.',
     },
     {
+      // ADR 0002: a style attribute reaches the page as an attribute, which style-src 'self' blocks.
+      // A `style:` directive sets one property through the CSSOM and is allowed.
+      selector: 'SvelteAttribute[key.name=/^style$/i]',
+      message: 'Inline style attributes are banned. Use a class, or a style: directive (ADR 0002).',
+    },
+    {
       selector: 'CallExpression[callee.name="importScripts"]',
       message: 'importScripts is banned.',
     },

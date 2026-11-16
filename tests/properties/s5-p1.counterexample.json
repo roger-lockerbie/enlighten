@@ -1,0 +1,176 @@
+[
+  {
+    "units": [0, 1],
+    "light": ["C1", "C5", "C1"],
+    "groups": [0, 0, 0],
+    "scene": [0, 0, 0],
+    "min": [85, 85, 85],
+    "phys": [1, 1, 1],
+    "level": [0, 219, 0],
+    "fade": [0, 1, 0]
+  },
+  [
+    {
+      "kind": "tx",
+      "dt": 0,
+      "source": "ui",
+      "cmds": [
+        {
+          "id": "DTR0",
+          "value": 1
+        },
+        {
+          "id": "DTR1",
+          "value": 0
+        },
+        {
+          "id": "DTR2",
+          "value": 0
+        },
+        {
+          "id": "DT8_SET_TEMPORARY_RGB",
+          "address": {
+            "kind": "short",
+            "n": 1
+          }
+        },
+        {
+          "id": "DTR0",
+          "value": 0
+        },
+        {
+          "id": "DTR1",
+          "value": 0
+        },
+        {
+          "id": "DTR2",
+          "value": 0
+        },
+        {
+          "id": "DT8_SET_TEMPORARY_WAF",
+          "address": {
+            "kind": "short",
+            "n": 1
+          }
+        }
+      ]
+    },
+    {
+      "kind": "rescan",
+      "dt": 0
+    },
+    {
+      "kind": "tx",
+      "dt": 0,
+      "source": "ui",
+      "cmds": [
+        {
+          "id": "DAPC",
+          "address": {
+            "kind": "short",
+            "n": 1
+          },
+          "value": 255
+        }
+      ]
+    },
+    {
+      "kind": "tx",
+      "dt": 2100,
+      "source": "ui",
+      "cmds": [
+        {
+          "id": "DTR0",
+          "value": 4
+        },
+        {
+          "id": "DTR1",
+          "value": 0
+        },
+        {
+          "id": "DTR2",
+          "value": 1
+        },
+        {
+          "id": "DT8_SET_TEMPORARY_RGB",
+          "address": {
+            "kind": "short",
+            "n": 1
+          }
+        },
+        {
+          "id": "DTR0",
+          "value": 0
+        },
+        {
+          "id": "DTR1",
+          "value": 0
+        },
+        {
+          "id": "DTR2",
+          "value": 0
+        },
+        {
+          "id": "DT8_SET_TEMPORARY_WAF",
+          "address": {
+            "kind": "short",
+            "n": 1
+          }
+        },
+        {
+          "id": "DAPC",
+          "address": {
+            "kind": "short",
+            "n": 1
+          },
+          "value": 145
+        }
+      ]
+    },
+    {
+      "kind": "tx",
+      "dt": 0,
+      "source": "ui",
+      "cmds": [
+        {
+          "id": "DTR0",
+          "value": 0
+        },
+        {
+          "id": "DTR1",
+          "value": 0
+        },
+        {
+          "id": "DTR2",
+          "value": 0
+        },
+        {
+          "id": "DT8_SET_TEMPORARY_RGB",
+          "address": {
+            "kind": "short",
+            "n": 1
+          }
+        },
+        {
+          "id": "DTR0",
+          "value": 0
+        },
+        {
+          "id": "DTR1",
+          "value": 0
+        },
+        {
+          "id": "DTR2",
+          "value": 0
+        },
+        {
+          "id": "DT8_SET_TEMPORARY_WAF",
+          "address": {
+            "kind": "short",
+            "n": 1
+          }
+        }
+      ]
+    }
+  ]
+]

@@ -1,9 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { cspDirectives } from '../config/security.ts';
 
-test('placeholder page loads with no CSP violation, console error or page error', async ({
-  page,
-}) => {
+test('every page loads with no CSP violation, console error or page error', async ({ page }) => {
   const problems: string[] = [];
 
   page.on('console', (msg) => {
@@ -33,7 +31,22 @@ test('placeholder page loads with no CSP violation, console error or page error'
   });
 
   const response = await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Enlighten' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Playground' })).toBeVisible();
+  // E-csp: every page of the app, and the bus worker, under the production policy.
+  await expect(page.getByTestId('verified')).toHaveText('2/2 verified', { timeout: 60_000 });
+  for (const name of ['Devices', 'Bus monitor', 'Settings', 'Playground']) {
+    await page
+      .getByRole('navigation', { name: 'Pages' })
+      .getByRole('button', { name, exact: true })
+      .click();
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+  }
+  // Open a dialog and the console drawer too.
+  await page.getByTestId('ceiling').click();
+  await expect(page.getByTestId('ceiling-dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.keyboard.press('Control+Backquote');
+  await expect(page.getByTestId('console')).toBeVisible();
 
   const headers = response?.headers() ?? {};
   expect(headers['content-security-policy']).toContain("require-trusted-types-for 'script'");

@@ -63,7 +63,7 @@ test('without a token the page offers the simulator only', async ({ page }) => {
   server = await startServer();
   const w = await watch(page);
   await page.goto('http://127.0.0.1:47821/');
-  await expect(page.getByRole('heading', { name: 'Enlighten', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Playground', level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Hardware', exact: true })).toBeDisabled();
   await expect(page.getByText('Hardware and Both need the server')).toBeVisible();
   expect(await w.problems()).toEqual([]);

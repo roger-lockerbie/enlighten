@@ -7,9 +7,17 @@
  */
 import type { Address } from '../dali/address.ts';
 import type { Command } from '../dali/codec.ts';
-import type { Outcome } from '../safety/governor.ts';
+import { DEFAULT_CEILING_ARC, type Outcome } from '../safety/governor.ts';
 import type { Unlock } from '../safety/types.ts';
-import type { Intent, OutputTarget, RequestResult, Snapshot } from './engine.ts';
+import { parseUnitSetup, type UnitSetup } from '../sim/settings.ts';
+import type {
+  Channels,
+  FadeSetting,
+  Intent,
+  OutputTarget,
+  RequestResult,
+  Snapshot,
+} from './engine.ts';
 
 export type Call =
   | { readonly op: 'setTarget'; readonly target: OutputTarget }
@@ -33,11 +41,20 @@ export type Call =
     }
   | { readonly op: 'checkReport' }
   | { readonly op: 'clearCheck' }
-  | { readonly op: 'clearDivergences' };
+  | { readonly op: 'clearDivergences' }
+  /** Set up the simulated bench's units again (SPEC R1.6). */
+  | { readonly op: 'bench'; readonly setup: Partial<Record<'A' | 'B', UnitSetup>> };
 
 export type ToWorker =
   /** The first message. The token is present only when the page came from the server. */
-  | { readonly type: 'init'; readonly token?: Uint8Array }
+  | {
+      readonly type: 'init';
+      readonly token?: Uint8Array;
+      /** The ceiling to start with, from the page's stored preferences (ADR 0009). */
+      readonly ceilingArc?: number;
+      /** The simulated bench's set-up, from the page's stored preferences. */
+      readonly bench?: Partial<Record<'A' | 'B', UnitSetup>>;
+    }
   | { readonly type: 'heartbeat'; readonly visible: boolean }
   | { readonly type: 'panic'; readonly id: number }
   | { readonly type: 'call'; readonly id: number; readonly call: Call };
@@ -84,13 +101,82 @@ function parseCommand(x: unknown): Command | undefined {
   return out;
 }
 
+function parseChannels(x: unknown): Channels | undefined {
+  if (!Array.isArray(x) || x.length !== 6) return undefined;
+  const out: number[] = [];
+  for (const v of x) {
+    if (!isInt(v, 0, 255)) return undefined;
+    out.push(v);
+  }
+  return out as unknown as Channels;
+}
+
+function parseFade(x: unknown): FadeSetting | undefined {
+  if (!isObj(x)) return undefined;
+  if (x['kind'] === 'standard' && isInt(x['value'], 0, 15))
+    return { kind: 'standard', value: x['value'] };
+  if (x['kind'] === 'extended' && isInt(x['value'], 0, 0x4f))
+    return { kind: 'extended', value: x['value'] };
+  return undefined;
+}
+
+/** A set-up for the bench's units. A change must name a unit; a start may name none. */
+function parseBench(
+  x: unknown,
+  allowEmpty = false,
+): Partial<Record<'A' | 'B', UnitSetup>> | undefined {
+  if (!isObj(x) || (!allowEmpty && Object.keys(x).length === 0)) return undefined;
+  const out: Partial<Record<'A' | 'B', UnitSetup>> = {};
+  for (const k of Object.keys(x)) {
+    if (k !== 'A' && k !== 'B') return undefined;
+    const u = parseUnitSetup(x[k]);
+    if (typeof u === 'string') return undefined;
+    out[k] = u;
+  }
+  return out;
+}
+
+const isMirek = (x: unknown): x is number => isInt(x, 1, 0xfffe);
+
 function parseIntent(x: unknown): Intent | undefined {
   if (!isObj(x)) return undefined;
   switch (x['kind']) {
-    case 'level':
-      return isInt(x['address'], 0, 63) && isInt(x['arc'], 0, 254)
+    case 'level': {
+      const live = x['live'];
+      if (!isInt(x['address'], 0, 63) || !isInt(x['arc'], 0, 254)) return undefined;
+      if (live !== undefined && !isBool(live)) return undefined;
+      return live === undefined
         ? { kind: 'level', address: x['address'], arc: x['arc'] }
+        : { kind: 'level', address: x['address'], arc: x['arc'], live };
+    }
+    case 'tc':
+      return isInt(x['address'], 0, 63) && isMirek(x['mirek'])
+        ? { kind: 'tc', address: x['address'], mirek: x['mirek'] }
         : undefined;
+    case 'rgbwaf': {
+      const channels = parseChannels(x['channels']);
+      return isInt(x['address'], 0, 63) && channels !== undefined
+        ? { kind: 'rgbwaf', address: x['address'], channels }
+        : undefined;
+    }
+    case 'apply': {
+      const { address, fade, arc, mirek, channels } = x;
+      if (!isInt(address, 0, 63)) return undefined;
+      const f = fade === undefined ? undefined : parseFade(fade);
+      const ch = channels === undefined ? undefined : parseChannels(channels);
+      if (fade !== undefined && f === undefined) return undefined;
+      if (channels !== undefined && ch === undefined) return undefined;
+      if (arc !== undefined && !isInt(arc, 0, 254)) return undefined;
+      if (mirek !== undefined && !isMirek(mirek)) return undefined;
+      return {
+        kind: 'apply',
+        address,
+        ...(f === undefined ? {} : { fade: f }),
+        ...(arc === undefined ? {} : { arc }),
+        ...(mirek === undefined ? {} : { mirek }),
+        ...(ch === undefined ? {} : { channels: ch }),
+      };
+    }
     case 'raw':
       return isInt(x['a'], 0, 255) && isInt(x['b'], 0, 255)
         ? { kind: 'raw', a: x['a'], b: x['b'] }
@@ -151,6 +237,10 @@ function parseCall(x: unknown): Call | undefined {
     }
     case 'commission':
       return isStr(x['typed'], 64) ? { op: 'commission', typed: x['typed'] } : undefined;
+    case 'bench': {
+      const setup = parseBench(x['setup']);
+      return setup === undefined ? undefined : { op: 'bench', setup };
+    }
     case 'check': {
       const { step, confirmed, note, skip } = x;
       if (!isStr(step, 64)) return undefined;
@@ -176,10 +266,20 @@ export function parseToWorker(x: unknown): ToWorker | undefined {
   switch (x['type']) {
     case 'init': {
       const t = x['token'];
-      if (t === undefined) return { type: 'init' };
-      return t instanceof Uint8Array && t.length === 32
-        ? { type: 'init', token: t.slice() }
-        : undefined;
+      const arc = x['ceilingArc'];
+      const b = x['bench'];
+      if (t !== undefined && !(t instanceof Uint8Array && t.length === 32)) return undefined;
+      // A session never starts above the default ceiling: a higher one needs a person's
+      // confirmation once the app is running (ADR 0013, security review S5-L2).
+      if (arc !== undefined && !isInt(arc, 1, DEFAULT_CEILING_ARC)) return undefined;
+      const bench = b === undefined ? undefined : parseBench(b, true);
+      if (b !== undefined && bench === undefined) return undefined;
+      return {
+        type: 'init',
+        ...(t === undefined ? {} : { token: t.slice() }),
+        ...(arc === undefined ? {} : { ceilingArc: arc }),
+        ...(bench === undefined ? {} : { bench }),
+      };
     }
     case 'heartbeat':
       return isBool(x['visible']) ? { type: 'heartbeat', visible: x['visible'] } : undefined;
@@ -205,7 +305,18 @@ export function parseFromWorker(x: unknown): FromWorker | undefined {
       const s = x['snapshot'];
       if (!isObj(s) || typeof s['target'] !== 'string' || !TARGETS.includes(s['target']))
         return undefined;
-      for (const k of ['devices', 'divergences', 'jobs', 'check', 'monitor', 'notices', 'unlocks'])
+      for (const k of [
+        'devices',
+        'divergences',
+        'jobs',
+        'check',
+        'monitor',
+        'notices',
+        'unlocks',
+        'light',
+        'feedback',
+        'bench',
+      ])
         if (!Array.isArray(s[k])) return undefined;
       if (!isBool(s['latched']) || !isInt(s['ceilingArc'], 1, 254)) return undefined;
       return { type: 'snapshot', snapshot: s as unknown as Snapshot };

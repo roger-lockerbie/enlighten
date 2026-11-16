@@ -54,7 +54,11 @@ export class BusClient {
   /** Set once the worker is gone. Nothing more can be sent. */
   dead: string | undefined;
 
-  constructor(token: Uint8Array | undefined) {
+  /** `start` carries the stored ceiling and bench set-up, already validated by the store. */
+  constructor(
+    token: Uint8Array | undefined,
+    start: Omit<Extract<ToWorker, { type: 'init' }>, 'type' | 'token'> = {},
+  ) {
     const w = startBusWorker();
     this.worker = w;
     w.onmessage = (ev: MessageEvent) => {
@@ -63,7 +67,7 @@ export class BusClient {
     w.onerror = () => {
       this.end('The bus worker stopped with an error. Reload the page.');
     };
-    this.post(token === undefined ? { type: 'init' } : { type: 'init', token });
+    this.post({ type: 'init', ...start, ...(token === undefined ? {} : { token }) });
     // The page keeps no copy: the caller's array is cleared.
     token?.fill(0);
     const beat = () => {

@@ -6,6 +6,9 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
+          // The engine tests drive long runs on the virtual clock. Under Stryker's instrumentation
+          // one of them takes longer than the default 5 s.
+          testTimeout: 20_000,
           include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'config/**/*.test.ts'],
           exclude: ['**/*.prop.test.ts'],
           environment: 'node',
@@ -30,6 +33,8 @@ export default defineConfig({
         'src/safety/**/*.ts',
         'src/engine/**/*.ts',
         'src/transport/**/*.ts',
+        'src/light/**/*.ts',
+        'src/store/**/*.ts',
       ],
       exclude: ['**/*.test.ts', '**/index.ts'],
       reporter: ['text-summary', 'text'],
