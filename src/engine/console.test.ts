@@ -326,6 +326,27 @@ describe('scripts', () => {
     expect(t.clock.now() - start).toBeLessThan(10_000);
   });
 
+  it('a scan or profile write from the Devices page stops a script first (S6-L1)', async () => {
+    const t = setup();
+    await t.settle();
+    const p = t.engine.runScript('s', 'level 0 50\nwait 1min\nlevel 0 254', ctx);
+    await t.until(() => t.engine.snapshot().script?.line === 2);
+    const scan = t.engine.rescan('ui');
+    expect((await t.drive(p)).ok).toBe(false);
+    expect(t.lines().at(-1)).toBe('s stopped: A scan started.');
+    expect((await t.drive(scan)).ok).toBe(true);
+
+    const q = t.engine.runScript('s', 'wait 1min\noff 0', ctx);
+    await t.until(() => t.engine.snapshot().script !== undefined);
+    const prof = t.engine.reapplyProfile('ui');
+    expect((await t.drive(q)).ok).toBe(false);
+    expect(t.lines().at(-1)).toBe('s stopped: The safety profile is being written again.');
+    expect((await t.drive(prof)).ok).toBe(true);
+
+    // The console's own scan runs inside its line and finishes it.
+    expect((await t.type('scan')).r.ok).toBe(true);
+  });
+
   it('runs one script at a time, and refuses typed lines while it runs', async () => {
     const t = setup();
     await t.settle();
@@ -351,6 +372,9 @@ describe('scripts', () => {
       'hi there',
       'r finished.',
     ]);
+    // Echoed text has its own kind, so it cannot pass for the app's own lines (S6-I2).
+    const echoed = t.engine.snapshot().console.filter((l) => l.text === 'hi there');
+    expect(echoed.map((l) => l.kind)).toEqual(['echo', 'echo']);
   });
 });
 

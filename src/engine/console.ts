@@ -32,7 +32,7 @@ import type { DeviceView, FadeSetting, Intent, OutputTarget, RequestResult } fro
 
 /** How a line of console output reads: `out` is plain, the rest are prefixed so colour is never needed. */
 export type ConsoleLineKind =
-  'out' | 'reply' | 'note' | 'refused' | 'fault' | 'error' | 'step' | 'pause';
+  'out' | 'reply' | 'note' | 'refused' | 'fault' | 'error' | 'step' | 'pause' | 'echo';
 
 export interface ConsoleLine {
   readonly kind: ConsoleLineKind;
@@ -229,7 +229,8 @@ export class ConsoleExec {
         );
         return true;
       case 'echo':
-        this.out('out', c.text);
+        // Its own kind, shown with a prefix, so echoed text cannot pass for the app's own (S6-I2).
+        this.out('echo', c.text);
         return true;
       case 'wait':
         await this.host.sleep(c.ms);

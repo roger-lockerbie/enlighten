@@ -9,7 +9,7 @@
   the line and stops a running line or script. Every frame goes through the governor in the worker.
 -->
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { DRAWER_MAX, DRAWER_MIN } from '../../store/schema.ts';
   import { keyPress } from '../console.svelte.ts';
   import type { AppState } from '../state.svelte.ts';
@@ -72,7 +72,12 @@
     });
   });
 
-  const PREFIX: Readonly<Record<string, string>> = { step: '+ ', pause: '|| ' };
+  const PREFIX: Readonly<Record<string, string>> = { step: '+ ', pause: '|| ', echo: 'echo: ' };
+
+  // Closing the drawer drops a pending confirmation (S6-L4).
+  onDestroy(() => {
+    con.cancelConfirm();
+  });
 </script>
 
 <section
@@ -222,6 +227,7 @@
     color: var(--danger);
   }
   .line.note,
+  .line.echo,
   .line.step,
   .line.trace {
     color: var(--text-muted);

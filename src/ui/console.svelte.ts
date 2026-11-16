@@ -22,7 +22,7 @@ import { widgetFor, type KeyPress, type Platform } from '../console/keys.ts';
 import { aliasProblem, parseLine, type ParseContext } from '../console/parse.ts';
 import type { ConsoleLineKind } from '../engine/console.ts';
 import type { Snapshot } from '../engine/engine.ts';
-import { aliasContext, consoleContext, type Alias } from '../engine/protocol.ts';
+import { aliasContext, consoleContext, MAX_USE, type Alias } from '../engine/protocol.ts';
 import { BUILTIN_SCRIPTS, builtin } from '../script/builtin.ts';
 import type { StoredScript } from '../store/schema.ts';
 import { timeText } from './format.ts';
@@ -43,7 +43,12 @@ interface Confirm {
   /** What to type, compared without case. */
   readonly expect: string;
   readonly run: () => void;
+  /** When it was asked, in ms. It lapses after CONFIRM_LAPSE_MS. */
+  readonly at: number;
 }
+
+/** A confirmation not answered in this time lapses (S6-L4). */
+export const CONFIRM_LAPSE_MS = 60_000;
 
 /** The platform for the key legend: a Mac, or an app window, can use the keys a browser tab keeps. */
 export function platform(): Platform {
@@ -85,6 +90,8 @@ export class ConsoleState {
   private consoleSeq = 0;
   private traceSeq = 0;
   readonly platform: Platform;
+
+  private readonly now = (): number => Date.now();
 
   constructor(app: AppState, stored: readonly { line: string; at: number }[], p: Platform) {
     this.app = app;
@@ -288,12 +295,16 @@ export class ConsoleState {
     this.ed = afterAccept(this.ed, next);
     this.print('input', `${this.prompt} ${raw}`);
     const c = this.confirm;
-    if (c !== undefined) {
+    // Panic typed at a confirm> prompt is panic, not an answer (S6-M1).
+    if (c !== undefined && raw.trim().toLowerCase() !== 'panic') {
       this.confirm = undefined;
-      if (raw.trim().toLowerCase() === c.expect.toLowerCase()) c.run();
+      if (this.now() - c.at > CONFIRM_LAPSE_MS)
+        this.print('note', 'That confirmation lapsed. Nothing changed. Type the command again.');
+      else if (raw.trim().toLowerCase() === c.expect.toLowerCase()) c.run();
       else this.print('note', 'Not confirmed. Nothing changed.');
       return;
     }
+    this.confirm = undefined;
     let line = raw;
     if (raw !== this.verified) {
       const x = expand(raw, this.historyLines);
@@ -357,7 +368,12 @@ export class ConsoleState {
           this.use = undefined;
           this.print('out', 'No default target.');
         } else {
-          this.use = line.trim().split(/\s+/)[1] ?? '';
+          const to = line.trim().split(/\s+/)[1] ?? '';
+          if (to.length > MAX_USE) {
+            this.print('error', `enlighten: use: at most ${String(MAX_USE)} characters`);
+            return;
+          }
+          this.use = to;
           this.print('out', `Commands with no address go to ${this.use}.`);
         }
         return;
@@ -412,7 +428,14 @@ export class ConsoleState {
 
   private ask(text: string, expect: string, run: () => void): void {
     this.print('note', text);
-    this.confirm = { expect, run };
+    this.confirm = { expect, run, at: this.now() };
+  }
+
+  /** Drop a pending confirmation, as when the drawer closes or another page runs a line. */
+  cancelConfirm(): void {
+    if (this.confirm === undefined) return;
+    this.confirm = undefined;
+    this.print('note', 'Not confirmed. Nothing changed.');
   }
 
   private historyCommand(args: readonly string[]): void {
@@ -466,6 +489,7 @@ export class ConsoleState {
 
   /** Run a line as if typed, from another page (the Scripts page's Run). */
   submit(line: string): void {
+    this.cancelConfirm();
     this.print('input', `${this.prompt} ${line}`);
     this.remember(line);
     this.run(line);

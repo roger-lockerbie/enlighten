@@ -808,6 +808,8 @@ export class Engine {
     if (!isPerson(source)) return no('Only a person starts a scan.');
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
+    // A scan from the console runs inside its own line. From anywhere else it stops the console.
+    if (source !== 'console') this.stopConsoleFor('A scan started.');
     return this.inventory(conn);
   }
 
@@ -816,6 +818,7 @@ export class Engine {
     if (!isPerson(source)) return no('Only a person re-applies the profile.');
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
+    if (source !== 'console') this.stopConsoleFor('The safety profile is being written again.');
     const r = await this.runJob(conn, 'profile', 'Safety profile', async (job, submit) => {
       for (const n of conn.found) {
         if (job.aborted) return;
@@ -1360,6 +1363,7 @@ export class Engine {
     if (conn === undefined) return no('Hardware: disconnected.');
     if (!conn.governor.isUnlocked('reset')) return no('Commissioning needs the reset unlock.');
     if (typed !== 'commission') return no('Type "commission" to confirm.');
+    this.stopConsoleFor('Commissioning started.');
     const r = await this.runJob(conn, 'commission', 'Commissioning', async (job, submit) => {
       const result = await commission({
         submit,
@@ -1408,6 +1412,7 @@ export class Engine {
     if (step.unlock !== undefined && !conn.governor.isUnlocked(step.unlock))
       return no(`This step needs the ${step.unlock} unlock.`);
     const run = step.run;
+    this.stopConsoleFor('A hardware check step started.');
     const r = await this.runJob(conn, 'check', step.title, async (_job, submit) => {
       const ctx: CheckContext = {
         submit,
@@ -1668,8 +1673,21 @@ export class Engine {
 
   /** Ctrl-C: stop the running console line or script, and nothing else. */
   stopConsole(): void {
-    for (const j of this.jobs) if (CONSOLE_JOBS.includes(j.kind)) this.abort(j, 'Ctrl-C.');
-    this.emit();
+    this.stopConsoleFor('Ctrl-C.');
+  }
+
+  /**
+   * Stop console lines and scripts before work that needs the bus to itself: commissioning, a
+   * hardware check step, or a scan or profile write started outside the console (S6-L1).
+   */
+  private stopConsoleFor(why: string): void {
+    let any = false;
+    for (const j of this.jobs)
+      if (CONSOLE_JOBS.includes(j.kind)) {
+        this.abort(j, why);
+        any = true;
+      }
+    if (any) this.emit();
   }
 
   // -----------------------------------------------------------------------------------------------

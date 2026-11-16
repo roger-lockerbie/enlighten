@@ -7,6 +7,8 @@
 export class ScreenWake {
   private wanted = false;
   private held: WakeLockSentinel | undefined;
+  /** A request in flight, so a second take() does not ask again (S6-L5). */
+  private taking = false;
   private told = false;
   private readonly onRefused: (why: string) => void;
 
@@ -29,13 +31,14 @@ export class ScreenWake {
   }
 
   private async take(): Promise<void> {
-    if (this.held !== undefined) return;
+    if (this.held !== undefined || this.taking) return;
     if (!('wakeLock' in navigator)) {
       this.refused(
         'This browser has no screen wake lock, so the screen may sleep during a script.',
       );
       return;
     }
+    this.taking = true;
     try {
       const s = await navigator.wakeLock.request('screen');
       if (!this.wanted) {
@@ -50,6 +53,8 @@ export class ScreenWake {
       this.refused(
         'The browser refused a screen wake lock, so the screen may sleep during a script.',
       );
+    } finally {
+      this.taking = false;
     }
   }
 

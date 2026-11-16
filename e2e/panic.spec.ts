@@ -91,3 +91,15 @@ test('panic stops a script mid-wait, from the button and typed in the console', 
   await expect(log).not.toContainText('A0 level 200');
   await noProblems(w);
 });
+
+test('panic typed at a confirm> prompt is panic, not an answer (S6-M1)', async ({ page }) => {
+  const w = await openApp(page);
+  await openConsole(page);
+  await typeLine(page, 'unlock rate');
+  await expect(page.getByTestId('console-status')).toContainText('Type rate');
+  await typeLine(page, 'panic');
+  await panicLatched(page);
+  await expect(consoleLog(page)).not.toContainText('Not confirmed');
+  await expect(page.getByTestId('console-status')).not.toContainText('Type rate');
+  await noProblems(w);
+});

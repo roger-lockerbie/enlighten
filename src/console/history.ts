@@ -257,9 +257,15 @@ function delimited(c: Cursor, d: string): string {
   return out;
 }
 
+/** The text so far, or an error once it passes the line limit, so it cannot grow without bound (S6-L2). */
+function bounded(text: string): string {
+  if (text.length > MAX_LINE) throw new ExpandError('the expanded line is too long');
+  return text;
+}
+
 function substitute(text: string, sub: Substitution, global: boolean): string {
   if (sub.from === '' || !text.includes(sub.from)) throw new ExpandError('substitution failed');
-  return global ? text.split(sub.from).join(sub.to) : text.replace(sub.from, () => sub.to);
+  return bounded(global ? text.split(sub.from).join(sub.to) : text.replace(sub.from, () => sub.to));
 }
 
 /** `:s/l/r/`, `:gs/l/r/`, `:&`, `:g&` and `:p`, any number of them. */
@@ -322,7 +328,7 @@ export function expand(line: string, events: readonly HistLine[], sub?: Substitu
       const to = delimited(c, '^');
       state.sub = { from, to };
       out = substitute(last.line, state.sub, false);
-      out += modifiers(c, '', state);
+      out = bounded(out + modifiers(c, '', state));
       i = c.i;
       changed = true;
     }
@@ -351,7 +357,7 @@ export function expand(line: string, events: readonly HistLine[], sub?: Substitu
       const c: Cursor = { s: line, i: i + 1 };
       const ev = event(c, events);
       const picked = words(c, ev);
-      out += modifiers(c, picked, state);
+      out = bounded(out + modifiers(c, picked, state));
       i = c.i;
       changed = true;
     }

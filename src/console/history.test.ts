@@ -209,6 +209,16 @@ describe('expand', () => {
       message: 'enlighten: the expanded line is too long',
     });
   });
+
+  it('stops a substitution that grows the line before it grows again (S6-L2)', () => {
+    const e = hist(['a']).lines;
+    const t0 = performance.now();
+    expect(expand(`!!:gs/a/aaaaaaaa/${':g&'.repeat(40)}`, e)).toEqual({
+      kind: 'error',
+      message: 'enlighten: the expanded line is too long',
+    });
+    expect(performance.now() - t0).toBeLessThan(100);
+  });
 });
 
 describe('historyList', () => {

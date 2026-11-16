@@ -71,6 +71,8 @@ export type Alias = readonly [string, number];
 
 /** The most aliases a console call carries: one for each short address. */
 export const MAX_ALIASES = 64;
+/** The longest `use` default a console call carries. */
+export const MAX_USE = 200;
 
 export type ToWorker =
   /** The first message. The token is present only when the page came from the server. */
@@ -306,7 +308,7 @@ function parseCall(x: unknown): Call | undefined {
       const { line, use, confirmed } = x;
       const aliases = parseAliases(x['aliases']);
       if (!isStr(line, MAX_LINE) || aliases === undefined) return undefined;
-      if (use !== undefined && !isStr(use, 200)) return undefined;
+      if (use !== undefined && !isStr(use, MAX_USE)) return undefined;
       if (confirmed !== undefined && !isBool(confirmed)) return undefined;
       return {
         op: 'console',

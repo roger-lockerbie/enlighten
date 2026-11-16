@@ -44,6 +44,25 @@ describe('P-history', () => {
     );
   });
 
+  it('chained substitutions stay within the limit at every step (S6-L2)', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 4 }),
+        fc.string({ maxLength: 40 }),
+        fc.integer({ min: 0, max: 60 }),
+        (from, to, n) => {
+          const h = new History([], { limit: 1000, ignoreSpace: false });
+          h.add(`echo ${from}`, 0);
+          const d =
+            ['/', '|', '#', ','].find((c) => !from.includes(c) && !to.includes(c)) ?? '\u0001';
+          const r = expand(`!!:gs${d}${from}${d}${to}${d}${':g&'.repeat(n)}`, h.lines);
+          if (r.kind === 'ok') expect(r.line.length).toBeLessThanOrEqual(MAX_LINE);
+        },
+      ),
+      { numRuns: runs },
+    );
+  });
+
   it('a line with no ! and no leading ^ is the line', () => {
     fc.assert(
       fc.property(
