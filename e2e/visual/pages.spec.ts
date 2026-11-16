@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { goTo, ready, type PageName } from '../app.ts';
 
-const PAGES: PageName[] = ['Playground', 'Devices', 'Bus monitor', 'Settings'];
+const PAGES: PageName[] = ['Playground', 'Devices', 'Bus monitor', 'Settings', 'Scripts'];
 
 test('each page matches its baseline', async ({ page }) => {
   await page.goto('/');

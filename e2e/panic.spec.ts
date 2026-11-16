@@ -1,12 +1,22 @@
 /**
  * E-panic, for the shell: the button and Escape twice from every page, with a dialog open, and the
- * latch holding until Resume. Mid-script and mid-sequence come with Stages 6 and 9. Panic reaching
- * the bus is in e2e/server/modes.spec.ts.
+ * latch holding until Resume. Mid-script, by the button and typed in the console (Stage 6).
+ * Mid-sequence comes with Stage 9. Panic reaching the bus is in e2e/server/modes.spec.ts.
  */
 import { expect, test } from '@playwright/test';
-import { enter, goTo, noProblems, openApp, panicLatched, type PageName } from './app.ts';
+import {
+  consoleLog,
+  enter,
+  goTo,
+  noProblems,
+  openApp,
+  openConsole,
+  panicLatched,
+  typeLine,
+  type PageName,
+} from './app.ts';
 
-const PAGES: PageName[] = ['Playground', 'Devices', 'Bus monitor', 'Settings'];
+const PAGES: PageName[] = ['Playground', 'Devices', 'Bus monitor', 'Settings', 'Scripts'];
 
 test('the button and Escape twice latch panic from every page, until Resume', async ({ page }) => {
   const w = await openApp(page);
@@ -51,5 +61,33 @@ test('Escape twice works with a dialog open, and the latch holds until Resume', 
   await expect(page.getByTestId('tape-0').getByTestId('tape-text')).toContainText('2.6%', {
     timeout: 10_000,
   });
+  await noProblems(w);
+});
+
+test('panic stops a script mid-wait, from the button and typed in the console', async ({
+  page,
+}) => {
+  const w = await openApp(page);
+  await openConsole(page);
+  const log = consoleLog(page);
+  await goTo(page, 'Scripts');
+  await page.getByTestId('script-new').click();
+  await page.getByTestId('script-name').fill('slow');
+  await page.getByTestId('script-text').fill('level 0 150\nwait 1min\nlevel 0 200');
+  await page.getByTestId('script-save').click();
+  await page.getByTestId('script-run').click();
+  await expect(page.getByTestId('script-status')).toContainText('line 2', { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Panic' }).click();
+  await panicLatched(page);
+  await expect(log).toContainText('slow stopped: Panic.');
+  await expect(page.getByTestId('script-status')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Resume' }).click();
+
+  await typeLine(page, 'run slow');
+  await expect(page.getByTestId('script-status')).toContainText('line 2', { timeout: 30_000 });
+  await typeLine(page, 'panic');
+  await panicLatched(page);
+  await expect(log.getByText('slow stopped: Panic.')).toHaveCount(2);
+  await expect(log).not.toContainText('A0 level 200');
   await noProblems(w);
 });

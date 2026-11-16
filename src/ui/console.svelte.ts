@@ -200,6 +200,10 @@ export class ConsoleState {
     // Ctrl-C with a selection copies, as everywhere else.
     if (k.ctrl && !k.alt && !k.meta && k.key.toLowerCase() === 'c' && hasSelection)
       return { handled: false };
+    // Backspace and Delete remove a selection, as everywhere else. The input event then follows.
+    const plain = !k.ctrl && !k.alt && !k.meta;
+    if (hasSelection && plain && (k.key === 'Backspace' || k.key === 'Delete'))
+      return { handled: false };
     // Enter at a script's pause goes on, whatever the line holds.
     if (
       k.key === 'Enter' &&
@@ -224,6 +228,7 @@ export class ConsoleState {
       this.print('note', 'Not confirmed.');
       return { handled: true };
     }
+    const line = this.ed.buffer;
     const r = apply(this.ed, w, this.editorContext());
     if (r.effect?.kind !== 'list') this.list = [];
     if (r.effect?.kind === 'release') {
@@ -232,7 +237,7 @@ export class ConsoleState {
     }
     this.ed = r.state;
     this.message = '';
-    if (r.effect !== undefined) this.effect(r.effect);
+    if (r.effect !== undefined) this.effect(r.effect, line);
     return { handled: true };
   }
 
@@ -242,7 +247,8 @@ export class ConsoleState {
     this.list = [];
   }
 
-  private effect(e: Effect): void {
+  /** Act on an editor effect. `line` is what the input held before the key. */
+  private effect(e: Effect, line: string): void {
     switch (e.kind) {
       case 'accept':
         this.accept(e.line, e.andDown);
@@ -254,7 +260,7 @@ export class ConsoleState {
         this.out = [];
         return;
       case 'interrupt':
-        this.print('input', `${this.prompt} ${this.ed.buffer}^C`);
+        this.print('input', `${this.prompt} ${line}^C`);
         this.ed = afterAccept(this.ed);
         this.confirm = undefined;
         if (this.busy || this.app.snap?.script !== undefined)

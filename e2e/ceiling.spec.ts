@@ -1,10 +1,10 @@
 /**
  * E-ceiling: lowering takes effect at once, raising needs the new value typed, and a saved ceiling
- * above the default is offered back rather than applied at start (SPEC R6, ADR 0013). A script that
- * tries to raise it is Stage 6's (the console), and a mismatch is in e2e/server/playground.spec.ts.
+ * above the default is offered back rather than applied at start (SPEC R6, ADR 0013). A script cannot
+ * raise it (ADR 0014). A mismatch is in e2e/server/playground.spec.ts.
  */
 import { expect, test } from '@playwright/test';
-import { enter, field, noProblems, openApp, ready } from './app.ts';
+import { consoleLog, enter, field, goTo, noProblems, openApp, ready, typeLine } from './app.ts';
 
 test('lowering takes effect at once, and pulls a lit driver down with it', async ({ page }) => {
   const w = await openApp(page);
@@ -91,5 +91,24 @@ test('a saved ceiling above the default is offered back, not applied at start', 
   await expect(page.getByTestId('ceiling')).toContainText('arc 235', { timeout: 30_000 });
   await expect(offer).toHaveCount(0);
   expect(await field(page, 'level-0-right').count()).toBe(1);
+  await noProblems(w);
+});
+
+test('a script cannot raise the ceiling, though it may lower it', async ({ page }) => {
+  const w = await openApp(page);
+  await goTo(page, 'Scripts');
+  await page.getByTestId('script-new').click();
+  await page.getByTestId('script-name').fill('raise');
+  await page.getByTestId('script-text').fill('cap 210\ncap 250\nlevel all 254');
+  await page.getByTestId('script-save').click();
+  await page.getByTestId('script-run').click();
+  const log = consoleLog(page);
+  await expect(log).toContainText('refused: a script cannot raise the ceiling.', {
+    timeout: 30_000,
+  });
+  await expect(log).toContainText('raise stopped at line 2.');
+  await expect(page.getByTestId('ceiling')).toContainText('arc 210');
+  await typeLine(page, 'query 0 level');
+  await expect(log).not.toContainText('A0 level 254');
   await noProblems(w);
 });
