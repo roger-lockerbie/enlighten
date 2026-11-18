@@ -4,6 +4,7 @@
  * picture shows no patch edges.
  */
 import type { Face, Geometry } from './geometry.ts';
+import { ATLAS_WIDTH, MAX_ATLAS_HEIGHT } from './limits.ts';
 import type { Grid, Mesh } from './mesh.ts';
 
 /** Texel sizes in metres: coarse along the hallway, where light changes slowly, and fine across. */
@@ -15,8 +16,7 @@ export const TEXEL_END = 0.05;
 const POCKET_TEXELS = 8;
 /** One texel of border around each face, a copy of its edge, so filtering never reads a neighbour. */
 const PAD = 1;
-const ATLAS_WIDTH = 256;
-export const MAX_ATLAS_HEIGHT = 1024;
+export { MAX_ATLAS_HEIGHT };
 
 export interface AtlasRect {
   readonly face: number;

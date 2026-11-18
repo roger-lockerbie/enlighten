@@ -48,8 +48,8 @@
     </div>
   {/each}
   <p class="muted small">
-    An estimate: placeholder tape colours, each white channel assumed to give as much light as red,
-    green and blue together, on a scale shared by both tapes.
+    An estimate from placeholder tape data, on one scale for both tapes: tape A at full is the top.
+    A screen cannot show LED colours at full saturation.
   </p>
 </section>
 

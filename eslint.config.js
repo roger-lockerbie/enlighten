@@ -15,6 +15,7 @@ export default tseslint.config(
       'playwright-report-server/',
       'test-results/',
       'test-results-visual/',
+      'test-results-perf/',
       'node_modules/',
       'reports/',
       '.stryker-tmp/',

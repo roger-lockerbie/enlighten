@@ -3,8 +3,8 @@ import { HOST, PREVIEW_PORT } from './config/security.ts';
 
 export default defineConfig({
   testDir: 'e2e',
-  // The server tests and V-ui have their own configs.
-  testIgnore: ['server/**', 'visual/**'],
+  // The server tests, V-ui and Perf-frame have their own configs.
+  testIgnore: ['server/**', 'visual/**', 'perf/**'],
   fullyParallel: true,
   // The simulated bus runs at DALI speed, so the scan at start takes about 15 s.
   timeout: 90_000,

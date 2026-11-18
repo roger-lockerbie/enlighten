@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_MOUNTS,
   MOUNT_DEFAULTS,
   defaultScene,
   geometryText,
   mount,
   parseScene,
   sharesPocket,
+  sixMountScene,
   span,
 } from './scene.ts';
 import type { Scene } from './scene.ts';
@@ -29,6 +31,12 @@ describe('the scene', () => {
       ['skirting', 'left', 'A', 'A'],
       ['channel', 'right', 'B', 'B'],
     ]);
+  });
+
+  it('has a full scene for timing that passes the check', () => {
+    const six = sixMountScene();
+    expect(six.mounts).toHaveLength(MAX_MOUNTS);
+    expect(parseScene(copy(six))).toEqual({ ok: true, value: six });
   });
 
   it('says where each default came from', () => {

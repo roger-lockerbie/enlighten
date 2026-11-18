@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { MemoryBackend, Store } from '../store/store.ts';
+import { LightStore } from '../store/light.ts';
+import { MemoryBackend } from '../store/store.ts';
 import {
   CACHE_INDEX_KEY,
   MAX_CACHED,
@@ -23,7 +24,6 @@ import type { Scene } from './scene.ts';
 const scene = defaultScene();
 const solved = solveScene(scene, { maxPatches: 700 });
 const fresh = (): Response => structuredClone(solved);
-const stamp = () => '2026-11-18T09-00-00';
 
 describe('the cache key', () => {
   it('hashes text to 16 hex digits, the same every time', () => {
@@ -160,50 +160,50 @@ describe('stored records', () => {
 describe('the store keeps solved light', () => {
   it('saves, loads and reuses a scene', async () => {
     const b = new MemoryBackend();
-    const store = new Store(b, stamp);
-    expect(await store.loadLight(scene)).toBeUndefined();
-    await store.saveLight(scene, solved);
-    expect(await store.loadLight(scene)).toEqual(solved);
+    const store = new LightStore(b);
+    expect(await store.load(scene)).toBeUndefined();
+    await store.save(scene, solved);
+    expect(await store.load(scene)).toEqual(solved);
     expect(b.map.get(CACHE_INDEX_KEY)).toEqual([cacheKey(scene)]);
-    expect(await store.loadLight({ ...scene, width: 1.4 })).toBeUndefined();
+    expect(await store.load({ ...scene, width: 1.4 })).toBeUndefined();
   });
 
   it('deletes a record that fails its checks, and one that is another scene', async () => {
     const b = new MemoryBackend();
-    const store = new Store(b, stamp);
-    await store.saveLight(scene, solved);
+    const store = new LightStore(b);
+    await store.save(scene, solved);
     const key = cacheKey(scene);
     const stored = b.map.get(key) as { response: { layers: Float32Array[] } };
     const layer = stored.response.layers[0];
     if (layer === undefined) throw new Error('no layer');
     layer[5] = Number.NaN;
-    expect(await store.loadLight(scene)).toBeUndefined();
+    expect(await store.load(scene)).toBeUndefined();
     expect(b.map.has(key)).toBe(false);
     await b.put(key, { text: 'another scene', response: solved });
-    expect(await store.loadLight(scene)).toBeUndefined();
+    expect(await store.load(scene)).toBeUndefined();
     expect(b.map.has(key)).toBe(false);
   });
 
   it('keeps only the scenes used most recently, and clears strays', async () => {
     const b = new MemoryBackend();
-    const store = new Store(b, stamp);
+    const store = new LightStore(b);
     const scenes = [2.4, 2.5, 2.6, 2.7, 2.8, 2.9].map((height) => ({ ...scene, height }));
     await b.put('light:ffffffffffffffff', { stray: true });
-    for (const s of scenes) await store.saveLight(s, solved);
+    for (const s of scenes) await store.save(s, solved);
     const kept = [...b.map.keys()].filter((k) => k.startsWith('light:'));
     expect(kept.sort()).toEqual(scenes.slice(2).map(cacheKey).sort());
-    expect(await store.loadLight(scenes[0] ?? scene)).toBeUndefined();
-    expect(await store.loadLight(scenes[5] ?? scene)).toEqual(solved);
+    expect(await store.load(scenes[0] ?? scene)).toBeUndefined();
+    expect(await store.load(scenes[5] ?? scene)).toEqual(solved);
   });
 
   it('treats a backend that fails as an empty cache', async () => {
     const broken = new MemoryBackend();
     broken.get = () => Promise.reject(new Error('no'));
-    expect(await new Store(broken, stamp).loadLight(scene)).toBeUndefined();
+    expect(await new LightStore(broken).load(scene)).toBeUndefined();
     const half = new MemoryBackend();
-    await new Store(half, stamp).saveLight(scene, solved);
+    await new LightStore(half).save(scene, solved);
     half.put = () => Promise.reject(new Error('no'));
-    expect(await new Store(half, stamp).loadLight(scene)).toEqual(solved);
+    expect(await new LightStore(half).load(scene)).toEqual(solved);
   });
 });
 

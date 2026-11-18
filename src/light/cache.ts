@@ -6,10 +6,8 @@
  * other stored data (ADR 0009).
  */
 import type { Atlas, AtlasRect } from './atlas.ts';
-import { MAX_ATLAS_HEIGHT } from './atlas.ts';
-import { MAX_PATCHES } from './mesh.ts';
+import { ATLAS_WIDTH, MAX_ATLAS_HEIGHT, MAX_PATCHES, SOLVER_VERSION } from './limits.ts';
 import type { Response } from './response.ts';
-import { SOLVER_VERSION } from './response.ts';
 import type { Scene } from './scene.ts';
 import { MAX_MOUNTS, geometryText } from './scene.ts';
 
@@ -20,7 +18,6 @@ export const MAX_CACHED = 4;
 
 /** The most faces a scene can have: six for the room and five for each of six openings. */
 const MAX_FACES = 6 + 5 * MAX_MOUNTS;
-const MAX_ATLAS_WIDTH = 256;
 /** No surface gets more than this from 1 lm per metre of tape: the tape's own cover gives 1 ÷ its width. */
 const MAX_VALUE = 1000;
 
@@ -64,7 +61,7 @@ function checkAtlas(v: unknown): Atlas | string {
   if (o === undefined || !hasKeys(o, ['width', 'height', 'rects']))
     return 'the lightmap is not one';
   const { width, height, rects } = o;
-  if (!whole(width, 1, MAX_ATLAS_WIDTH) || !whole(height, 1, MAX_ATLAS_HEIGHT)) {
+  if (!whole(width, 1, ATLAS_WIDTH) || !whole(height, 1, MAX_ATLAS_HEIGHT)) {
     return 'the lightmap has a bad size';
   }
   if (!Array.isArray(rects) || rects.length > MAX_FACES) return 'the lightmap has too many faces';

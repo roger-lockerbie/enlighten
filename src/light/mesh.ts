@@ -5,11 +5,11 @@
  */
 import type { Face, Geometry } from './geometry.ts';
 import { inHole } from './geometry.ts';
+import { MAX_PATCHES } from './limits.ts';
 import type { Mount } from './scene.ts';
 import { span } from './scene.ts';
 
-/** The dense form factor matrix grows with the square of this (100 MB at 5,000). */
-export const MAX_PATCHES = 5000;
+export { MAX_PATCHES };
 
 /** Patch sizes before any coarsening, in metres. */
 export const STEP_ALONG = 0.25;

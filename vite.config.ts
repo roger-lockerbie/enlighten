@@ -53,5 +53,8 @@ export default defineConfig({
     sourcemap: false,
     assetsInlineLimit: 0,
     modulePreload: { polyfill: false },
+    // three.js is one lazily loaded chunk of about 540 kB (ADR 0002). e2e/bundle.spec.ts holds the
+    // entry chunk to its own budget.
+    chunkSizeWarningLimit: 700,
   },
 });

@@ -17,3 +17,4 @@ __pycache__/
 reports/
 server/.venv/
 .pytest_cache/
+test-results-perf/

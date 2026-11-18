@@ -1,44 +1,63 @@
 import { describe, expect, it } from 'vitest';
 import { channelsToHue, hueToChannels } from './hue.ts';
-import { encodeSrgb, previewColour, PREVIEW_WHITE } from './preview.ts';
+import { benchTape, encodeSrgb, previewColour, PREVIEW_WHITE } from './preview.ts';
 
 describe('previewColour', () => {
+  const TC = ['WW', 'CW', 'WW', 'CW', 'unused'] as const;
+  const RGB = ['R', 'G', 'B', 'WW', 'CW'] as const;
+
   it('is black with nothing lit', () => {
-    expect(previewColour([0, 0, 0, 0, 0], ['R', 'G', 'B', 'WW', 'CW'])).toEqual({
+    expect(previewColour([0, 0, 0, 0, 0], RGB)).toEqual({
       rgb: [0, 0, 0],
       luminance: 0,
       clipped: false,
+      desaturated: false,
     });
   });
 
-  it('shows two cool whites at full as near display white', () => {
-    const c = previewColour([1, 1], ['CW', 'CW']);
+  it('takes the tape from what the terminals carry', () => {
+    expect(benchTape(TC)).toBe('A');
+    expect(benchTape(RGB)).toBe('B');
+    expect(benchTape([])).toBe('A');
+  });
+
+  it('shows tape A at full as the top of the scale, rolled off just under white', () => {
+    const c = previewColour([1, 1, 1, 1, 0], TC);
     expect(c.luminance).toBe(PREVIEW_WHITE);
-    expect(Math.max(...c.rgb)).toBe(255);
-    expect(Math.min(...c.rgb)).toBeGreaterThan(240);
+    expect(PREVIEW_WHITE).toBe(1800);
+    expect(Math.max(...c.rgb)).toBeGreaterThan(235);
+    expect(c.clipped).toBe(true);
   });
 
   it('keeps warm white warm: more red than blue', () => {
-    const c = previewColour([0.5, 0, 0.5, 0, 0], ['WW', 'CW', 'WW', 'CW', 'unused']);
+    const c = previewColour([0.5, 0, 0.5, 0, 0], TC);
     expect(c.rgb[0]).toBeGreaterThan(c.rgb[2]);
+    expect(c.luminance).toBeCloseTo(450, 9);
+    expect(c.desaturated).toBe(false);
   });
 
-  it('keeps both tapes on one scale: half the drive is half the luminance', () => {
-    const full = previewColour([1, 0], ['WW', 'CW']);
-    const half = previewColour([0.5, 0], ['WW', 'CW']);
-    expect(half.luminance).toBeCloseTo(full.luminance / 2);
-    expect(half.rgb[0]).toBeLessThan(full.rgb[0]);
+  it('keeps both tapes on one scale: tape B at full is dimmer than tape A at full', () => {
+    const a = previewColour([1, 1, 1, 1, 0], TC);
+    const b = previewColour([1, 1, 1, 1, 1], RGB);
+    expect(b.luminance).toBe(1096);
+    expect(b.luminance).toBeLessThan(a.luminance);
+    const half = previewColour([0.5, 0, 0.5, 0, 0], TC);
+    const quarter = previewColour([0.25, 0, 0.25, 0, 0], TC);
+    expect(quarter.luminance).toBeCloseTo(half.luminance / 2, 9);
+    expect(quarter.rgb[0]).toBeLessThan(half.rgb[0]);
   });
 
-  it('scales a colour too bright for the screen down as a whole, keeping its hue', () => {
-    const c = previewColour([1, 1, 1, 1, 1], ['R', 'G', 'B', 'WW', 'CW']);
-    expect(c.clipped).toBe(true);
-    expect(Math.max(...c.rgb)).toBe(255);
+  it('marks a colour the screen cannot show at full saturation, and keeps its hue', () => {
+    const blue = previewColour([0, 0, 1, 0, 0], RGB);
+    expect(blue.desaturated).toBe(true);
+    expect(blue.rgb[2]).toBeGreaterThan(blue.rgb[0]);
+    expect(blue.rgb[2]).toBeGreaterThan(blue.rgb[1]);
+    expect(Math.min(...blue.rgb)).toBeGreaterThanOrEqual(0);
   });
 
   it('treats a missing label as unused and clamps drives to 0 to 1', () => {
     expect(previewColour([1], []).luminance).toBe(0);
-    expect(previewColour([2], ['CW']).luminance).toBe(1);
+    expect(previewColour([2], ['CW']).luminance).toBe(900);
     expect(previewColour([-1], ['CW']).luminance).toBe(0);
   });
 

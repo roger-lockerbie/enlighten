@@ -7,14 +7,14 @@ import type { Atlas } from './atlas.ts';
 import { layout, rasterise } from './atlas.ts';
 import type { Geometry } from './geometry.ts';
 import { buildGeometry, portalsBetween } from './geometry.ts';
+import { SOLVER_VERSION } from './limits.ts';
 import { buildMesh } from './mesh.ts';
 import { illuminance } from './polygon.ts';
 import { directOnPatches, formFactors, patchReflectance, solve } from './radiosity.ts';
 import type { Scene } from './scene.ts';
 import type { V3 } from './vec.ts';
 
-/** Raised whenever a change to the solver would change its answers, so old cache entries are not reused. */
-export const SOLVER_VERSION = 1;
+export { SOLVER_VERSION };
 
 export interface Response {
   readonly version: number;

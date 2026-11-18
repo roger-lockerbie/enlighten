@@ -172,6 +172,26 @@ export function defaultScene(): Scene {
   };
 }
 
+/**
+ * The most a scene can hold, for timing (docs/TEST_PLAN.md, Perf-frame and Perf-solve): on each
+ * wall a skirting slot, a channel at 600 mm and a high reveal, three on tape A and three on tape B.
+ */
+export function sixMountScene(): Scene {
+  const base = defaultScene();
+  const l = base.length;
+  return {
+    ...base,
+    mounts: [
+      mount('l1', 'skirting', 'left', l, { tape: 'A', unit: 'A' }),
+      mount('l2', 'channel', 'left', l, { tape: 'B', unit: 'B' }),
+      mount('l3', 'reveal', 'left', l, { tape: 'A', unit: 'A', facing: 'up' }),
+      mount('r1', 'skirting', 'right', l, { tape: 'B', unit: 'B' }),
+      mount('r2', 'channel', 'right', l, { tape: 'A', unit: 'A' }),
+      mount('r3', 'reveal', 'right', l, { tape: 'B', unit: 'B', facing: 'down' }),
+    ],
+  };
+}
+
 const KINDS: readonly MountKind[] = ['skirting', 'reveal', 'channel'];
 const SIDES: readonly Side[] = ['left', 'right'];
 const FACINGS: readonly Facing[] = ['up', 'down'];
