@@ -59,7 +59,8 @@ Workspace version 2 adds `scripts` and the three history preferences. A version 
 
 ## Consequences
 
-- Every frame from the console or a script goes through `Engine.request` and the governor. `src/safety` did not change.
+- Every frame from the console or a script goes through `Engine.request` and the governor. The console needed no change to `src/safety`. The rate guard changed in this stage for S6-P1, which the console property found, and for what the reviews and property runs found after it (ADR 0015).
+- `reset <n>` and `raw` with a RESET run the engine's reset, which sends OFF 350 ms later and writes the safety profile again. A bare RESET is refused (S6-R1).
 - P-ceiling now runs random console lines and scripts through the engine as well as intents.
 - Ctrl-C with a selection copies, and Backspace or Delete with a selection is left to the browser, so the console's editor and the input's own selection never disagree.
 - A refused step stops a script. A script that waits on the rate guard for more than 10 s stops with the guard's reason.
