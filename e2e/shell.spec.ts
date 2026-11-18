@@ -15,6 +15,7 @@ test('navigates by the rail, by Alt with a digit, and between regions with F6', 
     ['Alt+3', 'Bus monitor'],
     ['Alt+4', 'Settings'],
     ['Alt+5', 'Scripts'],
+    ['Alt+6', 'Visualiser'],
     ['Alt+2', 'Devices'],
     ['Alt+1', 'Playground'],
   ] as const) {

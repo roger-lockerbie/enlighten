@@ -19,6 +19,9 @@ export async function watch(
     // Chromium on Linux does not know the 'bluetooth' Permissions-Policy feature. The header still
     // names it for platforms that do, so this one warning is allowed.
     if (text.includes("Unrecognized feature: 'bluetooth'") || allow(text)) return;
+    // Headless Chromium draws WebGL in software and reads each frame back to show it, and its GL
+    // layer warns about that read. The app reads pixels back only when asked to time a frame.
+    if (text.includes('GPU stall due to ReadPixels')) return;
     if (msg.type() === 'error' || msg.type() === 'warning')
       problems.push(`console ${msg.type()}: ${text}`);
   });

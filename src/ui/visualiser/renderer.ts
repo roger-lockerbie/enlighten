@@ -36,13 +36,15 @@ import { RIPPLE_SAMPLES } from '../../light/diffuser.ts';
 import type { Frame, RippleTable } from '../../light/frame.ts';
 import { MAX_CHANNELS } from '../../light/frame.ts';
 import type { Face, Geometry } from '../../light/geometry.ts';
-import { facePoint } from '../../light/geometry.ts';
+import { faceAt, facePoint } from '../../light/geometry.ts';
 import type { Atlas } from '../../light/atlas.ts';
 import type { Response } from '../../light/response.ts';
 import { fragmentShader, vertexShader } from './shaders.ts';
 
 /** How far a tape's lit surface is drawn in front of the face it sits on, in metres. */
 const LIFT = 0.0003;
+/** How far each face is drawn past its own outer edge, in metres. */
+const OVERLAP = 0.002;
 
 export interface Measured {
   /** Milliseconds a frame at 1440 by 900, each frame forced to finish. */
@@ -146,21 +148,25 @@ function buildMesh(g: Geometry, atlas: Atlas): BufferGeometry {
       info.push(data[0], data[1], data[2], data[3]);
     }
   };
-  for (const f of g.faces) {
+  const uvOn = (f: Face): ((s: number, t: number) => readonly [number, number]) => {
     const rect = atlas.rects[f.index];
-    if (rect === undefined) continue;
-    const at = (s: number, t: number): readonly [number, number] => [
+    if (rect === undefined) return () => [0, 0];
+    return (s, t) => [
       (rect.x + (s / f.su) * rect.w) / atlas.width,
       (rect.y + (t / f.sv) * rect.h) / atlas.height,
     ];
+  };
+  for (const f of g.faces) {
+    const at = uvOn(f);
     for (const c of solidCells(f)) {
+      // Faces meet at edges whose end points differ, which leaves cracks a pixel wide. Each face
+      // runs a little past its own outer edge, behind its neighbour, to close them.
+      const s0 = c.s0 <= 0 ? -OVERLAP : c.s0;
+      const s1 = c.s1 >= f.su ? f.su + OVERLAP : c.s1;
+      const t0 = c.t0 <= 0 ? -OVERLAP : c.t0;
+      const t1 = c.t1 >= f.sv ? f.sv + OVERLAP : c.t1;
       quad(
-        [
-          facePoint(f, c.s0, c.t0),
-          facePoint(f, c.s1, c.t0),
-          facePoint(f, c.s1, c.t1),
-          facePoint(f, c.s0, c.t1),
-        ],
+        [facePoint(f, s0, t0), facePoint(f, s1, t0), facePoint(f, s1, t1), facePoint(f, s0, t1)],
         f.normal,
         [at(c.s0, c.t0), at(c.s1, c.t0), at(c.s1, c.t1), at(c.s0, c.t1)],
         [f.reflectance, f.cell, 0, 0],
@@ -172,8 +178,15 @@ function buildMesh(g: Geometry, atlas: Atlas): BufferGeometry {
       (p) =>
         [p[0] + e.normal[0] * LIFT, p[1] + e.normal[1] * LIFT, p[2] + e.normal[2] * LIFT] as const,
     );
-    const none = [0, 0] as const;
-    quad(lifted, e.normal, [none, none, none, none], [0, e.cell, 1, e.mount]);
+    // An unlit tape looks like the surface it sits in, so its strip carries that surface's
+    // reflectance and its place in the lightmap.
+    const under = e.corners.map((p) => faceAt(g, p, e.normal));
+    const face = under[0]?.face;
+    const at = face === undefined ? undefined : uvOn(face);
+    const uvs = under.map((u) =>
+      u === undefined || at === undefined ? ([0, 0] as const) : at(u.s, u.t),
+    );
+    quad(lifted, e.normal, uvs, [face?.reflectance ?? 0, e.cell, 1, e.mount]);
   }
   const out = new BufferGeometry();
   out.setAttribute('position', new BufferAttribute(new Float32Array(position), 3));
@@ -219,7 +232,7 @@ export class HallwayRenderer {
   private pending = 0;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false });
+    this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(1);
     this.renderer.setClearColor(0x000000, 1);
     this.gl = this.renderer.getContext() as WebGL2RenderingContext;

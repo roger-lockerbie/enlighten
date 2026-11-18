@@ -11,6 +11,8 @@ export default defineConfig({
   forbidOnly: !!process.env['CI'],
   retries: 0,
   reporter: process.env['CI'] ? [['list'], ['html', { open: 'never' }]] : 'list',
+  // V-hallway's pictures are drawn in software, so one set of baselines serves every platform.
+  snapshotPathTemplate: '{testDir}/{testFileName}-snapshots/{arg}{ext}',
   use: {
     baseURL: `http://${HOST}:${String(PREVIEW_PORT)}`,
     trace: 'retain-on-failure',

@@ -335,7 +335,11 @@
         }}
         testid="balance-kelvin"
       />
-      <span class="muted small" data-testid="balance-white">Balanced to {whiteKelvin} K.</span>
+      <span class="muted small" data-testid="balance-white">
+        {app.prefs.whiteBalance === 'daylight'
+          ? 'Balanced to daylight (D65).'
+          : `Balanced to ${String(whiteKelvin)} K.`}
+      </span>
     </div>
     <div class="row">
       <Segmented
@@ -374,7 +378,9 @@
     </p>
     <ul class="small mounts" data-testid="mounts">
       {#each scene.mounts as m, i (m.id)}
-        <li>
+        {@const out = frame.mounts[i]?.raw ?? [0, 0, 0]}
+        {@const sum = out[0] + out[1] + out[2]}
+        <li data-testid={`mount-${String(i)}`}>
           {TAPES[m.tape].name}, cover: {DIFFUSERS[m.diffuser].name}, in a
           {m.kind === 'skirting'
             ? 'skirting slot'
@@ -382,7 +388,9 @@
               ? 'flush channel'
               : 'reveal'}
           on the {m.side} wall, following driver {m.unit}:
-          {fixed(frame.mounts[i]?.raw[1] ?? 0)} lm/m now.
+          <span data-testid={`mount-${String(i)}-flux`}>{out[1].toFixed(2)}</span> lm/m now{#if sum > 0},
+            x <span data-testid={`mount-${String(i)}-x`}>{(out[0] / sum).toFixed(5)}</span>
+            y <span data-testid={`mount-${String(i)}-y`}>{(out[1] / sum).toFixed(5)}</span>{/if}.
         </li>
       {/each}
     </ul>

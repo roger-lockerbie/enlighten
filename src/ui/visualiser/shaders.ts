@@ -42,7 +42,8 @@ export interface ShaderCounts {
 
 /**
  * The fragment shader for a scene with these counts. Vertex `info` is reflectance, the surface's
- * cell, 1 for a tape's own lit surface, and that tape's mount.
+ * cell, 1 for a tape's own lit surface, and that tape's mount. A tape's strip carries the
+ * reflectance of the surface it sits in.
  */
 export function fragmentShader(c: ShaderCounts): string {
   const n = (v: number): string => String(Math.max(1, Math.floor(v)));
@@ -162,28 +163,27 @@ void main() {
   // Illuminance on the surface, and its luminance, as XYZ.
   vec3 lux = vec3(0.0);
   vec3 luminance = vec3(0.0);
-  if (vInfo.z < 0.5) {
-    for (int s = 0; s < SEGMENTS; s++) {
-      vec3 facing = segNormal[s];
-      // Behind the tape, or in its plane: it gives nothing this way.
-      if (dot(facing, vPoint - segCorner[s * 4]) <= 1e-6) continue;
-      for (int k = 0; k < 4; k++) poly[k] = segCorner[s * 4 + k];
-      count = 4;
-      clipPlane(vPoint, vNormal);
-      int from = int(segInfo[s].y + 0.5);
-      if (from != cell) {
-        if (from > 0 && count >= 3) clipPortal(vPoint, from);
-        if (cell > 0 && count >= 3) clipPortal(vPoint, cell);
-      }
-      if (count < 3) continue;
-      lux += edgeIntegral(vPoint, vNormal) * segInfo[s].z * mountLight[int(segInfo[s].x + 0.5)];
+  for (int s = 0; s < SEGMENTS; s++) {
+    vec3 facing = segNormal[s];
+    // Behind the tape, or in its plane: it gives nothing this way.
+    if (dot(facing, vPoint - segCorner[s * 4]) <= 1e-6) continue;
+    for (int k = 0; k < 4; k++) poly[k] = segCorner[s * 4 + k];
+    count = 4;
+    clipPlane(vPoint, vNormal);
+    int from = int(segInfo[s].y + 0.5);
+    if (from != cell) {
+      if (from > 0 && count >= 3) clipPortal(vPoint, from);
+      if (cell > 0 && count >= 3) clipPortal(vPoint, cell);
     }
-    for (int m = 0; m < MOUNTS; m++) {
-      lux += texture(layers, vec3(vUv, float(m))).r * mountLight[m];
-    }
-    luminance = lux * (vInfo.x / PI);
-  } else {
-    // A tape's own lit surface, with its dots.
+    if (count < 3) continue;
+    lux += edgeIntegral(vPoint, vNormal) * segInfo[s].z * mountLight[int(segInfo[s].x + 0.5)];
+  }
+  for (int m = 0; m < MOUNTS; m++) {
+    lux += texture(layers, vec3(vUv, float(m))).r * mountLight[m];
+  }
+  luminance = lux * (vInfo.x / PI);
+  if (vInfo.z > 0.5) {
+    // A tape's own lit surface: what it gives out, with its dots, on top of what it reflects.
     int m = int(vInfo.w + 0.5);
     vec3 light = vec3(0.0);
     float along = vPoint.x * mountSurface[m].x;
@@ -191,8 +191,9 @@ void main() {
       float row = (float(m * CHANNELS + c) + 0.5) / float(MOUNTS * CHANNELS);
       light += channelLight[m * CHANNELS + c] * texture(ripple, vec2(along, row)).r;
     }
-    luminance = light * mountSurface[m].y;
-    lux = luminance * PI;
+    luminance += light * mountSurface[m].y;
+    // In false colour by illuminance, a lit strip shows what it gives out per square metre.
+    lux += light * (mountSurface[m].y * PI);
   }
 
   if (falseMode != 0) {

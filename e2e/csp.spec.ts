@@ -8,6 +8,8 @@ test('every page loads with no CSP violation, console error or page error', asyn
     // Chromium on Linux doesn't know the 'bluetooth' Permissions-Policy feature. The header
     // still names it for platforms that do, so this one warning is allowed.
     if (msg.text().includes("Unrecognized feature: 'bluetooth'")) return;
+    // Headless Chromium draws WebGL in software and warns when it reads a frame back to show it.
+    if (msg.text().includes('GPU stall due to ReadPixels')) return;
     if (msg.type() === 'error' || msg.type() === 'warning') {
       problems.push(`console ${msg.type()}: ${msg.text()}`);
     }
@@ -32,14 +34,29 @@ test('every page loads with no CSP violation, console error or page error', asyn
 
   const response = await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Playground' })).toBeVisible();
-  // E-csp: every page of the app, and the bus worker, under the production policy.
+  // E-csp: every page of the app, and both workers, under the production policy.
   await expect(page.getByTestId('verified')).toHaveText('2/2 verified', { timeout: 60_000 });
-  for (const name of ['Devices', 'Bus monitor', 'Settings', 'Playground']) {
+  for (const name of [
+    'Devices',
+    'Bus monitor',
+    'Settings',
+    'Scripts',
+    'Visualiser',
+    'Playground',
+  ]) {
     await page
       .getByRole('navigation', { name: 'Pages' })
       .getByRole('button', { name, exact: true })
       .click();
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+    // The Visualiser loads three.js in its own chunk and starts the light worker, both under the
+    // same policy.
+    if (name === 'Visualiser') {
+      await expect(page.getByTestId('solve-status')).toContainText('Bounced light ready', {
+        timeout: 60_000,
+      });
+      await expect(page.getByTestId('hallway-canvas')).toBeVisible();
+    }
   }
   // Open a dialog and the console drawer too.
   await page.getByTestId('ceiling').click();
