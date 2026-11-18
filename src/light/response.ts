@@ -7,7 +7,7 @@ import type { Atlas } from './atlas.ts';
 import { layout, rasterise } from './atlas.ts';
 import type { Geometry } from './geometry.ts';
 import { buildGeometry, portalsBetween } from './geometry.ts';
-import { SOLVER_VERSION } from './limits.ts';
+import { MAX_PATCHES, SOLVER_VERSION } from './limits.ts';
 import { buildMesh } from './mesh.ts';
 import { illuminance } from './polygon.ts';
 import { directOnPatches, formFactors, patchReflectance, solve } from './radiosity.ts';
@@ -33,7 +33,10 @@ export interface SolveOptions {
 
 export function solveScene(scene: Scene, options: SolveOptions = {}): Response {
   const g = buildGeometry(scene);
-  const mesh = buildMesh(g, options.maxPatches);
+  const cap = Math.min(options.maxPatches ?? MAX_PATCHES, MAX_PATCHES);
+  const mesh = buildMesh(g, cap);
+  // The form factor matrix grows with the square of the patch count, so the cap is a hard one.
+  if (mesh.count > cap) throw new RangeError('The scene needs more patches than the limit allows.');
   const atlas = layout(g);
   const layers: Float32Array[] = [];
   if (g.emitters.length > 0) {

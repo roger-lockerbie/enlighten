@@ -25,7 +25,7 @@ export class LightSolver {
     this.start = start;
   }
 
-  /** Solve a scene, reporting as it goes. A later call makes this one go quiet. */
+  /** Solve a scene, reporting as it goes. A later call makes this one stop reporting. */
   async solve(scene: Scene, report: (s: SolveState) => void): Promise<void> {
     const id = ++this.id;
     const total = scene.mounts.length;

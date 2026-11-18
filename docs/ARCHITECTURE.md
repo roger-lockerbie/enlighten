@@ -169,7 +169,12 @@ IndexedDB in the page, an in-memory map in tests. See section 5.
 - `src/console`: the line editor state machine, history and expansion, the command parser, completion. Pure.
 - `src/script`: the parser and step list. Pure. The runner is in the engine.
 - `src/switch`: the part 301 event machine per button, on a `Clock`. Pure.
-- `src/light`: form factors, the radiosity solve, the direct term, emitter and diffuser models, colour maths. Pure, and shared by the light worker, the probe and the tests.
+- `src/light`: pure, and shared by the light worker, the page, the probe and the tests (ADR 0017).
+  - `scene.ts` is the scene as plain data, with its validator and defaults. `geometry.ts` turns it into faces, openings (portals) and each tape's lit rectangle, and finds the surface under a ray. `camera.ts` is the view as numbers.
+  - `polygon.ts` is Lambert's edge integral with clipping by openings. `mesh.ts`, `radiosity.ts` and `atlas.ts` are the patches, the form factors and solve, and the lightmap. `response.ts` is `solveScene`: one lightmap layer per mount.
+  - `emitter.ts` and `diffuser.ts` are the tape and cover data, each value with its basis. `frame.ts` turns the simulator's drives into each mount's colour for a frame. `probe.ts` reads the light at a point.
+  - `colour/` is XYZ, the locus, white balance, gamut mapping, exposure and false colour.
+  - `protocol.ts` and `cache.ts` are the light worker's messages and the checks on a solved response. `limits.ts` holds the sizes both sides share.
 
 ## 3. The path every input takes
 
@@ -214,7 +219,7 @@ Remote use: the server runs on the bench computer, and the other computer forwar
 - `load` reads, checks the version, runs the migrations from that version to the present one, validates the result, and returns it. Failure at any step sets the record aside under a dated key and returns defaults.
 - Migrations live in `src/store/migrations/`, one file per step, each with a fixture of the old shape.
 - The same validators check workspace files and stored records.
-- The radiosity cache is keyed by a hash of geometry, materials and the solver's version. It is safe to delete, and is validated for shape and size like anything else.
+- The radiosity cache is keyed by a hash of geometry, materials and the solver's version, with the hashed text stored beside the layers and compared on read. It is safe to delete, and is validated for shape, size and values like anything else. A record that fails is deleted and solved again. Four scenes are kept. It shares the store's backend through `src/store/light.ts`, which only the Visualiser loads.
 - History is written line by line as commands run, so a reload or a closed tab loses nothing.
 
 ## 6. Folder layout
@@ -239,9 +244,12 @@ src/
   store/           validators, migrations, Store interface          pure (the IndexedDB adapter is src/ui/idb.ts)
   transport/       SimTransport, ServerTransport, wire codec        pure: the worker passes the WebSocket
   workers/         bus worker and light worker shells, the Trusted Types policy
-  ui/              Svelte components, stores, design tokens, the three.js renderer
+  ui/              Svelte components, stores, design tokens, and the three.js renderer
+                   and its shaders in ui/visualiser
 tests/             cross-module tests, lint tests, golden fixtures
 tools/golden/      fixture generator (python-dali)
+tools/reference/   reference path tracer for the light core's fixtures
+tools/perf/        solve timing
 tools/first_light.py
 ```
 

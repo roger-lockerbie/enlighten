@@ -29,7 +29,16 @@ One window, no routes that need a server. Ten pages in a rail on the left:
 | Settings    | Preferences, workspace export and import, key legend                                                           | 5     |
 | Scripts     | Built-in and stored scripts, an editor that shows parse errors by line, import, export, and Run in the console | 6     |
 
-Pages that a stage has not built yet are not shown. Stage 5 built Playground, Devices, Bus monitor and Settings, in that order in the rail, so Alt-1 to Alt-4 reach them. Stage 6 added Scripts fifth, reached with Alt-5 (ADR 0014). The Playground drives one address per panel: a group as the target is not built yet (ADR 0013).
+Pages that a stage has not built yet are not shown. Stage 5 built Playground, Devices, Bus monitor and Settings, in that order in the rail, so Alt-1 to Alt-4 reach them. Stage 6 added Scripts fifth, reached with Alt-5 (ADR 0014). Stage 7 added the Visualiser sixth, reached with Alt-6 (ADR 0017). The Playground drives one address per panel: a group as the target is not built yet (ADR 0013).
+
+### The Visualiser in Stage 7
+
+One fixed hallway from one fixed camera, at eye level looking down it. From the top: the page title with its "estimated" chip ("prediction" when hardware is driving) and the state of the bounced light; the picture; the probe's reading; the view controls; and what the picture shows.
+
+- The picture is a button, so it takes focus. The probe follows the pointer over it, and the arrow keys move it by 2% of the picture, or 10% with Shift. A ring marks where it is.
+- The view controls are three segmented controls with a number field each: exposure (night-adapted, evening, day, manual, with EV), white balance (adapted to the scene, daylight, chosen, with K), and what to show (the picture, lux, cd/m²) with the false-colour legend.
+- "What this shows" says the picture is a best-effort estimate, lists each mount with its tape, cover, place, driver and present output, and has "Measure frame time", which reports milliseconds a frame for six mounts and the GPU.
+- The inspector says the hallway and mounts are fixed in this version. Stage 8 puts the selected mount there.
 
 ## 2. Layout
 

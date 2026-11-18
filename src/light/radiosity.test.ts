@@ -4,7 +4,7 @@ import { buildGeometry, faceAt } from './geometry.ts';
 import { buildMesh } from './mesh.ts';
 import { directOnPatches, formFactors, patchReflectance, solve } from './radiosity.ts';
 import { directAt, solveScene } from './response.ts';
-import { defaultScene, mount } from './scene.ts';
+import { defaultScene, mount, sixMountScene } from './scene.ts';
 import type { Scene } from './scene.ts';
 
 const base = defaultScene();
@@ -303,6 +303,12 @@ describe('the response', () => {
     expect(r.patches).toBeLessThanOrEqual(900);
     const empty = solveScene({ ...base, mounts: [] });
     expect(empty.layers).toEqual([]);
+  });
+
+  it('refuses a scene that cannot be meshed within the cap', () => {
+    expect(() => solveScene(sixMountScene(), { maxPatches: 10 })).toThrow(RangeError);
+    // A cap above the limit is held to the limit.
+    expect(solveScene(base, { maxPatches: 1e9 }).patches).toBeLessThanOrEqual(5000);
   });
 
   it('changes little when the mesh is made coarser', () => {
