@@ -9,6 +9,7 @@ import { TimerClock } from '../bus/clock.ts';
 import { withFloors } from '../bus/timing.ts';
 import { Engine } from '../engine/engine.ts';
 import {
+  consoleContext,
   parseToWorker,
   type Call,
   type CallResult,
@@ -86,7 +87,8 @@ function start(m: Extract<ToWorker, { type: 'init' }>): Engine {
 }
 
 async function handle(e: Engine, call: Call): Promise<CallResult> {
-  // Everything the page asks for comes from a person at the UI.
+  // Everything the page asks for comes from a person at the UI. A typed console line is `console`,
+  // and a script's steps are `script`, set inside the engine (ADR 0014).
   const src = 'ui';
   switch (call.op) {
     case 'setTarget':
@@ -130,6 +132,21 @@ async function handle(e: Engine, call: Call): Promise<CallResult> {
       return { ok: true };
     case 'bench':
       return e.setBench(call.setup, src);
+    case 'console': {
+      const c = consoleContext(call.aliases, call.use);
+      if (!c.ok) return c;
+      return e.console(call.line, c.ctx, call.confirmed === true);
+    }
+    case 'runScript': {
+      const c = consoleContext(call.aliases);
+      if (!c.ok) return c;
+      return e.runScript(call.name, call.text, c.ctx);
+    }
+    case 'scriptContinue':
+      return e.scriptContinue();
+    case 'stopConsole':
+      e.stopConsole();
+      return { ok: true };
   }
 }
 

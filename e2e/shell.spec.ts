@@ -14,6 +14,7 @@ test('navigates by the rail, by Alt with a digit, and between regions with F6', 
   for (const [key, name] of [
     ['Alt+3', 'Bus monitor'],
     ['Alt+4', 'Settings'],
+    ['Alt+5', 'Scripts'],
     ['Alt+2', 'Devices'],
     ['Alt+1', 'Playground'],
   ] as const) {
@@ -48,8 +49,7 @@ test('the console drawer opens with Ctrl-` and takes focus, and resizes from the
   await page.keyboard.press('Control+Backquote');
   const drawer = page.getByTestId('console');
   await expect(drawer).toBeVisible();
-  await expect(drawer).toBeFocused();
-  await expect(drawer).toContainText('The console arrives in Stage 6.');
+  await expect(page.getByTestId('console-input')).toBeFocused();
   const before = (await drawer.boundingBox())?.height ?? 0;
   expect(Math.round(before)).toBe(220);
   const grip = page.getByRole('button', { name: /Console height/ });

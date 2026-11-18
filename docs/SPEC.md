@@ -79,16 +79,16 @@ Terms: **arc level** is DALI's 0 to 254 level. **Output** is light output as a f
 
 - S3.1 By default no more than one swing starts in any one-second window, per address and for the room. A swing is two opposite legs. A leg is a maximal monotonic run of a predicted trace, across commands and sources, with a ratio of 1.10 or more between its ends, or one that starts or ends at off. Small steps in one direction add up to one leg.
 - S3.1a The guard watches several traces for each address: the drive of each channel, and a luminance estimate that weights the channels by the profile's relative luminance (placeholder weights until measured). A leg on any of them is a leg for the address, so a swap between colours at a constant level counts. The ceiling's mix sum is not used by the guard.
-- S3.1b On Hardware and Both, while the inventory is stale or gear without a short address is present, every broadcast, group and unaddressed frame is also judged against a worst-case phantom driver: fade time 0, MAX LEVEL 254, every channel, level unknown. Gear the app has not seen is therefore counted. Indirect level commands to a group or broadcast are refused in that state.
+- S3.1b On Hardware and Both, while the inventory is stale or gear without a short address is present, every broadcast, group and unaddressed frame is also judged against a worst-case phantom driver: fade time 0, MAX LEVEL 254, every channel, level unknown. Gear the app has not seen is therefore counted. Indirect level commands to a group or broadcast are refused in that state. Gear in a state the guard does not know (not yet scanned, seen fading during its scan, or not found by the inventory) changes only on its own while no other gear moves, and other gear waits while it may still be fading (ADR 0016). OFF is never held by this.
 - S3.2 The `rate` unlock lets the limit be set to 2 or 3 for the session, with swing starts at least 360 ms apart. Nothing allows more than 3. On Hardware and Both, if the operator answered on connect that they cannot see the lights, the `rate` unlock is refused for that session.
-- S3.3 A hard step is a leg with a ratio above 2, or one that starts or ends at off, made with no fade of 0.7 s or longer. At most one hard step starts in any 2 seconds per address, and one in any second for the room. One broadcast or group frame counts once for the room. No unlock changes this. Ordinary switching on and off is therefore allowed, and hard flashing is held to one change every 2 seconds. Under S3.7 every large change on hardware is a hard step until fades are confirmed.
+- S3.3 A hard step is a leg with a ratio above 2, or one that starts or ends at off, made with no fade of 0.7 s or longer. A fade counts as 0.7 s or longer only if it ran that long: one cut short by a later command counts by the time it ran. A leg like that is one hard step from where its fast movement began. In a longer leg, each instant step above 2 is its own hard step and starts where it happens (ADR 0015), and so does fast change above 2 within 0.7 s (ADR 0016). Where the samples fall can move such a date, so on the border the guard counts each date the rule could give it. At most one hard step starts in any 2 seconds per address, and one in any second for the room. One broadcast or group frame counts once for the room. No unlock changes this. Ordinary switching on and off is therefore allowed, and hard flashing is held to one change every 2 seconds. Under S3.7 every large change on hardware is a hard step until fades are confirmed.
 - S3.4 Changes smaller than a leg are held to three reversals a second, per address and for the room.
 - S3.5 A move to or from saturated red counts as a leg.
 - S3.6 A repeating pattern faster than one swing in two seconds stops after 5 seconds.
 - S3.7 On Hardware and Both, each level or colour command counts as an instant step until both are true: the address's fade time has been read back in this session, and the DA5-L's fade behaviour has been marked confirmed after hardware day. That mark is a constant in the code changed by a reviewed commit, not a setting.
 - S3.8 Panic is never delayed or refused by the guard.
 - S3.9 The guard judges every transaction by its predicted effect on those traces, whatever kind of command it is. That includes configuration writes that move the output, such as SET MIN LEVEL and SET MAX LEVEL. On Hardware and Both, every behaviour of the driver that is not yet confirmed takes its worst case for the guard: for example, a change to MIN LEVEL or MAX LEVEL is assumed to move the output at once. Panic's OFF is recorded in the guard's history like any other change.
-- S3.10 An unlocked RESET is one hard step under S3.3 and a full swing under S3.1, and is further limited to one in any 10 seconds.
+- S3.10 An unlocked RESET is one hard step under S3.3 and a full swing under S3.1, and is further limited to one in any 10 seconds. Its jump to full and its OFF together are that one hard step, starting at the first of them that is a hard step, and anything sent before the OFF is judged with it (ADR 0015).
 
 **S4. Panic.**
 
@@ -291,13 +291,17 @@ An alias starts with a letter, is not a command name or keyword, and does not ma
 
 ### DALI commands
 
-Every supported command is available under python-dali's class name in kebab case: `dapc 0 128`, `recall-max-level 0`, `dtr0 220`, `set-max-level 0`, `query-actual-level 0`, `go-to-scene 0 3`, `set-temporary-colour-temperature-tc 0`, `activate 0`. Device type commands get their ENABLE DEVICE TYPE frame added, and send-twice commands are sent twice. Both show in the trace.
+Every supported command is available under python-dali's class name in kebab case: `dapc 0 128`, `recall-max-level 0`, `dtr0 220`, `set-max-level 0`, `query-actual-level 0`, `go-to-scene 0 3`, `set-temporary-colour-temperature 0`, `activate 0`. Device type commands get their ENABLE DEVICE TYPE frame added, and send-twice commands are sent twice. Both show in the trace.
 
-`raw <hex> <hex> [x2]` sends one 16-bit frame as given, twice with `x2`. It is judged like any other frame.
+Every device type command also answers to its name with a `dt6-` or `dt8-` prefix. `query-operating-mode` names a general command and a DT6 one: the bare name is the general command, and `dt6-query-operating-mode` the other. `query-extended-version-number` names a DT6 and a DT8 command and no general one, so the bare name is refused and the console asks for `dt6-` or `dt8-`. `set-temporary-colour-temperature-tc` is kept as another name for `set-temporary-colour-temperature` (ADR 0014).
+
+`raw <hex> <hex> [x2]` sends one 16-bit frame as given. It is judged like any other frame. A send-twice command is always sent twice, and the console says so. `x2` is accepted only on a send-twice command, and refused on any other frame. A RESET, by its DALI name or as `raw`, goes to one short address at a time and runs the full RESET sequence in section 5: RESET, OFF 350 ms later, then the safety profile written and verified again. The console says first that the driver goes to full output for about 0.3 s (ADR 0015).
+
+A step the rate guard holds with a retry time waits for it, up to 10 s, and prints `waiting` with the time and the reason. Ctrl-C ends the wait. Any other refusal ends the line.
 
 ### Replies
 
-A query prints the decoded meaning and the raw byte, for example `actual level 170 (10.1%) [0xAA]`. No reply prints `no reply`. A collision prints `framing error (more than one device answered?)`. A transport fault prints as a fault, never as "no reply". A refusal prints `refused:` and the reason.
+A query prints the decoded meaning and the raw byte, for example `actual level 170 (10.1%) [0xAA]`. No reply prints `no reply`. A collision prints `framing error (more than one device answered?)`. A transport fault prints `fault:`, never "no reply". A refusal prints `refused:` and the reason. A step stopped by panic or Ctrl-C prints `stopped:`.
 
 ## 7. Script format
 
@@ -314,7 +318,7 @@ end        = "end"
 command    = any console command except those listed below
 ```
 
-Not allowed in a script: `unlock`, `lock`, `target`, `run`, `history`, `clear`, `use`, `resume`, and `cap` with a value above the present ceiling. Limits are in ADR 0007. `pause` shows its message and waits for Enter. A refused step stops the script and reports the line. The built-in `first-light` follows `tools/first_light.py` step for step, using `level` and `tc` and `rgb` so every level is clamped.
+Not allowed in a script: `unlock`, `lock`, `target`, `run`, `history`, `clear`, `use`, `resume`, `scripts`, and `cap` with a value above the present ceiling, which is refused when the step runs. Limits are in ADR 0007. Each step is echoed with its line number before it runs. `pause` is not echoed: it shows its message and waits for Enter. A refused step stops the script and reports the line. A script runs from the store or the built-ins, never from unsaved text in the editor. The built-in `first-light` follows `tools/first_light.py` step for step, using `level` and `tc` and `rgb` so every level is clamped.
 
 ## 8. Workspace file
 
@@ -338,7 +342,7 @@ JSON, at most 2 MB, with these top-level keys and no others:
 
 Names are at most 60 characters. Numbers have ranges. Enumerations are closed. Validation follows ADR 0009. An import replaces the library and set-up after a confirmation that lists what will change. It sends nothing of its own. A lower ceiling in the file is applied as the ceiling control applies it (R6.2), which writes MAX LEVEL through the governor. Imported preferences cannot turn off verify mode or override reduced motion: those two apply only when they make the app more careful. Simulator profile settings in `devices` apply to the simulated bench only (R1.6).
 
-Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013).
+Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Version 2, from Stage 6, adds `scripts`, and `preferences` gains the history length, the leading-space rule and verify mode. A version 1 file migrates to version 2. Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013, ADR 0014).
 
 ## 9. Server protocol
 

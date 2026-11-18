@@ -3,17 +3,28 @@
  * checks the shape, migrates, and validates. A record that fails is set aside under a dated key, not
  * deleted, and the defaults are used. The backend is IndexedDB in the page and a map in tests.
  */
+import { mergeStored, type StoredLine } from '../console/history.ts';
 import { percentText } from '../dali/curve.ts';
-import { PREFERENCES_MIGRATIONS, WORKSPACE_MIGRATIONS } from './migrations/index.ts';
-import { migrate } from './migrate.ts';
 import {
+  HISTORY_MIGRATIONS,
+  PREFERENCES_MIGRATIONS,
+  SCRIPTS_MIGRATIONS,
+  WORKSPACE_MIGRATIONS,
+} from './migrations/index.ts';
+import { migrate, type Migration } from './migrate.ts';
+import {
+  checkHistory,
   checkPreferences,
+  checkScripts,
   checkWorkspace,
   DEFAULT_PREFERENCES,
+  HISTORY_VERSION,
   PREFERENCES_VERSION,
+  SCRIPTS_VERSION,
   WORKSPACE_FORMAT,
   WORKSPACE_VERSION,
   type Preferences,
+  type StoredScript,
   type Workspace,
 } from './schema.ts';
 import { checkTree, parseText, type Result } from './validate.ts';
@@ -45,6 +56,8 @@ export class MemoryBackend implements Backend {
 }
 
 export const PREFERENCES_KEY = 'preferences';
+export const HISTORY_KEY = 'history';
+export const SCRIPTS_KEY = 'scripts';
 export const SET_ASIDE_PREFIX = 'set-aside:';
 
 export interface Loaded<T> {
@@ -63,36 +76,106 @@ export class Store {
     this.stamp = stamp;
   }
 
-  async loadPreferences(): Promise<Loaded<Preferences>> {
+  /**
+   * Load one record: read, migrate, validate. One that fails is set aside under a dated key and the
+   * defaults are used.
+   */
+  private async load<T>(
+    key: string,
+    what: string,
+    version: number,
+    migrations: readonly Migration[],
+    check: (x: unknown) => Result<T>,
+    defaults: T,
+  ): Promise<Loaded<T>> {
     let raw: unknown;
     try {
-      raw = await this.backend.get(PREFERENCES_KEY);
+      raw = await this.backend.get(key);
     } catch {
-      return { value: DEFAULT_PREFERENCES, problem: 'Stored preferences could not be read.' };
+      return { value: defaults, problem: `Stored ${what} could not be read.` };
     }
-    if (raw === undefined) return { value: DEFAULT_PREFERENCES };
-    const r = readRecord(raw, (d) =>
-      migrate(d.data, d.version, PREFERENCES_VERSION, PREFERENCES_MIGRATIONS),
-    );
-    const checked = r.ok ? checkPreferences(r.value) : r;
+    if (raw === undefined) return { value: defaults };
+    const r = readRecord(raw, (d) => migrate(d.data, d.version, version, migrations));
+    const checked = r.ok ? check(r.value) : r;
     if (checked.ok) return { value: checked.value };
-    const key = `${SET_ASIDE_PREFIX}${PREFERENCES_KEY}:${this.stamp()}`;
     try {
-      await this.backend.put(key, raw);
-      await this.backend.delete(PREFERENCES_KEY);
+      await this.backend.put(`${SET_ASIDE_PREFIX}${key}:${this.stamp()}`, raw);
+      await this.backend.delete(key);
     } catch {
       // The defaults are used either way.
     }
     return {
-      value: DEFAULT_PREFERENCES,
-      problem: `Stored preferences were set aside and defaults used. ${checked.error}`,
+      value: defaults,
+      problem: `Stored ${what} were set aside and defaults used. ${checked.error}`,
     };
   }
 
-  async savePreferences(p: Preferences): Promise<void> {
-    const checked = checkPreferences(p);
+  private async save<T>(
+    key: string,
+    version: number,
+    check: (x: unknown) => Result<T>,
+    data: unknown,
+  ): Promise<void> {
+    const checked = check(data);
     if (!checked.ok) throw new Error(checked.error);
-    await this.backend.put(PREFERENCES_KEY, { version: PREFERENCES_VERSION, data: checked.value });
+    await this.backend.put(key, { version, data: checked.value });
+  }
+
+  loadPreferences(): Promise<Loaded<Preferences>> {
+    return this.load(
+      PREFERENCES_KEY,
+      'preferences',
+      PREFERENCES_VERSION,
+      PREFERENCES_MIGRATIONS,
+      checkPreferences,
+      DEFAULT_PREFERENCES,
+    );
+  }
+
+  savePreferences(p: Preferences): Promise<void> {
+    return this.save(PREFERENCES_KEY, PREFERENCES_VERSION, checkPreferences, p);
+  }
+
+  /** Console history, oldest first. */
+  async loadHistory(): Promise<Loaded<readonly StoredLine[]>> {
+    const r = await this.load(
+      HISTORY_KEY,
+      'history lines',
+      HISTORY_VERSION,
+      HISTORY_MIGRATIONS,
+      checkHistory,
+      { lines: [] },
+    );
+    return { ...r, value: r.value.lines };
+  }
+
+  /**
+   * Add a line to stored history. What another tab stored since is kept, so neither tab overwrites
+   * the other's lines (research section 7). A stored record that fails is set aside first.
+   */
+  async appendHistory(line: StoredLine, limit: number): Promise<void> {
+    const stored = await this.loadHistory();
+    await this.saveHistory(mergeStored(stored.value, line, limit));
+  }
+
+  saveHistory(lines: readonly StoredLine[]): Promise<void> {
+    return this.save(HISTORY_KEY, HISTORY_VERSION, checkHistory, { lines });
+  }
+
+  async loadScripts(): Promise<Loaded<readonly StoredScript[]>> {
+    const r = await this.load(
+      SCRIPTS_KEY,
+      'scripts',
+      SCRIPTS_VERSION,
+      SCRIPTS_MIGRATIONS,
+      checkScripts,
+      { scripts: [] },
+    );
+    return { ...r, value: r.value.scripts };
+  }
+
+  saveScripts(scripts: readonly StoredScript[]): Promise<void> {
+    return this.save(SCRIPTS_KEY, SCRIPTS_VERSION, checkScripts, { scripts });
   }
 
   async setAside(): Promise<string[]> {
@@ -150,7 +233,7 @@ const pct = (arc: number) => `${percentText(arc)}%`;
  */
 export function readWorkspace(
   text: string,
-  present: { readonly ceilingArc: number },
+  present: { readonly ceilingArc: number; readonly scripts?: readonly string[] },
 ): Result<ImportPlan> {
   const parsed = parseText(text);
   if (!parsed.ok) return parsed;
@@ -183,6 +266,14 @@ export function readWorkspace(
   if (p?.playgroundMode !== undefined)
     changes.push(`Playground mode: ${p.playgroundMode === 'live' ? 'Live' : 'Commit'}.`);
   if (p?.reducedMotion === 'always') changes.push('Reduced motion: always on.');
+  if (p?.historyLength !== undefined)
+    changes.push(`Console history: keeps ${String(p.historyLength)} lines.`);
+  if (p?.historyIgnoreSpace !== undefined)
+    changes.push(
+      `Console history: lines that start with a space are ${p.historyIgnoreSpace ? 'left out' : 'kept'}.`,
+    );
+  if (p?.verifyMode === false)
+    changes.push('Verify mode: the file turns it off. An import cannot, so it stays on.');
   for (const d of w.devices ?? []) {
     const parts: string[] = [];
     if (d.alias !== undefined) parts.push(`name "${d.alias}"`);
@@ -198,6 +289,11 @@ export function readWorkspace(
     }
     if (parts.length > 0) changes.push(`A${String(d.address)}: ${parts.join(', ')}.`);
   }
+  const have = new Set((present.scripts ?? []).map((n) => n.toLowerCase()));
+  for (const s of w.scripts ?? [])
+    changes.push(
+      `Script "${s.name}": ${have.has(s.name.toLowerCase()) ? 'replaces the stored one' : 'added'}. It runs only when you type run.`,
+    );
   return {
     ok: true,
     value: {

@@ -41,6 +41,15 @@ All notable changes to this project are recorded here. The format follows Keep a
 - A `max-level` quirk in the fake server, for the mismatch test.
 - ADR 0013: the shell and playground as built.
 
+- Stage 6 console: a zsh-style line editor in the drawer with the emacs keymap from one binding table, a kill ring, undo and redo, incremental search, completion, and history with `!` expansion and verify mode.
+- The console language from SPEC section 6: friendly commands, every DALI command by python-dali's name, `raw`, decoded replies, and typed confirmations at a `confirm>` prompt. Every frame goes through the governor with the source `console`.
+- Scripts: the parser with ADR 0007's limits, the built-in `first-light`, and a runner in the bus worker with the source `script`, which panic, Ctrl-C, a target change and the watchdog stop. A step held by the rate guard waits up to 10 s.
+- The Scripts page (Alt-5): list, edit with parse errors by line, save, delete, import and export. A screen wake lock while a script runs.
+- History settings in Settings, and a key legend built from the binding table.
+- Preferences version 2, the history and scripts records, and workspace version 2 with its migration.
+- U-console, U-script, P-history, P-parser, P-ceiling for console lines and scripts, E-console, E-keys, E-script, a script that tries to raise the ceiling, and panic mid-script.
+- ADR 0014: the console and scripts as built.
+
 ### Changed
 
 - The plan for Stages 3, 4, 5 and 12 follows the design: the governor as ADR 0004 sets it out, a Python hardware server before any WebHID transport, and the build settings the spike proved.
@@ -55,6 +64,9 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The page imports the hardware check's step list without its runners.
 - Output percentages show one decimal everywhere, as 39.5% for arc 220.
 - The e2e tests run at 1440 by 900, with a 90 s limit for the start-up scan.
+- The DALI name for the temporary colour temperature is python-dali's `set-temporary-colour-temperature`. The spec's `set-temporary-colour-temperature-tc` still works. A name shared with a general command goes to the general command, `dt6-` or `dt8-` reaches a device type one, and a name only device type commands share needs the prefix.
+- The engine's failed results say whether they were refused, dropped or a fault, so the console prints a fault as a fault.
+- Several IndexedDB records share one object store, each under its own key and schema version (ADR 0014).
 
 ### Fixed
 
@@ -63,6 +75,18 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 - On hardware, the rate guard counted two opposite legs that start at the same moment as one leg when it united its faded and instant predictions, so a room could rise and fall from one command past the limit. Found by the 1,000-run property tests, present since Stage 3.
 - The property tests' trace checker summed each driver's last sample, taken at different times, so the room showed small steps the light never made. It now samples every driver at the same times.
+- S6-P1: the rate guard dated a hard step at the start of its run and counted one a run, so a step inside a slow run, or a RESET's jump after a rise, had no hard step of its own. An unlocked RESET after a rise let a flash through, and a RESET at full had its OFF dropped. A fast leg is now a hard step from its start, each instant step in a longer leg is its own hard step dated where it happens, and a RESET and its OFF are one hard step (ADR 0015). Found by the Stage 6 console property, present since Stage 3.
+- S6-R1: a RESET typed at the console sent no OFF and did not write the safety profile again, so the driver stayed at full. It now runs the full RESET sequence, one short address at a time.
+- S6-R4 to S6-R6: instant steps are measured within 60 ms, not only between neighbouring samples; the RESET pair drops the step nearest the OFF, and only when the RESET's jump was a hard step; and a change made while a RESET's OFF is pending is judged with it.
+- S6-S1 to S6-S4: an OFF from another control while the gear was deaf after a RESET no longer lets the guard hold the reset's own OFF; a held RESET is refused at once instead of going out later; a reset that panic stops says MAX LEVEL may be 254; and in the room only the RESET's own driver's jump counts.
+- S6-P3 and S6-P4: the guard counted a turn after a run on the leg border as no small reversal, and took a new leg 1 ms after an old one for the old one, so four small reversals, or three legs at the default of one swing, could pass in a second. Found by the 1,000-run property pass.
+- S6-R4 (again): a fast fade inside a longer run, by 8.9 times in 200 ms, changed by less than 2 in any 50 ms and was not a hard step. Fast change above 2 within 0.7 s is now a hard step from where it starts (ADR 0016).
+- S6-P5: a slow fade's tail, split from the rest by another driver's step, counted as a fast leg. Change from a fade that ran 0.7 s or longer is now slow and never a hard step, read from the drivers' fade plans, and a fade cut short counts by the time it ran.
+- S6-P6: on hardware, gear seen fading during its scan, and so not modelled, moved with other gear on one broadcast, and the room made four legs in 0.7 s where the guard counted one. Gear in an unknown state now changes only on its own while nothing else moves, and other gear waits while it may still be fading.
+- S6-P7: the trace checker dated one fast rise from off at different times on different channels, which gave a false alarm. A fast leg is now dated where its fast movement began, in the guard and the checker.
+- S6-S16-1 to S6-S16-4 and S6-D16-1 to S6-D16-6, from the reviews of ADR 0016: a command to an empty address no longer holds the room, a fault or CONTINUOUS UP or DOWN marks gear as moving for as long as it may move, OFF and panic end the marks, gear the inventory has not found is under the same rule, a span the guard counts on the border also counts at the latest date the rule could give it, and the guard asks a fade to run 705 ms before calling it slow.
+- S6-P8 to S6-P10, from the 1,000-run property pass after the reviews: on the border of a fast leg the guard also counts the leg's start; a span also counts at the earliest date the rule could give it, when a fade found it; and the trace checker pairs a RESET's jump dated just before the RESET. S6-S17-1 to S6-S17-3, from the security review of those fixes: after an instant step near 2, a span also counts at the latest date it is surely above 2 from, and the checker pairs a RESET only with a step still going when it went out. S6-D17-1, from the DALI review: merging an address's channels no longer drops a span's own date for a border date just before it. S6-P11: the same merge no longer takes a step up and a fade down a few ms apart for one hard step. S6-P12, from the 1,000-run pass on those fixes: a movement the guard joins to the last span also counts at the dates the rule could give it as a span of its own. S6-S18-1 to S6-S18-5, from the security review of those fixes: after an instant step near 2 the early date allows for the checker's own sample spacing, the test for where the rule must have found a span allows for it at both ends of the window, the guard samples a segment every 10 ms at most, and the merge of an address's events is linear.
+- S6-P2: the trace checker dated hard steps the same way, which gave a false alarm on the console property, and its room sum took 18 minutes on one long run. Both are fixed.
 
 ### Security
 

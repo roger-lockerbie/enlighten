@@ -151,7 +151,7 @@ describe('the store', () => {
       bench: { B: { presentation: 'tc', settings: { maxLowerPullsDown: false } } },
     };
     await store.savePreferences(p);
-    expect(b.map.get('preferences')).toEqual({ version: 1, data: p });
+    expect(b.map.get('preferences')).toEqual({ version: 2, data: p });
     expect(await store.loadPreferences()).toEqual({ value: p });
   });
 
@@ -218,7 +218,7 @@ describe('workspace files (SPEC section 8)', () => {
     const r = readWorkspace(text, { ceilingArc: 220 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.workspace).toEqual({ format: 'enlighten-workspace', version: 1, ...content });
+    expect(r.value.workspace).toEqual({ format: 'enlighten-workspace', version: 2, ...content });
     expect(r.value.lowerCeiling).toBe(180);
     expect(r.value.changes).toEqual([
       'Ceiling: lowered from 39.5% (arc 220) to 13.3% (arc 180).',
@@ -248,7 +248,7 @@ describe('workspace files (SPEC section 8)', () => {
       ok: false,
       error: 'This is not an Enlighten workspace file.',
     });
-    expect(readWorkspace('{"format":"enlighten-workspace","version":2}', at).ok).toBe(false);
+    expect(readWorkspace('{"format":"enlighten-workspace","version":3}', at).ok).toBe(false);
     expect(readWorkspace('{"format":"enlighten-workspace","version":1,"looks":[]}', at)).toEqual({
       ok: false,
       error: 'The file: unknown key "looks".',
@@ -291,5 +291,121 @@ describe('workspace files (SPEC section 8)', () => {
 
   it('refuses to export something it could not import', () => {
     expect(() => exportWorkspace({ ceiling: 0 })).toThrow();
+  });
+});
+
+describe('Stage 6 records (ADR 0014)', () => {
+  const v1Preferences = {
+    ceilingArc: 200,
+    playgroundMode: 'commit',
+    page: 'devices',
+    inspectorOpen: false,
+    drawerOpen: true,
+    drawerHeight: 300,
+    reducedMotion: 'always',
+    aliases: [{ address: 0, alias: 'warm' }],
+    bench: {},
+  };
+
+  it('migrates version 1 preferences, with the history settings at their defaults', async () => {
+    const b = new MemoryBackend();
+    await b.put('preferences', { version: 1, data: v1Preferences });
+    const r = await new Store(b, stamp).loadPreferences();
+    expect(r.problem).toBeUndefined();
+    expect(r.value).toEqual({
+      ...v1Preferences,
+      historyLength: 1000,
+      historyIgnoreSpace: false,
+      verifyMode: true,
+    });
+  });
+
+  it('stores history, merges what another tab added, and keeps the limit', async () => {
+    const b = new MemoryBackend();
+    const one = new Store(b, stamp);
+    const two = new Store(b, stamp);
+    expect((await one.loadHistory()).value).toEqual([]);
+    await one.appendHistory({ line: 'level 0 50%', at: 1 }, 3);
+    await two.appendHistory({ line: 'off 0', at: 2 }, 3);
+    await one.appendHistory({ line: 'off 0', at: 3 }, 3);
+    await one.appendHistory({ line: 'on 0', at: 4 }, 3);
+    await two.appendHistory({ line: 'query 0', at: 5 }, 3);
+    expect((await one.loadHistory()).value.map((l) => l.line)).toEqual([
+      'off 0',
+      'on 0',
+      'query 0',
+    ]);
+    await one.saveHistory([]);
+    expect((await two.loadHistory()).value).toEqual([]);
+  });
+
+  it('sets aside history that does not check, and keeps going', async () => {
+    const b = new MemoryBackend();
+    await b.put('history', { version: 1, data: { lines: [{ line: 'x'.repeat(501), at: 0 }] } });
+    const s = new Store(b, stamp);
+    const r = await s.loadHistory();
+    expect(r.value).toEqual([]);
+    expect(r.problem).toMatch(/^Stored history lines were set aside/);
+    expect(await s.setAside()).toEqual(['set-aside:history:2026-11-16T09-00-00']);
+    await s.appendHistory({ line: 'off 0', at: 1 }, 100);
+    expect((await s.loadHistory()).value).toEqual([{ line: 'off 0', at: 1 }]);
+  });
+
+  it('stores scripts, and refuses bad names, built-in names, doubles and oversized text', async () => {
+    const b = new MemoryBackend();
+    const s = new Store(b, stamp);
+    expect((await s.loadScripts()).value).toEqual([]);
+    await s.saveScripts([{ name: 'warm up', text: 'level 0 50%\n' }]);
+    expect((await s.loadScripts()).value).toEqual([{ name: 'warm up', text: 'level 0 50%\n' }]);
+    for (const bad of [
+      [{ name: '../x', text: '' }],
+      [{ name: 'First-Light', text: '' }],
+      [
+        { name: 'a', text: '' },
+        { name: 'A', text: '' },
+      ],
+      [{ name: 'a', text: 'x'.repeat(64 * 1024 + 1) }],
+      [{ name: 'a', text: '\n'.repeat(2000) }],
+      [{ name: 'a', text: 1 }],
+      Array.from({ length: 101 }, (_, i) => ({ name: `s${String(i)}`, text: '' })),
+    ])
+      await expect(s.saveScripts(bad as never)).rejects.toThrow();
+    await b.put('scripts', { version: 1, data: { scripts: [{ name: 'x', text: 3 }] } });
+    const r = await s.loadScripts();
+    expect(r.value).toEqual([]);
+    expect(r.problem).toMatch(/^Stored scripts were set aside/);
+  });
+
+  it('reads a version 1 workspace file', () => {
+    const r = readWorkspace(
+      '{"format":"enlighten-workspace","version":1,"ceiling":100,"preferences":{"playgroundMode":"live"}}',
+      { ceilingArc: 220 },
+    );
+    expect(r.ok && r.value.workspace.version).toBe(2);
+  });
+
+  it('carries scripts and the history settings, and an import cannot turn verify mode off', () => {
+    const text = exportWorkspace({
+      preferences: { historyLength: 500, historyIgnoreSpace: true, verifyMode: false },
+      scripts: [
+        { name: 'warm up', text: 'level 0 50%' },
+        { name: 'new one', text: 'off all' },
+      ],
+    });
+    const r = readWorkspace(text, { ceilingArc: 220, scripts: ['Warm Up'] });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.value.changes).toEqual([
+      'Console history: keeps 500 lines.',
+      'Console history: lines that start with a space are left out.',
+      'Verify mode: the file turns it off. An import cannot, so it stays on.',
+      'Script "warm up": replaces the stored one. It runs only when you type run.',
+      'Script "new one": added. It runs only when you type run.',
+    ]);
+    expect(
+      readWorkspace(
+        '{"format":"enlighten-workspace","version":2,"scripts":[{"name":"first-light","text":""}]}',
+        { ceilingArc: 220 },
+      ).ok,
+    ).toBe(false);
   });
 });

@@ -102,3 +102,8 @@ export function channelName(i: number, code: number | undefined): string {
   const name = ASSIGNED[code];
   return name === undefined ? fallback : name.charAt(0).toUpperCase() + name.slice(1);
 }
+
+/** A date and time in the person's own format, for `history -i`. */
+export function timeText(at: number): string {
+  return new Date(at).toLocaleString();
+}

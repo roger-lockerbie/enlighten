@@ -35,6 +35,8 @@ export default defineConfig({
         'src/transport/**/*.ts',
         'src/light/**/*.ts',
         'src/store/**/*.ts',
+        'src/console/**/*.ts',
+        'src/script/**/*.ts',
       ],
       exclude: ['**/*.test.ts', '**/index.ts'],
       reporter: ['text-summary', 'text'],

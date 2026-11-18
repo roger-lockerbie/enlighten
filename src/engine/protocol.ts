@@ -3,10 +3,14 @@
  * one that receives, and every message received is checked here before it is used. A message that does
  * not pass is dropped.
  *
- * Everything the page asks for comes from a person at the UI, so the worker gives it the source `ui`.
+ * Everything the page asks for comes from a person, so the worker gives it the source `ui`, or
+ * `console` for a typed console line. A script's steps run with the source `script` (ADR 0014).
  */
 import type { Address } from '../dali/address.ts';
 import type { Command } from '../dali/codec.ts';
+import { aliasProblem, parseTarget, type ParseContext } from '../console/parse.ts';
+import { MAX_LINE } from '../console/history.ts';
+import { MAX_BYTES, scriptNameProblem } from '../script/parse.ts';
 import { DEFAULT_CEILING_ARC, type Outcome } from '../safety/governor.ts';
 import type { Unlock } from '../safety/types.ts';
 import { parseUnitSetup, type UnitSetup } from '../sim/settings.ts';
@@ -43,7 +47,32 @@ export type Call =
   | { readonly op: 'clearCheck' }
   | { readonly op: 'clearDivergences' }
   /** Set up the simulated bench's units again (SPEC R1.6). */
-  | { readonly op: 'bench'; readonly setup: Partial<Record<'A' | 'B', UnitSetup>> };
+  | { readonly op: 'bench'; readonly setup: Partial<Record<'A' | 'B', UnitSetup>> }
+  /** A typed console line, with the page's aliases and `use` default. Parsed again in the worker. */
+  | {
+      readonly op: 'console';
+      readonly line: string;
+      readonly aliases: readonly Alias[];
+      readonly use?: string;
+      /** The person typed the confirmation for an unlock or a raise of the ceiling. */
+      readonly confirmed?: boolean;
+    }
+  | {
+      readonly op: 'runScript';
+      readonly name: string;
+      readonly text: string;
+      readonly aliases: readonly Alias[];
+    }
+  | { readonly op: 'scriptContinue' }
+  | { readonly op: 'stopConsole' };
+
+/** An alias from the Devices page: a name and a short address. */
+export type Alias = readonly [string, number];
+
+/** The most aliases a console call carries: one for each short address. */
+export const MAX_ALIASES = 64;
+/** The longest `use` default a console call carries. */
+export const MAX_USE = 200;
 
 export type ToWorker =
   /** The first message. The token is present only when the page came from the server. */
@@ -201,6 +230,38 @@ function parseIntent(x: unknown): Intent | undefined {
   }
 }
 
+function parseAliases(x: unknown): Alias[] | undefined {
+  if (!Array.isArray(x) || x.length > MAX_ALIASES) return undefined;
+  const out: Alias[] = [];
+  for (const a of x) {
+    if (!Array.isArray(a) || a.length !== 2) return undefined;
+    const [name, n] = a as unknown[];
+    if (!isStr(name, 60) || aliasProblem(name) !== undefined || !isInt(n, 0, 63)) return undefined;
+    out.push([name, n]);
+  }
+  return out;
+}
+
+/** A parse context with aliases and no `use` default. */
+export function aliasContext(aliases: readonly Alias[]): ParseContext {
+  return { aliases: new Map(aliases.map(([name, n]) => [name.toLowerCase(), n])) };
+}
+
+/**
+ * The parse context for a console line or a script, built in the worker from what the page sent. A
+ * `use` default that does not parse is an error, not a silent change of target.
+ */
+export function consoleContext(
+  aliases: readonly Alias[],
+  use?: string,
+): { ok: true; ctx: ParseContext } | { ok: false; reason: string } {
+  const map = aliasContext(aliases).aliases;
+  if (use === undefined) return { ok: true, ctx: { aliases: map } };
+  const t = parseTarget(use, { aliases: map });
+  if (!t.ok) return { ok: false, reason: `The use default: ${t.error}` };
+  return { ok: true, ctx: { aliases: map, use: t.value } };
+}
+
 function parseCall(x: unknown): Call | undefined {
   if (!isObj(x)) return undefined;
   switch (x['op']) {
@@ -210,6 +271,8 @@ function parseCall(x: unknown): Call | undefined {
         : undefined;
     case 'reconnect':
     case 'resume':
+    case 'scriptContinue':
+    case 'stopConsole':
     case 'rescan':
     case 'reapplyProfile':
     case 'checkReport':
@@ -240,6 +303,28 @@ function parseCall(x: unknown): Call | undefined {
     case 'bench': {
       const setup = parseBench(x['setup']);
       return setup === undefined ? undefined : { op: 'bench', setup };
+    }
+    case 'console': {
+      const { line, use, confirmed } = x;
+      const aliases = parseAliases(x['aliases']);
+      if (!isStr(line, MAX_LINE) || aliases === undefined) return undefined;
+      if (use !== undefined && !isStr(use, MAX_USE)) return undefined;
+      if (confirmed !== undefined && !isBool(confirmed)) return undefined;
+      return {
+        op: 'console',
+        line,
+        aliases,
+        ...(use === undefined ? {} : { use }),
+        ...(confirmed === undefined ? {} : { confirmed }),
+      };
+    }
+    case 'runScript': {
+      const { name, text } = x;
+      const aliases = parseAliases(x['aliases']);
+      if (!isStr(name, 60) || scriptNameProblem(name) !== undefined) return undefined;
+      // Characters here; the parser checks the size in bytes.
+      if (!isStr(text, MAX_BYTES) || aliases === undefined) return undefined;
+      return { op: 'runScript', name, text, aliases };
     }
     case 'check': {
       const { step, confirmed, note, skip } = x;
@@ -311,6 +396,7 @@ export function parseFromWorker(x: unknown): FromWorker | undefined {
         'jobs',
         'check',
         'monitor',
+        'console',
         'notices',
         'unlocks',
         'light',

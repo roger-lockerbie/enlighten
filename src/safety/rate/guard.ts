@@ -31,10 +31,17 @@ interface Tagged {
 
 /**
  * An event is new when the prediction without the transaction does not have it. That includes an old
- * run that the transaction extends into a leg or a hard step, whose start lies in the past.
+ * run that the transaction extends into a leg or a hard step, whose start lies in the past. Each
+ * baseline event stands for one candidate event at most, so a new leg that starts within 2 ms of an
+ * old one, such as the fall straight after a rise, is still new.
  */
 function tag(times: readonly number[], baseline: readonly number[]): Tagged[] {
-  return times.map((t) => ({ t, isNew: !baseline.some((b) => Math.abs(b - t) <= 2) }));
+  const used = new Set<number>();
+  return times.map((t) => {
+    const i = baseline.findIndex((b, k) => !used.has(k) && Math.abs(b - t) <= 2);
+    if (i >= 0) used.add(i);
+    return { t, isNew: i < 0 };
+  });
 }
 
 /** Windows [t_i, t_i + span) holding more than `max` events, at least one of them new. */

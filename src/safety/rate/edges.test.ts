@@ -14,8 +14,10 @@ import {
   FADE_MARGIN_MS,
   HARD_FADE_MS,
   HARD_RATIO,
-  isHard,
+  hardTimes,
+  JUMP_MS,
   isLeg,
+  isSurelyLeg,
   LEG_RATIO,
   mergeDirected,
   mergeTimes,
@@ -40,6 +42,11 @@ const run = (o: Partial<Run>): Run => ({
   from: 1,
   to: 1,
   jumpMax: 1,
+  jumps: [],
+  fastRatio: 1,
+  fastStart: undefined,
+  spans: [],
+  border: [],
   ...o,
 });
 const ev = (o: Partial<TraceEvents>): TraceEvents => ({ legs: [], hard: [], reversals: [], ...o });
@@ -64,9 +71,99 @@ describe('ratios and runs', () => {
     expect(runs(tr([0, 0.1], [10, 0.2], [1010, 0.2], [1020, 0.3]))).toHaveLength(2);
     expect(runs(tr([0, 0.1], [10, 0.2], [1009, 0.2], [1020, 0.3]))).toHaveLength(1);
   });
-  it('counts a step within 50 ms as instant, and a slower one not', () => {
+  it('counts a step within 50 ms (60 ms to the guard) as instant, and a slower one not', () => {
     expect(runs(tr([100, 0.1], [150, 0.5]))[0]?.jumpMax).toBeCloseTo(5);
-    expect(runs(tr([100, 0.1], [151, 0.5]))[0]?.jumpMax).toBe(1);
+    // The guard looks one 10 ms sample further back than 50 ms, for where its samples fall.
+    expect(runs(tr([100, 0.1], [160, 0.5]))[0]?.jumpMax).toBeCloseTo(5);
+    expect(runs(tr([100, 0.1], [161, 0.5]))[0]?.jumpMax).toBe(1);
+  });
+  it('dates each instant step above 2 where it happens, inside a run kept going by a slow fade', () => {
+    // A slow fall with a drop at 1 s and another at 1.8 s: one run, two hard steps (ADR 0015).
+    const pts: [number, number][] = [];
+    for (let t = 0; t <= 3000; t += 10) {
+      const v = (t < 1000 ? 1 : t < 1800 ? 0.33 : 0.1) - t / 100_000;
+      pts.push([t, v]);
+    }
+    // The fall is slow, apart from the drops.
+    const samples = tr(...pts).map((p, k) => ({ ...p, slow: k % 100 !== 0 || k === 0 }));
+    const r = runs(samples);
+    expect(r).toHaveLength(1);
+    expect(r[0]?.jumps.map((j) => j.t)).toEqual([990, 1790]);
+    expect(directedEvents(samples).hard.map((e) => e.t)).toEqual([990, 1790]);
+    // Were the fall fast, the drop's span could be dated as far back as the window reaches: the rule
+    // finds it when the change from the window's lowest point passes 2, partway down the drop (S6-P10).
+    expect(directedEvents(tr(...pts)).hard.map((e) => e.t)).toEqual([260, 990, 1060, 1790]);
+  });
+  it('finds a step above 2 within 50 ms when no two samples differ by 2', () => {
+    // A slow rise keeps the run going, then a 100 ms fade by 15: 1.31 a sample, 3.9 within 50 ms.
+    const pts: [number, number][] = [
+      [0, 0.5],
+      [10, 0.05],
+    ];
+    for (let t = 200; t <= 1000; t += 10) pts.push([t, 0.05 + (t - 200) / 100_000]);
+    for (let k = 1; k <= 10; k++) pts.push([1000 + k * 10, 0.058 * 15 ** (k / 10)]);
+    // The rise is slow, the fade fast.
+    const samples = tr(...pts).map((p) => ({ ...p, slow: p.t > 200 && p.t <= 1000 }));
+    const r = runs(samples).find((x) => x.dir === 1);
+    expect(r?.jumps.length).toBe(1);
+    expect(directedEvents(samples).hard.map((e) => e.t)).toHaveLength(2);
+  });
+  it('counts instant steps that follow on within 50 ms as one', () => {
+    // A fast fade sampled finely: each sample a step above 2, one hard step.
+    const on = runs(tr([0, 0.02], [10, 0.05], [20, 0.12], [30, 0.3], [40, 0.8]));
+    expect(on[0]?.jumps.map((j) => j.t)).toEqual([0]);
+    // Two steps with a gap of exactly 50 ms between them are one; a gap over 50 ms is two.
+    expect(runs(tr([0, 0.03], [10, 0.1], [60, 0.11], [70, 0.4]))[0]?.jumps.map((j) => j.t)).toEqual(
+      [0],
+    );
+    expect(runs(tr([0, 0.03], [10, 0.1], [61, 0.11], [71, 0.4]))[0]?.jumps.map((j) => j.t)).toEqual(
+      [0, 61],
+    );
+    expect(JUMP_MS).toBe(50);
+  });
+  it('dates a fast leg where its fast movement began, and each span and instant step in a longer leg', () => {
+    const jump = (t: number) => ({ t, v: 0, endT: t + 10, endV: 0, max: 3 });
+    // A fast leg is one hard step, where its fast movement began, whatever steps it holds.
+    const r = run({
+      from: 0.1,
+      to: 0.3,
+      start: 1000,
+      end: 1500,
+      fastRatio: 3,
+      fastStart: 1000,
+      spans: [1150],
+    });
+    expect(hardTimes(r)).toEqual([1000]);
+    expect(hardTimes({ ...r, jumps: [jump(1200)] })).toEqual([1000]);
+    // Without a span, the fast change did not pass 2 within 0.7 s on the guard's samples.
+    expect(hardTimes({ ...r, spans: [] })).toEqual([]);
+    // A longer leg: each span and step where it happened. A span and a step within 50 ms are one.
+    const slow = run({ from: 0.1, to: 0.9, start: 1000, end: 3000, fastRatio: 9, spans: [1300] });
+    expect(hardTimes({ ...slow, jumps: [jump(1300), jump(2500)] })).toEqual([1300, 2500]);
+    expect(hardTimes({ ...slow, jumps: [jump(1350)] })).toEqual([1300]);
+    expect(hardTimes({ ...slow, jumps: [jump(1351)] })).toEqual([1300, 1351]);
+    expect(hardTimes({ ...slow, spans: [] })).toEqual([]);
+    // Ends far apart in under 0.7 s, but through a slow fade: not a hard step (ADR 0016).
+    expect(hardTimes(run({ from: 0.1, to: 0.9, start: 1000, end: 1300 }))).toEqual([]);
+    // On the border of 0.7 s, both readings: the fast leg's start, and each span and step (S6-P8).
+    const edge = { ...r, end: 1000 + HARD_FADE_MS - FADE_MARGIN_MS };
+    expect(hardTimes({ ...edge, jumps: [jump(1690)] })).toEqual([1000, 1150, 1690]);
+    expect(hardTimes({ ...edge, end: edge.end - 0.01, jumps: [jump(1690)] })).toEqual([1000]);
+    const far = { ...r, end: 1000 + HARD_FADE_MS + FADE_MARGIN_MS };
+    expect(hardTimes({ ...far, end: far.end - 0.01, jumps: [jump(1690)] })).toEqual([
+      1000, 1150, 1690,
+    ]);
+    expect(hardTimes({ ...far, jumps: [jump(1690)] })).toEqual([1150, 1690]);
+    // The start is not counted again when a span or step is within the time margin of it.
+    expect(hardTimes({ ...edge, spans: [1040] })).toEqual([1040]);
+    // Fast change near 2: both readings.
+    const near = { ...r, fastRatio: HARD_RATIO / RATIO_MARGIN };
+    expect(hardTimes({ ...near, jumps: [jump(1400)] })).toEqual([1000, 1150, 1400]);
+    expect(
+      hardTimes({ ...near, fastRatio: HARD_RATIO * RATIO_MARGIN, jumps: [jump(1400)] }),
+    ).toEqual([1150, 1400]);
+    // A run smaller than a leg has none.
+    expect(hardTimes({ ...r, to: 0.1005, jumps: [jump(1200)] })).toEqual([]);
   });
 });
 
@@ -78,15 +175,29 @@ describe('legs, hard steps and reversals at their edges', () => {
   });
   it('a hard step is an instant step or a short fade above 2 less the margin', () => {
     const edge = HARD_RATIO * RATIO_MARGIN;
-    expect(isHard(run({ from: 1, to: 1.5, jumpMax: edge }))).toBe(false);
-    expect(isHard(run({ from: 1, to: 1.5, jumpMax: 2 }))).toBe(true);
-    const fast = HARD_FADE_MS + FADE_MARGIN_MS;
-    expect(isHard(run({ from: 0.1, to: 0.1 * edge, start: 1000, end: 1000 + fast - 1 }))).toBe(
-      false,
-    );
-    expect(isHard(run({ from: 0.1, to: 0.3, start: 1000, end: 1000 + fast - 0.1 }))).toBe(true);
-    expect(isHard(run({ from: 0.1, to: 0.3, start: 1000, end: 1000 + fast }))).toBe(false);
-    expect(isHard(run({ from: 0.1, to: 0.3, start: 1000, end: 1000 + HARD_FADE_MS }))).toBe(true);
+    // An instant step: 1.98 is not a hard step, 2 is.
+    const step = (r: number) => events(tr([0, 1], [100, 1], [100.001, r], [500, r])).hard;
+    expect(step(edge)).toEqual([]);
+    expect(step(2)).toEqual([100]);
+    // A fade sampled every 10 ms: fast change above 2 within 0.7 s is a hard step from its start,
+    // and a fade the gear ran for 0.7 s or longer (marked slow) never is (ADR 0016).
+    const fade = (to: number, took: number, slow = false) => {
+      const pts: Sample[] = [
+        { t: 0, v: 0.1 },
+        { t: 1000, v: 0.1 },
+      ];
+      for (let k = 1; k * 10 <= took; k++)
+        pts.push({ t: 1000 + k * 10, v: 0.1 * (to / 0.1) ** ((k * 10) / took), slow });
+      pts.push({ t: 4000, v: to });
+      return events(pts).hard;
+    };
+    expect(fade(0.1 * edge * 0.9999, 300)).toEqual([]);
+    expect(fade(0.1 * edge * 1.0001, 300)).toEqual([1000]);
+    expect(fade(0.2, 300)).toEqual([1000]);
+    expect(fade(0.3, 400, true)).toEqual([]);
+    // Fast change by 3 over 1 s is above 2 within 0.7 s, and over 2 s it is not.
+    expect(fade(0.3, 1000)).toEqual([1000]);
+    expect(fade(0.3, 2000)).toEqual([]);
   });
   it('a reversal needs both runs to change by 0.4% or more, and one of them to be smaller than a leg', () => {
     const edge = 1 + (REVERSAL_MIN_RATIO - 1) * 0.8;
@@ -98,6 +209,17 @@ describe('legs, hard steps and reversals at their edges', () => {
     expect(directedEvents(tr([0, 1], [10, 1.5], [20, 1])).reversals).toEqual([]);
     expect(events(tr([0, 1], [10, 1.5], [20, edge * 1.5])).reversals).toEqual([]);
   });
+  it('a turn after a run on the leg border counts as a small reversal (rate-runs counterexample)', () => {
+    // A slow fall of 1.095, then a rise of 1.27: the rule sees no leg before the rise, so the turn is a
+    // small reversal. The guard used to call the fall a leg, by its margin, and missed the turn.
+    const turn = (fall: number) => directedEvents(tr([0, fall], [1000, 1], [1001, 1.27])).reversals;
+    expect(turn(1.095)).toEqual([1000]);
+    expect(turn(LEG_RATIO * RATIO_MARGIN)).toEqual([1000]);
+    expect(turn(LEG_RATIO / RATIO_MARGIN - 1e-6)).toEqual([1000]);
+    expect(turn(LEG_RATIO / RATIO_MARGIN)).toEqual([]);
+    expect(isSurelyLeg(run({ from: 1, to: LEG_RATIO / RATIO_MARGIN }))).toBe(true);
+    expect(isSurelyLeg(run({ from: 1, to: LEG_RATIO }))).toBe(false);
+  });
 });
 
 describe('merging events from several traces', () => {
@@ -107,6 +229,20 @@ describe('merging events from several traces', () => {
     expect(mergeDirected([[{ t: 1000, dir: 1 }], [{ t: 1101, dir: 1 }]])).toEqual([1000, 1101]);
     expect(mergeDirected([[{ t: 1000, dir: 1 }], [{ t: 1050, dir: -1 }]])).toEqual([1000, 1050]);
     expect(mergeDirected([[{ t: 1000, dir: 1 }], [{ t: 1030, dir: 1 }]], 20)).toEqual([1000, 1030]);
+  });
+  it('keeps opposite events apart unless they are at one moment (S6-P11)', () => {
+    // A swap between colours: one channel up, another down, at once.
+    expect(mergeDirected([[{ t: 1000, dir: 1 }], [{ t: 1000.001, dir: -1 }]])).toEqual([1000]);
+    // A step up, then a fade down starting 4 ms later: two.
+    expect(mergeDirected([[{ t: 31, dir: 1 }], [{ t: 35, dir: -1 }]])).toEqual([31, 35]);
+    // Within 5 ms, the same way or with no direction: one.
+    expect(mergeDirected([[{ t: 1000, dir: 1 }], [{ t: 1004, dir: 0 }]])).toEqual([1000]);
+  });
+  it('keeps a border date whatever the merge (S6-D17-1)', () => {
+    const span = { t: 1050, dir: 1 as const };
+    const early = { t: 1000, dir: 1 as const, border: true };
+    expect(mergeDirected([[early, span]], 60)).toEqual([1000, 1050]);
+    expect(mergeDirected([[early], [{ t: 1003, dir: 1 }]], 60)).toEqual([1000]);
   });
   it('merges times within 5 ms, after sorting', () => {
     expect(mergeTimes([[10], [0]])).toEqual([0, 10]);
@@ -135,6 +271,14 @@ describe('the limits at their edges', () => {
     expect(scopeViolations('a0', ev({ hard: [0, 103] }), ev({ hard: [0, 100] }), 1)).toHaveLength(
       1,
     );
+  });
+  it('an old event stands for one new event at most (rate-runs counterexample)', () => {
+    // A rise was old, and the change turned the slow fall straight after it into a leg 1 ms later.
+    // The fall is new, so three legs in a second break the one-swing limit.
+    const base = ev({ legs: [0, 549] });
+    expect(scopeViolations('a0', ev({ legs: [0, 549, 550] }), base, 1)).toHaveLength(1);
+    expect(scopeViolations('a0', ev({ legs: [0, 549] }), base, 1)).toEqual([]);
+    expect(scopeViolations('a0', ev({ hard: [0, 1, 2] }), ev({ hard: [0, 1, 2] }), 1)).toEqual([]);
   });
   it('windows are open at their end', () => {
     expect(scopeViolations('a0', ev({ hard: [0, 2040] }), EMPTY, 1)).toEqual([]);
@@ -262,6 +406,10 @@ describe('sampling a gear for events', () => {
       const gap = (times[i] ?? 0) - (times[i - 1] ?? 0);
       if ((times[i] ?? 0) <= 3000) expect(gap).toBeLessThanOrEqual(10 + 1e-9);
     }
+    // A segment that is not a whole number of 10 ms steps is still sampled every 10 ms at most (S6-S18-4).
+    const odd = sampleTimes(g, 503, 1000, false);
+    for (let i = 1; i < odd.length; i++)
+      expect((odd[i] ?? 0) - (odd[i - 1] ?? 0)).toBeLessThanOrEqual(10 + 1e-9);
     const long = sampleTimes(g, 0, 60_000, false).filter((t) => t > 3000);
     expect(long.length).toBeLessThanOrEqual(401);
     expect(long.length).toBeGreaterThan(100);
