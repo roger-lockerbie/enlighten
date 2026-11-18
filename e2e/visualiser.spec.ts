@@ -248,9 +248,10 @@ test('measuring the frame leaves the picture and the page alone', async ({ page 
   });
   await expect(page.getByTestId('measure')).toBeEnabled();
   // Nothing was drawn to the picture: it is the same unlit hallway. A failure says where the two
-  // differ and keeps both pictures.
+  // differ and keeps both pictures. The corners are left out: the frame's rounded border shows
+  // there, and on Linux it is drawn one level apart once the page has scrolled.
   const after = await canvas.screenshot();
-  const change = difference(readPng(before), readPng(after));
+  const change = difference(readPng(before), readPng(after), 8);
   if (change.pixels !== 0 || change.sizes !== 'same') {
     await test.info().attach('before-measure.png', { body: before, contentType: 'image/png' });
     await test.info().attach('after-measure.png', { body: after, contentType: 'image/png' });

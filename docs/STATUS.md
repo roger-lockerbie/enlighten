@@ -216,4 +216,5 @@ Known gaps, all in ADR 0017:
 Review and merge the Stage 7 PR. Then, in either order:
 
 - The rate guard stage the owner chose on 2026-11-18 (S6-P13, S6-D18-1 to S6-D18-5, S6-P14 to S6-P16 and S5-P1), which needs a row in `docs/STAGES.md` and a model.
+- The branch coverage target on `src/safety` (95%) fails now and then in CI. The property tests have no fixed seed, so the branches they reach in `src/safety/rate` change from run to run: on 2026-11-18 one CI run gave 94.96% and the runs either side passed. The fix is a fixed seed for the coverage run, or unit tests for those branches in `legs.ts` and `trace.ts`. On 2026-11-19 the owner chose to leave it for now. It fits the rate guard stage.
 - Stage 8 (hallway, mounts and tapes) on Opus, in plan mode.

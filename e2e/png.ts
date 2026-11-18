@@ -83,8 +83,11 @@ export interface Difference {
   readonly first: string;
 }
 
-/** Compare two pictures pixel by pixel. Equal pictures give `pixels: 0`. */
-export function difference(a: Image, b: Image): Difference {
+/**
+ * Compare two pictures pixel by pixel. Equal pictures give `pixels: 0`. `corner` leaves out a
+ * square of that many pixels at each corner, where a rounded frame shows through a screenshot.
+ */
+export function difference(a: Image, b: Image, corner = 0): Difference {
   let pixels = 0;
   let worst = 0;
   let first = '';
@@ -92,8 +95,13 @@ export function difference(a: Image, b: Image): Difference {
   let top = Infinity;
   let right = -1;
   let bottom = -1;
-  for (let y = 0; y < Math.min(a.height, b.height); y++) {
-    for (let x = 0; x < Math.min(a.width, b.width); x++) {
+  const w = Math.min(a.width, b.width);
+  const h = Math.min(a.height, b.height);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const nearX = x < corner || x >= w - corner;
+      const nearY = y < corner || y >= h - corner;
+      if (nearX && nearY) continue;
       const p = a.at(x, y);
       const q = b.at(x, y);
       const step = Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]), Math.abs(p[2] - q[2]));
