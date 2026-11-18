@@ -14,7 +14,7 @@ import { illuminanceAt } from '../src/light/probe.ts';
 import { solveScene } from '../src/light/response.ts';
 import { defaultScene } from '../src/light/scene.ts';
 import { goTo, noProblems, openApp, openConsole, typeLine } from './app.ts';
-import { readPng } from './png.ts';
+import { difference, readPng } from './png.ts';
 
 const READY = 'Bounced light ready';
 
@@ -247,7 +247,14 @@ test('measuring the frame leaves the picture and the page alone', async ({ page 
     timeout: 15_000,
   });
   await expect(page.getByTestId('measure')).toBeEnabled();
-  // Nothing was drawn to the picture: it is the same unlit hallway.
-  expect((await canvas.screenshot()).equals(before)).toBe(true);
+  // Nothing was drawn to the picture: it is the same unlit hallway. A failure says where the two
+  // differ and keeps both pictures.
+  const after = await canvas.screenshot();
+  const change = difference(readPng(before), readPng(after));
+  if (change.pixels !== 0 || change.sizes !== 'same') {
+    await test.info().attach('before-measure.png', { body: before, contentType: 'image/png' });
+    await test.info().attach('after-measure.png', { body: after, contentType: 'image/png' });
+  }
+  expect(change).toEqual({ sizes: 'same', pixels: 0, box: 'none', worst: 0, first: '' });
   await noProblems(w);
 });

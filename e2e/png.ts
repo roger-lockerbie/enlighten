@@ -73,3 +73,49 @@ export function readPng(file: Buffer): Image {
     },
   };
 }
+
+/** How two pictures differ: how many pixels, the box that holds them, and the largest step. */
+export interface Difference {
+  readonly sizes: string;
+  readonly pixels: number;
+  readonly box: string;
+  readonly worst: number;
+  readonly first: string;
+}
+
+/** Compare two pictures pixel by pixel. Equal pictures give `pixels: 0`. */
+export function difference(a: Image, b: Image): Difference {
+  let pixels = 0;
+  let worst = 0;
+  let first = '';
+  let left = Infinity;
+  let top = Infinity;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < Math.min(a.height, b.height); y++) {
+    for (let x = 0; x < Math.min(a.width, b.width); x++) {
+      const p = a.at(x, y);
+      const q = b.at(x, y);
+      const step = Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]), Math.abs(p[2] - q[2]));
+      if (step === 0) continue;
+      if (pixels === 0) first = `${String(x)},${String(y)}: ${p.join(' ')} to ${q.join(' ')}`;
+      pixels++;
+      worst = Math.max(worst, step);
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  const size = (i: Image): string => `${String(i.width)} by ${String(i.height)}`;
+  return {
+    sizes: a.width === b.width && a.height === b.height ? 'same' : `${size(a)} and ${size(b)}`,
+    pixels,
+    box:
+      pixels === 0
+        ? 'none'
+        : `${String(left)},${String(top)} to ${String(right)},${String(bottom)}`,
+    worst,
+    first,
+  };
+}
