@@ -16,6 +16,7 @@
     "@stryker-mutator/vitest-runner": "10.1.1",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@types/node": "26.6.6",
+    "@types/three": "0.187.0",
     "@vitest/coverage-v8": "5.1.0",
     "eslint": "10.14.0",
     "eslint-plugin-svelte": "3.24.0",
@@ -51,5 +52,8 @@
     "test:server": "server/.venv/bin/python -m pytest server -q",
     "coverage": "vitest run --coverage",
     "mutate": "PROP_RUNS=5 stryker run"
+  },
+  "dependencies": {
+    "three": "0.187.0"
   }
 }
