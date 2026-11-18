@@ -53,7 +53,7 @@
     "server": "server/.venv/bin/python -m server",
     "server:demo": "pnpm build && server/.venv/bin/python -m server --demo",
     "test:server": "server/.venv/bin/python -m pytest server -q",
-    "coverage": "vitest run --coverage",
+    "coverage": "PROP_SEED=1 vitest run --coverage",
     "mutate": "PROP_RUNS=5 stryker run"
   },
   "dependencies": {

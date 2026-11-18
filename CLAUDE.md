@@ -84,7 +84,7 @@ Use Node 26.13.1 (`.nvmrc`) and pnpm 12.18.0 through corepack. The dev server ru
 | `pnpm test`       | Unit tests (Vitest).                                             |
 | `pnpm test:prop`  | Property tests (fast-check, in `*.prop.test.ts` files).          |
 | `pnpm e2e`        | Playwright in Chromium. Builds and starts the preview itself.    |
-| `pnpm coverage`   | Unit and property tests with the coverage targets.               |
+| `pnpm coverage`   | Unit and property tests with the coverage targets, fixed seed.   |
 | `pnpm mutate`     | Stryker on `src/safety` and the codec. On demand, not in CI.     |
 | `pnpm golden`     | Regenerate the python-dali golden fixtures in `tests/golden/`.   |
 | `pnpm reference`  | Regenerate the light core's reference fixtures. About 6 minutes. |

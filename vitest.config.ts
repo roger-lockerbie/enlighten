@@ -12,6 +12,7 @@ export default defineConfig({
           include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'config/**/*.test.ts'],
           exclude: ['**/*.prop.test.ts'],
           environment: 'node',
+          setupFiles: ['tests/harness/seed.ts'],
         },
       },
       {
@@ -19,6 +20,7 @@ export default defineConfig({
           name: 'prop',
           include: ['src/**/*.prop.test.ts', 'tests/**/*.prop.test.ts', 'config/**/*.prop.test.ts'],
           environment: 'node',
+          setupFiles: ['tests/harness/seed.ts'],
         },
       },
     ],
