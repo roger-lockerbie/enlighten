@@ -14,3 +14,5 @@ server/.venv
 server/requirements.txt
 server/requirements-dev.txt
 .pytest_cache
+# Written by tools/reference/trace.ts.
+tests/golden/light/

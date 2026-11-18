@@ -4,9 +4,13 @@
  * `createScript`. Lint keeps `createPolicy` and `new Worker` in this file.
  */
 import busWorkerUrl from './bus.worker.ts?worker&url';
+import lightWorkerUrl from './light.worker.ts?worker&url';
 
-/** Every worker URL the policy will pass. The light worker joins in Stage 7. */
-const WORKER_URLS: readonly string[] = [new URL(busWorkerUrl, location.origin).href];
+/** Every worker URL the policy will pass: the bus worker, then the light worker. */
+const WORKER_URLS: readonly string[] = [
+  new URL(busWorkerUrl, location.origin).href,
+  new URL(lightWorkerUrl, location.origin).href,
+];
 
 interface PolicyLike {
   createScriptURL(input: string): unknown;
@@ -36,4 +40,11 @@ export function startBusWorker(): Worker {
   const [url] = WORKER_URLS;
   if (url === undefined) throw new Error('No bus worker URL.');
   return new Worker(trusted(url), { type: 'module', name: 'bus' });
+}
+
+/** Start a light worker (ADR 0010). The page ends it and starts another to drop a stale solve. */
+export function startLightWorker(): Worker {
+  const url = WORKER_URLS[1];
+  if (url === undefined) throw new Error('No light worker URL.');
+  return new Worker(trusted(url), { type: 'module', name: 'light' });
 }

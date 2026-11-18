@@ -47,6 +47,7 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "verify": "pnpm lint && pnpm typecheck && pnpm coverage && pnpm build && pnpm e2e",
     "golden": "tools/golden/.venv/bin/python -I tools/golden/generate.py",
+    "reference": "REFERENCE_PATHS=2000000 node tools/reference/trace.ts",
     "server": "server/.venv/bin/python -m server",
     "server:demo": "pnpm build && server/.venv/bin/python -m server --demo",
     "test:server": "server/.venv/bin/python -m pytest server -q",
