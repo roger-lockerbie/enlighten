@@ -227,6 +227,121 @@ describe('typed console lines', () => {
   });
 });
 
+describe('RESET from the console (DALI review S6-R1)', () => {
+  it('sends OFF after RESET and writes the safety profile again', async () => {
+    const t = setup({ ceilingArc: 200 });
+    await t.settle();
+    await t.type('unlock reset', true);
+    await t.type('level 0 150');
+    await t.clock.advance(3000);
+    const from = t.simTransport.log.length;
+    const { r, out } = await t.type('reset 0');
+    expect(r.ok).toBe(true);
+    expect(out[0]).toMatch(/^A0 goes to full output for about 0\.3 s, then OFF/);
+    expect(out.at(-1)).toBe('A0 reset, off, and the safety profile verified');
+    const log = t.simTransport.log.slice(from);
+    const ids = t.heard(from).map((c) => c.id);
+    expect(ids.indexOf('RESET')).toBeLessThan(ids.indexOf('OFF'));
+    const at = (id: string) => log.find((l) => decode(l.frame.frame)?.id === id)?.at ?? Number.NaN;
+    expect(at('OFF') - at('RESET')).toBeLessThan(500);
+    // MAX LEVEL is the ceiling again, not RESET's 254.
+    const a = t.sim.all.find((u) => u.gear.shortAddress === 0)?.gear;
+    expect(a?.snapshot().maxLevel).toBe(200);
+    expect(a?.outputAt(t.clock.now()).terminals.every((x) => x === 0)).toBe(true);
+  });
+
+  it('routes a raw RESET the same way, and refuses one to a group or broadcast', async () => {
+    const t = setup();
+    await t.settle();
+    await t.type('unlock reset', true);
+    const from = t.simTransport.log.length;
+    const raw = await t.type('raw 01 20');
+    expect(raw.r.ok).toBe(true);
+    expect(t.heard(from).map((c) => c.id)).toContain('OFF');
+    const g = await t.type('reset g0');
+    expect(g.r.ok).toBe(false);
+    expect(g.out.join('\n')).toContain('one short address at a time');
+    const all = await t.type('raw ff 20');
+    expect(all.r.ok).toBe(false);
+  });
+
+  it('is refused without the unlock, and a bare RESET is refused on every other path', async () => {
+    const t = setup();
+    await t.settle();
+    const { r } = await t.type('reset 0');
+    expect(r.ok).toBe(false);
+    t.engine.unlock('reset', 'ui', true);
+    const cmds = await t.drive(
+      t.engine.request(
+        { kind: 'commands', commands: [{ id: 'RESET', address: { kind: 'short', n: 0 } }] },
+        'ui',
+      ),
+    );
+    expect(cmds.ok).toBe(false);
+    const raw = await t.drive(t.engine.request({ kind: 'raw', a: 0x01, b: 0x20 }, 'ui'));
+    expect(raw.ok).toBe(false);
+    if (!raw.ok) expect(raw.reason).toMatch(/OFF and the safety profile/);
+    expect((await t.drive(t.engine.resetAddress(0, 'script'))).ok).toBe(false);
+  });
+
+  const resetAt = (t: ReturnType<typeof setup>, from: number) =>
+    t.simTransport.log.slice(from).find((l) => decode(l.frame.frame)?.id === 'RESET')?.at;
+
+  it('refuses a RESET the guard holds at once, so it never goes out later (security review M2)', async () => {
+    const t = setup();
+    await t.settle();
+    await t.type('unlock reset', true);
+    expect((await t.type('reset 0')).r.ok).toBe(true);
+    const from = t.simTransport.log.length;
+    // One RESET in 10 s: the second is refused now, not retried in the background.
+    const second = await t.type('reset 1');
+    expect(second.r.ok).toBe(false);
+    expect(t.engine.snapshot().jobs).toEqual([]);
+    await t.clock.advance(15_000);
+    expect(t.heard(from).map((c) => c.id)).not.toContain('RESET');
+  });
+
+  it('an OFF from another control while the gear is deaf does not hold the follow-up OFF (security review M1)', async () => {
+    const t = setup();
+    await t.settle();
+    await t.type('unlock reset', true);
+    const from = t.simTransport.log.length;
+    const p = t.engine.console('reset 0', ctx);
+    await t.until(() => resetAt(t, from) !== undefined);
+    const reset = resetAt(t, from) ?? Number.NaN;
+    await t.clock.advance(100);
+    const off = await t.drive(
+      t.engine.request(
+        { kind: 'commands', commands: [{ id: 'OFF', address: { kind: 'short', n: 0 } }] },
+        'ui',
+      ),
+    );
+    expect(off.ok).toBe(true);
+    expect((await t.drive(p)).ok).toBe(true);
+    const offs = t.simTransport.log
+      .slice(from)
+      .filter((l) => decode(l.frame.frame)?.id === 'OFF')
+      .map((l) => l.at - reset);
+    // The UI's OFF came while the gear was deaf; the reset's own OFF still followed in time.
+    expect(offs[0]).toBeLessThan(350);
+    expect(offs.some((d) => d >= 350 && d < 500)).toBe(true);
+  });
+
+  it('warns that MAX LEVEL may be 254 when panic stops a reset after its RESET (security review L1)', async () => {
+    const t = setup();
+    await t.settle();
+    await t.type('unlock reset', true);
+    const from = t.simTransport.log.length;
+    const p = t.engine.resetAddress(0, 'console');
+    await t.until(() => resetAt(t, from) !== undefined);
+    await t.drive(t.engine.panic());
+    const r = await t.drive(p);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/A0 was reset, so its MAX LEVEL may be 254/);
+    expect(t.engine.snapshot().notices.join('\n')).toMatch(/MAX LEVEL may be 254/);
+  });
+});
+
 describe('scripts', () => {
   /** Run a script, pressing Enter at every pause, and check the light at each step. */
   async function runAll(t: ReturnType<typeof setup>, name: string, text: string) {
@@ -409,6 +524,7 @@ function fakeHost(results: RequestResult[], devices: DeviceView[] = []) {
     setTarget: () => Promise.resolve({ ok: true }),
     rescan: () => Promise.resolve({ ok: true }),
     reapplyProfile: () => Promise.resolve({ ok: false, reason: 'no' }),
+    reset: () => Promise.resolve({ ok: true }),
     unlock: () => ({ ok: true }),
     lock: () => undefined,
     resume: () => ({ ok: true }),

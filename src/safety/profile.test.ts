@@ -480,8 +480,47 @@ describe('RESET and restore', () => {
         return Promise.resolve();
       },
     );
-    expect(r).toEqual({ ok: false, reason: 'OFF after RESET: no. Panic sent OFF instead.' });
+    expect(r).toEqual({
+      ok: false,
+      reason: 'OFF after RESET: no. Panic sent OFF instead.',
+      sent: true,
+    });
     expect(panicked).toBe(true);
+  });
+  it('sends the RESET and its OFF once through `once`, and the rest through the patient submit', async () => {
+    const g = gov();
+    const bus = fakeBus(g, DT6);
+    const viaOnce: string[] = [];
+    const once: Submit = (t, p) => {
+      viaOnce.push(t.label ?? '');
+      return bus.submit(t, p);
+    };
+    const r = await resetAndRestore(
+      0,
+      g,
+      bus.submit,
+      noWait,
+      'console',
+      () => Promise.resolve(),
+      once,
+    );
+    expect(r.ok).toBe(true);
+    expect(r.sent).toBe(true);
+    expect(viaOnce).toEqual(['RESET', 'OFF after RESET']);
+  });
+  it('returns a refused RESET as it is, with nothing sent', async () => {
+    const g = gov();
+    const once: Submit = () => Promise.resolve({ kind: 'refused', reason: 'later', retryAt: 9999 });
+    const r = await resetAndRestore(
+      0,
+      g,
+      fakeBus(g, DT6).submit,
+      noWait,
+      'console',
+      () => Promise.resolve(),
+      once,
+    );
+    expect(r).toEqual({ ok: false, reason: 'later' });
   });
   it('reports a profile that did not verify', async () => {
     const g = gov();

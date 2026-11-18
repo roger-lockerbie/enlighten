@@ -1,11 +1,13 @@
 /**
  * An independent check of the simulator's output trace against SPEC S3 and R6, for the property tests.
  *
- * It records what the simulated bench actually did and checks the rules by brute force. It shares no
- * code with `src/safety/rate`: the guard predicts and refuses, this measures what came out.
+ * It records what the simulated bench actually did and checks it against ADR 0011's and ADR 0015's
+ * rules. It shares no code with `src/safety/rate`: the guard predicts and refuses, this measures what
+ * came out. It reads the rules the same way the guard does, with its own code and without the guard's
+ * margins, so a gap in the reading itself is in both (security finding S6-R10).
  */
 import { arcToFraction } from '../../src/dali/curve.ts';
-import type { Da5l } from '../../src/sim/gear.ts';
+import type { Da5l, OutputPlan } from '../../src/sim/gear.ts';
 import type { Simulator } from '../../src/sim/simulator.ts';
 
 const LEG = 1.1;
@@ -30,11 +32,18 @@ export interface Point {
   readonly d: readonly number[];
 }
 
+/** Whether a unit's output changed between two times only through fades that ran 0.7 s or longer. */
+export type SlowTest = (x: number, y: number) => boolean;
+
 /** Records every unit's output from the simulator's plans as time moves on. */
 export class TraceRecorder {
   readonly points = new Map<string, Point[]>();
   readonly labels = new Map<string, readonly string[]>();
   readonly resets: { t: number; id: string }[] = [];
+  /** Every plan each unit has run, by its start time, to tell how long each fade ran (ADR 0016). */
+  readonly plans = new Map<string, Map<number, OutputPlan>>();
+  /** A unit's slow test, set by tests that record made-up points instead of a simulator's. */
+  readonly slow = new Map<string, SlowTest>();
   private last: number;
 
   constructor(
@@ -46,6 +55,21 @@ export class TraceRecorder {
       this.points.set(u.id, [{ t: start, d: u.gear.outputAt(start).terminals }]);
       this.labels.set(u.id, u.gear.model.terminals);
     }
+    this.keepPlans(start);
+  }
+
+  /** Plans that have started by `to` cannot change, so they are kept from here on. */
+  private keepPlans(to: number): void {
+    for (const u of this.sim.all) {
+      const kept = this.plans.get(u.id) ?? new Map<number, OutputPlan>();
+      for (const p of u.gear.plans()) if (p.since <= to) kept.set(p.since, p);
+      this.plans.set(u.id, kept);
+    }
+  }
+
+  /** A unit's slow test: its own if set, otherwise from the plans it ran. */
+  slowTest(id: string): SlowTest {
+    return this.slow.get(id) ?? slowFromPlans([...(this.plans.get(id)?.values() ?? [])]);
   }
 
   /**
@@ -70,8 +94,62 @@ export class TraceRecorder {
       for (const t of sorted) list.push({ t, d: u.gear.outputAt(t).terminals });
       this.points.set(u.id, list);
     }
+    this.keepPlans(to);
     this.last = to;
   }
+}
+
+/**
+ * Spans of time in which a unit's output can change fast: each plan's start, a fade that ran under
+ * 0.7 s from its start until it ended or was replaced, the switch off at the end of a fade to off,
+ * and identify. Anything else that changes is a fade that ran 0.7 s or longer (S3.3, ADR 0016).
+ */
+function slowFromPlans(unsorted: readonly OutputPlan[]): SlowTest {
+  const plans = [...unsorted].sort((a, b) => a.since - b.since);
+  const points: number[] = [];
+  const spans: [number, number][] = [];
+  const key = (o: unknown) => JSON.stringify(o);
+  plans.forEach((p, i) => {
+    points.push(p.since);
+    const next = plans[i + 1]?.since ?? Infinity;
+    if (p.identifyUntil > p.since) spans.push([p.since, Math.min(p.identifyUntil, next)]);
+    // Each fade once: from the first plan that has it to the first that does not.
+    const prev = plans[i - 1];
+    for (const part of ['level', 'colour'] as const) {
+      if (prev !== undefined && key(prev[part]) === key(p[part])) continue;
+      let k = i + 1;
+      while (k < plans.length && key(plans[k]?.[part]) === key(p[part])) k++;
+      const until = Math.min(p[part].end, plans[k]?.since ?? Infinity);
+      if (until - p[part].start < FADE_MS && until > p[part].start)
+        spans.push([p[part].start, until]);
+      if (part === 'level' && p.level.offAtEnd && p.level.end <= until) points.push(p.level.end);
+    }
+  });
+  points.sort((a, b) => a - b);
+  spans.sort((a, b) => a[0] - b[0]);
+  // The longest span, so a search for spans that reach x can stop.
+  const longest = spans.reduce((m, [a, b]) => Math.max(m, b - a), 0);
+  /** How many of the sorted values are at or below v. */
+  const upTo = (xs: readonly number[], v: number) => {
+    let lo = 0;
+    let hi = xs.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((xs[mid] ?? Infinity) <= v) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  const starts = spans.map(([a]) => a);
+  return (x, y) => {
+    if (upTo(points, y) > upTo(points, x)) return false;
+    for (let i = upTo(starts, y) - 1; i >= 0; i--) {
+      const [a, b] = spans[i] ?? [0, 0];
+      if (a < x - longest) break;
+      if (a < y && b > x) return false;
+    }
+    return true;
+  };
 }
 
 interface Run {
@@ -80,7 +158,17 @@ interface Run {
   dir: number;
   from: number;
   to: number;
-  jump: number;
+  /** Where the run changed by more than HARD within 50 ms. Steps within 100 ms are one step. */
+  jumps: { t: number; v: number; endT: number; endV: number }[];
+  jumpEnd: number;
+  /** The run's points from the last 50 ms. */
+  win: { t: number; v: number }[];
+  /** Every point of the run, with the log of the fast change from the run's start to it. */
+  pts: { t: number; v: number; fast: number; moved: boolean }[];
+  /** Where fast change above 2 within 0.7 s began. Spans that follow on are one (ADR 0016). */
+  spans: number[];
+  spanAt: number;
+  spanUntil: number;
 }
 
 function ratioOf(a: number, b: number): number {
@@ -95,23 +183,133 @@ function floored(a: number, b: number): number {
   return Math.max(a, b, FLOOR) / Math.max(Math.min(a, b), FLOOR);
 }
 
-function runsOf(pts: readonly { t: number; v: number }[]): Run[] {
+/** A trace's values at one point: each channel and the luminance, or the room's sum. */
+interface Series {
+  readonly t: number;
+  readonly vs: readonly number[];
+}
+
+interface Pt {
+  readonly t: number;
+  readonly v: number;
+  /** The change from the point before came only from fades that ran 0.7 s or longer. */
+  readonly slow?: boolean;
+}
+
+/**
+ * Fast change above 2 within 0.7 s, ending at the run's newest point, is a span from the latest
+ * point it is still above 2 from. It is part of the last span when it starts at or before the last
+ * point that was part of one, or within 0.7 s of where that span began.
+ */
+function spanCheck(r: Run): void {
+  const end = r.pts[r.pts.length - 1];
+  if (end === undefined) return;
+  let from: number | undefined;
+  for (let i = r.pts.length - 2; i >= 0; i--) {
+    const p = r.pts[i];
+    if (p === undefined || end.t - p.t >= FADE_MS) break;
+    if (end.fast - p.fast > Math.log(HARD)) {
+      // Back over fast movement under the 2% floor, where the movement began, within 0.7 s.
+      let k = i;
+      while (k > 0) {
+        const q = r.pts[k];
+        const before = r.pts[k - 1];
+        if (q === undefined || before === undefined || !q.moved || before.v > FLOOR) break;
+        if (end.t - before.t >= FADE_MS) break;
+        k--;
+      }
+      from = r.pts[k]?.t;
+      break;
+    }
+  }
+  if (from === undefined) return;
+  if (from > r.spanUntil && from >= r.spanAt + FADE_MS) {
+    r.spans.push(from);
+    r.spanAt = from;
+  }
+  r.spanUntil = end.t;
+}
+
+function runsOf(pts: readonly Pt[]): Run[] {
   const out: Run[] = [];
   let cur: Run | undefined;
+  const trim = (r: Run, t: number) => {
+    while (r.win.length > 1 && t - (r.win[0]?.t ?? t) > 50) r.win.shift();
+  };
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1];
     const b = pts[i];
     if (a === undefined || b === undefined) continue;
     const diff = b.v - a.v;
-    if (Math.abs(diff) <= 1e-9 * Math.max(1, Math.abs(b.v))) continue;
+    if (Math.abs(diff) <= 1e-9 * Math.max(1, Math.abs(b.v))) {
+      if (cur !== undefined) {
+        cur.win.push(b);
+        trim(cur, b.t);
+        cur.pts.push({
+          t: b.t,
+          v: b.v,
+          fast: cur.pts[cur.pts.length - 1]?.fast ?? 0,
+          moved: false,
+        });
+      }
+      continue;
+    }
     const dir = Math.sign(diff);
     if (cur?.dir !== dir || a.t - cur.end >= FLAT_MS) {
       if (cur !== undefined) out.push(cur);
-      cur = { start: a.t, end: b.t, dir, from: a.v, to: b.v, jump: 1 };
+      cur = {
+        start: a.t,
+        end: b.t,
+        dir,
+        from: a.v,
+        to: b.v,
+        jumps: [],
+        jumpEnd: -Infinity,
+        win: [a],
+        pts: [{ t: a.t, v: a.v, fast: 0, moved: false }],
+        spans: [],
+        spanAt: -Infinity,
+        spanUntil: -Infinity,
+      };
     }
     cur.end = b.t;
     cur.to = b.v;
-    if (b.t - a.t <= 50) cur.jump = Math.max(cur.jump, floored(a.v, b.v));
+    const before = cur.pts[cur.pts.length - 1]?.fast ?? 0;
+    const fast = b.slow !== true;
+    cur.pts.push({
+      t: b.t,
+      v: b.v,
+      fast: before + (fast ? Math.log(floored(a.v, b.v)) : 0),
+      moved: fast,
+    });
+    if (fast) spanCheck(cur);
+    cur.win.push(b);
+    trim(cur, b.t);
+    // A hard step is a change by more than 2 within 50 ms, dated where it happened (as late as it
+    // allows), not where its run began: a slow fade that ends in a hard step would otherwise date the
+    // step to the fade's start (ADR 0015).
+    const q = cur.win[0];
+    if (q === undefined || q === b) continue;
+    const r = floored(q.v, b.v);
+    if (r > HARD) {
+      let from = q;
+      for (const w of cur.win) if (w !== b && floored(w.v, b.v) > HARD) from = w;
+      const last = cur.jumps[cur.jumps.length - 1];
+      if (last !== undefined && from.t - cur.jumpEnd <= 100) {
+        last.endT = b.t;
+        last.endV = b.v;
+      } else cur.jumps.push({ t: from.t, v: from.v, endT: b.t, endV: b.v });
+      cur.jumpEnd = b.t;
+    } else if (r > HARD * 0.98 && q.t - cur.jumpEnd <= 100) {
+      // A step just under 2 that follows on from a hard step is the same movement. The guard, with its
+      // margin, may count it as part of the step, so the checker folds at least as much.
+      const last = cur.jumps[cur.jumps.length - 1];
+      if (last !== undefined) {
+        last.endT = b.t;
+        last.endV = b.v;
+      }
+      cur.jumpEnd = b.t;
+    }
   }
   if (cur !== undefined) out.push(cur);
   return out;
@@ -134,15 +332,29 @@ interface DirEvents {
   reversals: number[];
 }
 
-function dirEventsOf(pts: readonly { t: number; v: number }[]): DirEvents {
+function dirEventsOf(pts: readonly Pt[]): DirEvents {
   const rs = runsOf(pts);
   const isLeg = (r: Run) => ratioOf(r.from, r.to) >= LEG;
   const e: DirEvents = { legs: [], hard: [], reversals: [] };
   rs.forEach((r, i) => {
     if (isLeg(r)) {
       e.legs.push({ t: r.start, dir: r.dir });
-      if (r.jump > HARD || (floored(r.from, r.to) > HARD && r.end - r.start < FADE_MS))
-        e.hard.push({ t: r.start, dir: r.dir });
+      // Fast change from end to end above 2 in under 0.7 s is one hard step. Otherwise each span and
+      // each instant step is a hard step, dated where it happened (ADR 0015 and ADR 0016). A span and
+      // a step within 100 ms are the same movement.
+      const fast = Math.exp((r.pts[r.pts.length - 1]?.fast ?? 0) - (r.pts[0]?.fast ?? 0));
+      // A fast leg is dated where its fast movement began, the point before its first fast change.
+      const k = r.pts.findIndex((q) => q.moved);
+      const began = r.pts[k - 1]?.t;
+      if (fast > HARD && r.end - r.start < FADE_MS && r.spans.length > 0 && began !== undefined)
+        e.hard.push({ t: began, dir: r.dir });
+      else {
+        let last = -Infinity;
+        for (const t of [...r.spans, ...r.jumps.map((j) => j.t)].sort((x, y) => x - y)) {
+          if (t - last > 100) e.hard.push({ t, dir: r.dir });
+          last = t;
+        }
+      }
     }
     const p = rs[i - 1];
     // A run under 0.5% is not a change for the reversal rule (ADR 0011).
@@ -154,7 +366,7 @@ function dirEventsOf(pts: readonly { t: number; v: number }[]): DirEvents {
   return e;
 }
 
-function eventsOf(pts: readonly { t: number; v: number }[]): Events {
+function eventsOf(pts: readonly Pt[]): Events {
   const e = dirEventsOf(pts);
   return { legs: e.legs.map((x) => x.t), hard: e.hard.map((x) => x.t), reversals: e.reversals };
 }
@@ -227,28 +439,51 @@ export function rateProblems(rec: TraceRecorder, swings: number): RateProblem[] 
   const roomTimes = new Set<number>();
   for (const pts of rec.points.values()) for (const p of pts) roomTimes.add(p.t);
   const ids = [...rec.points.keys()];
-  const at = (id: string, t: number): readonly number[] => {
-    const pts = rec.points.get(id) ?? [];
-    let best: Point | undefined;
-    for (const p of pts) {
-      if (p.t <= t) best = p;
-      else break;
-    }
-    return best?.d ?? [];
-  };
-  const dropResetPair = (id: string, e: Events) => {
+  // The RESET's jump to full and its OFF are one hard step. When the jump (a hard step within 150 ms
+  // of the RESET) was hard, the hard step nearest the OFF, about 350 ms on, is dropped. When it was
+  // not, the OFF alone is the hard step.
+  // Resets whose own unit jumped: only those drop a step from the room.
+  const unitJumped = new Set<object>();
+  const dropResetPair = (id: string, e: Events, series: readonly Series[]) => {
+    // A step that had finished before the RESET went out is not its jump (S6-S17-2).
+    const finished = (from: number, before: number): boolean => {
+      const a = series.findLast((p) => p.t <= from);
+      const b = series.findLast((p) => p.t < before);
+      return (
+        a !== undefined && b !== undefined && a.vs.some((v, i) => floored(v, b.vs[i] ?? v) > HARD)
+      );
+    };
     for (const r of rec.resets.filter((x) => x.id === id || id === 'room')) {
-      const i = e.hard.findIndex((t) => t > r.t + 1 && t <= r.t + 2000);
-      if (i >= 0) e.hard.splice(i, 1);
+      // A jump is dated at the latest point within 50 ms that it is above 2 from, which can be a point
+      // just before the RESET when other gear's fade adds to it (S6-P9).
+      const jumped = (t: number) =>
+        t <= r.t + 150 && (t >= r.t - 1 || (t >= r.t - 50 && !finished(t, r.t)));
+      if (!e.hard.some(jumped)) continue;
+      if (id !== 'room') unitJumped.add(r);
+      else if (!unitJumped.has(r)) continue;
+      let j = -1;
+      e.hard.forEach((t, k) => {
+        if (t <= r.t + 150 || t > r.t + 2000) return;
+        const best = e.hard[j];
+        if (best === undefined || Math.abs(t - r.t - 350) < Math.abs(best - r.t - 350)) j = k;
+      });
+      if (j >= 0) e.hard.splice(j, 1);
     }
   };
+  const tests = new Map<string, SlowTest>(ids.map((id) => [id, rec.slowTest(id)]));
   for (const id of ids) {
     const pts = rec.points.get(id) ?? [];
     const labels = rec.labels.get(id) ?? [];
+    const test = tests.get(id) ?? (() => false);
+    const slow = pts.map((p, k): boolean => k > 0 && test(pts[k - 1]?.t ?? p.t, p.t));
     const lists: DirEvents[] = labels.flatMap((l, i) =>
-      l === 'unused' ? [] : [dirEventsOf(pts.map((p) => ({ t: p.t, v: p.d[i] ?? 0 })))],
+      l === 'unused'
+        ? []
+        : [dirEventsOf(pts.map((p, k) => ({ t: p.t, v: p.d[i] ?? 0, slow: slow[k] === true })))],
     );
-    lists.push(dirEventsOf(pts.map((p) => ({ t: p.t, v: lum(p.d, labels) }))));
+    lists.push(
+      dirEventsOf(pts.map((p, k) => ({ t: p.t, v: lum(p.d, labels), slow: slow[k] === true }))),
+    );
     const red: Dir[] = [];
     let was: boolean | undefined;
     const r = labels.indexOf('R');
@@ -265,17 +500,41 @@ export function rateProblems(rec: TraceRecorder, swings: number): RateProblem[] 
       hard: mergeDir(lists.map((l) => l.hard)),
       reversals: merge(lists.map((l) => l.reversals)),
     };
-    dropResetPair(id, e);
+    dropResetPair(
+      id,
+      e,
+      pts.map((p) => ({
+        t: p.t,
+        vs: [...p.d.filter((_, i) => labels[i] !== 'unused'), lum(p.d, labels)],
+      })),
+    );
     problems.push(...checkScope(id, e, swings, 2000));
   }
   const times = [...roomTimes].sort((a, b) => a - b);
-  const room = eventsOf(
-    times.map((t) => ({
+  // One cursor a unit: the times are sorted, so each unit's last point at or before t only moves on.
+  const cursor = new Map<string, number>(ids.map((id) => [id, -1]));
+  const at = (id: string, t: number): readonly number[] => {
+    const pts = rec.points.get(id) ?? [];
+    let i = cursor.get(id) ?? -1;
+    while (i + 1 < pts.length && (pts[i + 1]?.t ?? Infinity) <= t) i++;
+    cursor.set(id, i);
+    return pts[i]?.d ?? [];
+  };
+  const roomPts = times.map((t, k): Pt => {
+    const before = times[k - 1];
+    return {
       t,
       v: ids.reduce((s, id) => s + lum(at(id, t), rec.labels.get(id) ?? []), 0),
-    })),
+      // The room's change was slow only if every unit's was.
+      slow: before !== undefined && ids.every((id) => tests.get(id)?.(before, t) ?? false),
+    };
+  });
+  const room = eventsOf(roomPts);
+  dropResetPair(
+    'room',
+    room,
+    roomPts.map((p) => ({ t: p.t, vs: [p.v] })),
   );
-  dropResetPair('room', room);
   problems.push(...checkScope('room', room, swings, 1000));
   return problems;
 }

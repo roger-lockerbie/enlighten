@@ -25,6 +25,7 @@ import { lowerCeiling, raiseCeiling } from '../safety/ceiling.ts';
 import { DEFAULT_CEILING_ARC, Governor, type Outcome } from '../safety/governor.ts';
 import {
   applySafetyProfile,
+  resetAndRestore,
   patient,
   ProfileError,
   scan,
@@ -328,6 +329,10 @@ function checkChannels(ch: readonly number[]): string | undefined {
   return undefined;
 }
 const no = (reason: string): Outcome => ({ ok: false, reason });
+
+/** RESET goes only through `resetAddress`, which sends the OFF and the safety profile after it. */
+const RESET_ALONE =
+  'RESET is sent only with its OFF and the safety profile after it: use reset with a short address.';
 
 function resultText(r: SendResult): string {
   switch (r.kind) {
@@ -733,7 +738,6 @@ export class Engine {
     });
   }
 
-  /** A `Submit` bound to a connection and a job. Refusals with a retry time are retried (`patient`). */
   /** A `Submit` bound to a connection and a job, that returns the first refusal as it is. */
   private rawSubmitter(conn: Conn, job: Job | undefined): Submit {
     return async (tx, priority) => {
@@ -744,6 +748,7 @@ export class Engine {
     };
   }
 
+  /** A `Submit` bound to a connection and a job. Refusals with a retry time are retried (`patient`). */
   private submitter(conn: Conn, job: Job | undefined): Submit {
     return patient(
       this.rawSubmitter(conn, job),
@@ -831,6 +836,43 @@ export class Engine {
       }
     });
     return r.ok ? OK : no(r.reason);
+  }
+
+  /**
+   * RESET one driver under the unlock (SPEC section 5): RESET, OFF 350 ms later, then the safety
+   * profile written and read back. This is the only way RESET reaches a driver: a bare RESET left the
+   * driver at full with MAX LEVEL 254 (DALI review S6-R1).
+   */
+  async resetAddress(n: number, source: Source): Promise<Outcome> {
+    if (!isPerson(source)) return no('Only a person sends RESET.');
+    if (!Number.isInteger(n) || n < 0 || n > 63) return no('An address is 0 to 63.');
+    const conn = this.active();
+    if (conn === undefined) return no('Hardware: disconnected.');
+    if (!conn.governor.isUnlocked('reset')) return no('RESET needs the reset unlock.');
+    if (source !== 'console') this.stopConsoleFor('A RESET started.');
+    const r = await this.runJob(conn, 'reset', `RESET A${String(n)}`, async (job, submit) =>
+      resetAndRestore(
+        n,
+        conn.governor,
+        submit,
+        (ms) => this.wait(ms),
+        source,
+        () => this.panic(),
+        this.rawSubmitter(conn, job),
+      ),
+    );
+    if (!r.ok) return no(r.reason);
+    if (r.value.profile !== undefined) conn.profiles.set(n, r.value.profile);
+    this.emit();
+    if (r.value.ok) return OK;
+    // The RESET went out but the rest did not finish, perhaps for a panic: the driver may keep MAX
+    // LEVEL 254 (security review of ADR 0015, L1).
+    const warn =
+      r.value.sent === true
+        ? ` A${String(n)} was reset, so its MAX LEVEL may be 254: write the safety profile again.`
+        : '';
+    if (warn !== '') this.notice(warn.trim());
+    return no(`${r.value.reason}${warn}`);
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -1047,6 +1089,7 @@ export class Engine {
       case 'raw': {
         const frame: Frame = { a: intent.a & 0xff, b: intent.b & 0xff };
         const s = decodeSpec(frame);
+        if (s?.id === 'RESET') return { ok: false, reason: RESET_ALONE };
         const f: TxFrame = {
           frame,
           sendTwice: s?.sendTwice ?? false,
@@ -1056,6 +1099,8 @@ export class Engine {
         return fromTx(await conn.scheduler.submit(tx));
       }
       case 'commands': {
+        if (intent.commands.some((c) => c.id === 'RESET'))
+          return { ok: false, reason: RESET_ALONE };
         for (const c of intent.commands) {
           try {
             spec(c.id);
@@ -1507,6 +1552,7 @@ export class Engine {
       setTarget: (t, source) => this.setTarget(t, source),
       rescan: (source) => this.rescan(source),
       reapplyProfile: (source) => this.reapplyProfile(source),
+      reset: (n, source) => this.resetAddress(n, source),
       unlock: (u, source, confirmed) => this.unlock(u, source, confirmed),
       lock: (u) => {
         this.lock(u);

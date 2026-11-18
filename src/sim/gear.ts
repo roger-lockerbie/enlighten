@@ -365,6 +365,14 @@ export class Da5l {
     return this.driveFor(p.linear, level, p.colour.to);
   }
 
+  /**
+   * The output plans kept, oldest first, as a copy. The rate guard and the trace checker read them to
+   * tell how long each fade ran (ADR 0016).
+   */
+  plans(): readonly OutputPlan[] {
+    return [...this.s.plans];
+  }
+
   /** Times in a range at which a new plan starts. */
   planStarts(from: number, to: number): number[] {
     return this.s.plans.map((p) => p.since).filter((t) => t >= from && t <= to);

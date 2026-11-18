@@ -6,6 +6,14 @@ import { short, type Address } from '../dali/address.ts';
 import { decode, encode, frameText, type Command, type Frame } from '../dali/codec.ts';
 import { spec, type CommandSpec } from '../dali/commands.ts';
 import { arcToFraction } from '../dali/curve.ts';
+import {
+  DAPC_SEQUENCE_MS,
+  extendedFadeMs,
+  fadeRateStepsPerSecond,
+  fadeTimeMs,
+  fastFadeMs,
+  UP_DOWN_MS,
+} from '../dali/fade.ts';
 import type { TxFrame } from '../dali/sequences.ts';
 import type { BusReply } from '../dali/reply.ts';
 import {
@@ -99,6 +107,8 @@ export const RESET_INTERVAL_MS = 10_000;
 export const RESET_OFF_AFTER_MS = 350;
 /** The OFF that follows an unlocked RESET is part of the RESET's swing for this long. */
 export const RESET_FOLLOW_UP_MS = 2000;
+/** The RESET's own jump to full is a hard step this soon after its delivery: the frame and settling. */
+export const RESET_JUMP_WINDOW_MS = 150;
 /** How far back the rate guard looks. */
 export const HISTORY_MS = 6000;
 /**
@@ -106,6 +116,40 @@ export const HISTORY_MS = 6000;
  * one long leg, and whether it reaches the leg ratio can depend on its far end.
  */
 export const HORIZON_MS = 17 * 60_000;
+/** Gear in an unknown state is taken to move this much longer than its longest fade. */
+const MOVING_MARGIN_MS = 100;
+/** When it is not known how long such gear may move, a refused change may ask again this soon. */
+const UNKNOWN_RETRY_MS = 10_000;
+/**
+ * The longest fade DALI allows: an extended fade of 16 minutes. Gear whose fade settings are not known
+ * may move this long, so a refusal always has a time to ask again (security review S6-S16-1).
+ */
+const LONGEST_DALI_FADE_MS = 16 * 60_000;
+/** Commands that change a fade setting, which a scan has to read again. */
+const FADE_SETTINGS: ReadonlySet<string> = new Set([
+  'SET_FADE_TIME',
+  'SET_FADE_RATE',
+  'SET_EXTENDED_FADE_TIME',
+  'DT6_STORE_DTR_AS_FAST_FADE_TIME',
+  'RESET',
+]);
+
+/** The short address of a scope such as `a12`, or undefined for the room, phantom and unit scopes. */
+/**
+ * The key for gear the inventory has not found, or that has no short address, in the moving marks
+ * (DALI review S6-D16-3). Short addresses are 0 to 63.
+ */
+const UNFOUND = -1;
+
+function addressOfScope(scope: string): number | undefined {
+  if (scope === PHANTOM) return UNFOUND;
+  const m = /^a(\d+)$/.exec(scope);
+  return m === null ? undefined : Number(m[1]);
+}
+
+function gearName(n: number): string {
+  return n === UNFOUND ? 'Gear the inventory has not found' : `A${String(n)}`;
+}
 
 export interface AddressInfo {
   present?: boolean | undefined;
@@ -239,6 +283,11 @@ export class Governor {
   private synthetic: { t: number; scope: string; until: number; tx?: number | undefined }[] = [];
   /** The OFF that follows an unlocked RESET is part of the RESET's one swing (SPEC S3.10). */
   private resetOff: { targets: Set<number>; until: number } | undefined;
+  /**
+   * On hardware: until when gear in an unknown state may still be moving, by address. Its fade
+   * crosses other lights' at times the shadow cannot know (ADR 0016).
+   */
+  private readonly unsureMoving = new Map<number, number>();
   private holdUntil: number;
   private holdReason = 'nothing is known about the lights just after connecting';
   /** If set, a refusal in the hold asks to be tried again this soon, not at the hold's end. */
@@ -398,6 +447,8 @@ export class Governor {
   markInventoryFresh(unaddressedPresent: boolean): void {
     this.stale = false;
     this.unaddressedPresent = unaddressedPresent;
+    // Every gear there is has been found, so nothing unfound can still be moving.
+    if (!unaddressedPresent) this.unsureMoving.delete(UNFOUND);
   }
 
   /**
@@ -752,11 +803,40 @@ export class Governor {
     return now + this.timing.settleFirstMs + FORWARD_FRAME_MS;
   }
 
-  private simulate(planned: readonly Planned[]): Simulator {
+  private simulate(
+    planned: readonly Planned[],
+    extra: readonly { frame: TxFrame; at: number }[] = [],
+  ): Simulator {
     const fork = this.shadow.fork();
     const gap = this.timing.settleLaterMs + FORWARD_FRAME_MS;
-    for (const p of planned) fork.send(p.frame, p.deliverAt, gap);
+    // Frames go to the fork in time order: the gear plans each change from the one before.
+    const all = [...planned.map((p) => ({ frame: p.frame, at: p.deliverAt })), ...extra].sort(
+      (a, b) => a.at - b.at,
+    );
+    for (const f of all) fork.send(f.frame, f.at, gap);
     return fork;
+  }
+
+  /**
+   * The OFF an unlocked RESET is still waiting to send. Until it goes, every judgement predicts it,
+   * with and without the transaction, so a change made between a RESET and its OFF is judged with
+   * the OFF that will follow it (DALI review of ADR 0015).
+   */
+  private pendingResetOff(now: number): { frame: TxFrame; at: number }[] {
+    const r = this.resetOff;
+    // The OFF goes at the head of the queue 350 ms after the RESET, or later on a slow transport. It is
+    // predicted for as long as it would pass as the follow-up, so nothing judged before it goes is
+    // judged without it (second DALI review of ADR 0015).
+    if (r === undefined || r.targets.size === 0 || now > r.until) return [];
+    const at = Math.max(now, this.lastResetAt + RESET_OFF_AFTER_MS);
+    return [...r.targets].map((n) => ({
+      frame: {
+        frame: encode({ id: 'OFF', address: short(n) }).frame,
+        sendTwice: false,
+        expectReply: false,
+      },
+      at,
+    }));
   }
 
   /** The highest ceiling measure for a unit over a time range. */
@@ -932,7 +1012,10 @@ export class Governor {
     if (i.dirty === true)
       return no('Something was sent to the gear during the scan. Scan it again.');
     if (i.fading === undefined) return no('QUERY STATUS was not read back.');
-    if (i.fading) return no('The gear was fading during the scan. Scan it again when it settles.');
+    if (i.fading) {
+      this.markMoving(n, this.lastAt);
+      return no('The gear was fading during the scan. Scan it again when it settles.');
+    }
     const types = i.deviceTypes;
     if (i.present !== true || types === undefined) return no('The gear has not answered a scan.');
     const needs = [
@@ -982,15 +1065,117 @@ export class Governor {
     i.modelled = true;
     i.levelKnown = true;
     i.lastActiveKnown = false;
+    this.unsureMoving.delete(n);
     if (!types.includes(8)) i.colourKnown = true;
     return OK;
+  }
+
+  /**
+   * The longest an address's output can keep moving after a command: its longest fade, from the
+   * shadow when it models the gear, otherwise from the scan's read-backs, with CONTINUOUS UP or DOWN
+   * at the fade rate. The longest DALI allows when
+   * a fade setting was sent since the scan, or none was read.
+   */
+  private longestFadeMs(n: number, cmd?: string): number {
+    const u = this.shadow.all.find((x) => x.gear.shortAddress === n);
+    const i = this.info.get(n);
+    const s =
+      i?.modelled === true && u !== undefined
+        ? u.gear.snapshot()
+        : {
+            fadeTime: i?.fadeTime,
+            fadeRate: i?.fadeRate,
+            fastFade: i?.fastFade ?? 0,
+            extendedFade: i?.extendedFade,
+          };
+    // CONTINUOUS UP or DOWN runs at the fade rate, across the whole range at most. When the command
+    // is not known, as for gear seen fading during its scan, it may be one of them (S6-D16-2).
+    const atRate = cmd === undefined || cmd === 'CONTINUOUS_UP' || cmd === 'CONTINUOUS_DOWN';
+    if (s.fadeTime === undefined || s.extendedFade === undefined) return LONGEST_DALI_FADE_MS;
+    if (atRate && s.fadeRate === undefined) return LONGEST_DALI_FADE_MS;
+    return Math.max(
+      fadeTimeMs(s.fadeTime),
+      atRate ? (253 * 1000) / fadeRateStepsPerSecond(s.fadeRate ?? 1) : 0,
+      s.fastFade >= 27 ? 700 : fastFadeMs(s.fastFade),
+      extendedFadeMs(s.extendedFade),
+      UP_DOWN_MS,
+      DAPC_SEQUENCE_MS,
+    );
+  }
+
+  private markMoving(n: number, at: number, cmd?: string): void {
+    // An address a scan found empty has nothing to move (S6-S16-1).
+    if (this.info.get(n)?.present === false) return;
+    const until = at + this.longestFadeMs(n, cmd) + MOVING_MARGIN_MS;
+    this.unsureMoving.set(n, Math.max(this.unsureMoving.get(n) ?? -Infinity, until));
+  }
+
+  /** OFF ends any fade at once, so the gear has stopped moving by the margin after it (S6-S16-4). */
+  private markOff(n: number, at: number): void {
+    if (this.info.get(n)?.present === false) return;
+    this.unsureMoving.set(n, at + MOVING_MARGIN_MS);
+  }
+
+  /**
+   * On hardware, the room cannot be predicted while gear in an unknown state moves at the same time as
+   * other gear: their fades cross at times the shadow does not know. One broadcast made four room legs
+   * in 0.7 s while the guard counted one (ADR 0016). So a light change that moves such gear together
+   * with any other moving gear, or moves other gear while such gear may still be moving, is refused.
+   */
+  private unknownMix(
+    planned: readonly Planned[],
+    fork: Simulator,
+    extra: readonly { scope: string }[],
+    first: number,
+  ): Violation | undefined {
+    if (this.target !== 'hardware') return undefined;
+    const changed = new Set<number>();
+    let onlyOff = true;
+    for (const p of planned) {
+      if (!LIGHT_CHANGING.has(p.cmd.id) || p.cmd.address === undefined) continue;
+      if (p.cmd.id !== 'OFF') onlyOff = false;
+      for (const n of this.members(p.cmd.address)) changed.add(n);
+    }
+    // Gear in an unknown state that this transaction moves, the gear the inventory has not found among
+    // it: a frame to unaddressed gear changes no short address.
+    const moves = new Set<number>();
+    for (const e of extra) {
+      const n = addressOfScope(e.scope);
+      if (n !== undefined) moves.add(n);
+    }
+    // OFF ends every fade it reaches at once, so it crosses nothing; the hold lets it through too.
+    if ((changed.size === 0 && moves.size === 0) || onlyOff) return undefined;
+    const still = [...this.unsureMoving].filter(([n, until]) => until > first && !moves.has(n));
+    const wait = Math.max(-Infinity, ...still.map(([, until]) => until));
+    const retryAt = Number.isFinite(wait) ? wait : first + UNKNOWN_RETRY_MS;
+    if (moves.size === 0) {
+      if (still.length === 0) return undefined;
+      return {
+        scope: ROOM,
+        rule: `${gearName(still[0]?.[0] ?? 0)} may still be fading in a state the guard does not know, so other lights wait for it or for a new scan`,
+        retryAt,
+      };
+    }
+    const othersMoving = fork.all.some((u) => {
+      const sa = u.gear.shortAddress;
+      return (sa === null || !moves.has(sa)) && u.gear.settlesAt() > first;
+    });
+    const others = [...changed].some((n) => !moves.has(n));
+    if (moves.size === 1 && !others && !othersMoving && still.length === 0) return undefined;
+    return {
+      scope: ROOM,
+      rule: `${gearName([...moves][0] ?? 0)} is in a state the guard does not know, so it changes only on its own while nothing else moves`,
+      retryAt,
+    };
   }
 
   /** The rate guard: compare predicted events with and without the transaction. */
   private rateCheck(tx: Transaction, now: number): Violation[] {
     const planned = this.plan(tx, now);
     const first = this.firstDelivery(now);
-    const fork = this.simulate(planned);
+    const pending = this.pendingResetOff(now);
+    const fork = this.simulate(planned, pending);
+    const baseSim = pending.length > 0 ? this.simulate([], pending) : this.shadow;
     // An unlocked RESET is judged with the OFF that follows it: together they are one swing and one
     // hard step (SPEC S3.10). That OFF is then not judged again.
     const resets: { t: number; scopes: string[] }[] = [];
@@ -1013,11 +1198,11 @@ export class Governor {
     const instant = this.target === 'hardware' && !FADE_BEHAVIOUR_CONFIRMED;
     const from = now - HISTORY_MS;
     const to = Math.min(
-      Math.max(fork.settlesAt(), this.shadow.settlesAt(), first) + 1,
+      Math.max(fork.settlesAt(), baseSim.settlesAt(), first) + 1,
       first + HORIZON_MS,
     );
     const hist = this.synthetic.filter((e) => e.t >= from);
-    const base = withExtra(this.predict(this.shadow, from, to, instant), hist);
+    const base = withExtra(this.predict(baseSim, from, to, instant), hist);
     const extra = this.extraEvents(planned);
     // Switching off is always allowed in the hold: it cannot add a flash on top of an unknown past.
     const onlyOff = planned.every(
@@ -1041,13 +1226,32 @@ export class Governor {
     }
     const cand = withExtra(this.predict(fork, from, to, instant), [...hist, ...extra]);
     for (const r of resets) {
+      const jumpedIn = (scope: string) =>
+        (cand.get(scope)?.hard ?? []).some((t) => t >= r.t - 1 && t <= r.t + RESET_JUMP_WINDOW_MS);
+      // In the room, only the RESET's own driver jumping counts as its jump, not another driver's
+      // step in the same moment (security review of ADR 0015, L2).
+      const own = r.scopes.some((scope) => scope !== ROOM && jumpedIn(scope));
       for (const scope of r.scopes) {
         const hard = cand.get(scope)?.hard ?? [];
-        const i = hard.findIndex((t) => t > r.t + 1 && t <= r.t + RESET_FOLLOW_UP_MS);
-        if (i >= 0) hard.splice(i, 1);
+        // The RESET's jump to full and its OFF are one hard step, dated at the jump. When the jump
+        // was not a hard step (the light was already bright), the OFF is the one hard step (ADR
+        // 0015: dropping the first hard step after the RESET dropped the OFF even when the jump had
+        // been folded into an earlier rise, which let a flash through). Only a hard step at the
+        // RESET's own delivery counts as its jump, and only the step nearest the planned OFF is
+        // dropped, so another command's step in the window still counts.
+        if (!jumpedIn(scope) || (scope === ROOM && !own)) continue;
+        const offAt = r.t + RESET_OFF_AFTER_MS;
+        let j = -1;
+        hard.forEach((t, k) => {
+          if (t <= r.t + RESET_JUMP_WINDOW_MS || t > r.t + RESET_FOLLOW_UP_MS) return;
+          if (j < 0 || Math.abs(t - offAt) < Math.abs((hard[j] ?? Infinity) - offAt)) j = k;
+        });
+        if (j >= 0) hard.splice(j, 1);
       }
     }
     const v = violations(cand, base, this.swingLimit);
+    const mix = this.unknownMix(planned, fork, extra, first);
+    if (mix !== undefined) v.push(mix);
     if (planned.some((p) => p.cmd.id === 'RESET') && first - this.lastResetAt < RESET_INTERVAL_MS) {
       v.push({
         scope: 'bus',
@@ -1146,6 +1350,32 @@ export class Governor {
       if (same === undefined) this.synthetic.push({ ...e, until: e.t, tx: sent.tx });
       else same.until = sent.at;
     }
+    // Gear in an unknown state may move for as long as its longest fade (ADR 0016).
+    for (const n of targets) {
+      const i = this.info.get(n);
+      // Modelled or not: a scan under way may unmodel the gear with what it read before (S6-D16-4).
+      if (i !== undefined && FADE_SETTINGS.has(cmd.id)) i.fadeTime = undefined;
+    }
+    const off = cmd.id === 'OFF';
+    if (off) {
+      // A broadcast OFF, panic's among them, stops everything that may be moving.
+      const reached = a?.kind === 'broadcast' ? [...this.unsureMoving.keys()] : targets;
+      for (const n of reached) if (this.unsureMoving.has(n)) this.markOff(n, sent.at);
+    }
+    // A fault leaves modelled gear unknown, and it may have started a fade: mark it with the shadow's
+    // longest fade, read before the fault below unmodels it (S6-S16-2).
+    if (fault && LIGHT_CHANGING.has(cmd.id) && !off)
+      for (const n of targets) this.markMoving(n, sent.at, cmd.id);
+    for (const e of this.unknownEvents(
+      cmd,
+      sent.at,
+      (n) => this.info.get(n)?.levelKnown === true,
+    )) {
+      const n = addressOfScope(e.scope);
+      if (n === undefined) continue;
+      if (off) this.markOff(n, sent.at);
+      else this.markMoving(n, sent.at, cmd.id);
+    }
     this.synthetic = this.synthetic.filter((e) => e.t >= sent.at - HISTORY_MS - 1000);
 
     if (cmd.id === 'RESET' || cmd.id === 'SAVE_PERSISTENT_VARIABLES')
@@ -1153,7 +1383,15 @@ export class Governor {
     if (cmd.id === 'RESET') {
       this.lastResetAt = sent.at;
       this.resetOff = { targets: new Set(targets), until: sent.at + RESET_FOLLOW_UP_MS };
-    } else if (cmd.id === 'OFF' && this.resetOff !== undefined && a?.kind === 'short') {
+    } else if (
+      cmd.id === 'OFF' &&
+      this.resetOff !== undefined &&
+      a?.kind === 'short' &&
+      sent.at >= this.deafUntil
+    ) {
+      // Only an OFF the gear could hear ends the follow-up. One sent while the gear is still deaf
+      // after the RESET leaves it at full, and the follow-up OFF must still skip the guard
+      // (security review of ADR 0015, M1).
       this.resetOff.targets.delete(a.n);
     }
     if (STALES_INVENTORY.has(cmd.id)) this.stale = true;
@@ -1274,6 +1512,7 @@ export class Governor {
     switch (cmd.id) {
       case 'QUERY_CONTROL_GEAR_PRESENT':
         i.present = result.kind !== 'no-reply';
+        if (!i.present) this.unsureMoving.delete(n);
         break;
       case 'QUERY_PHYSICAL_MINIMUM':
         i.physicalMinimum = v;

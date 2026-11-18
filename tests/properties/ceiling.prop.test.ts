@@ -60,6 +60,9 @@ describe('P-ceiling', () => {
   }
 });
 
+/** Well inside the 20 s of output history the simulated gear keeps. */
+const CHECK_EVERY_MS = 5000;
+
 describe('P-ceiling for console lines and script steps', () => {
   const ctx = { aliases: new Map<string, number>() };
   for (const [c2, c5] of [
@@ -79,7 +82,9 @@ describe('P-ceiling for console lines and script steps', () => {
               simTransport: new SimTransport(sim, clock, withFloors({})),
               ceilingArc: 180,
             });
-            const drive = async (p: Promise<unknown>) => {
+            // Nothing to check during the start-up scan: it is set once the check below exists.
+            let during: (what: string) => void = () => undefined;
+            const drive = async (p: Promise<unknown>, what = 'start-up') => {
               const st = { done: false };
               const done = () => st.done;
               void p.then(() => {
@@ -91,6 +96,8 @@ describe('P-ceiling for console lines and script steps', () => {
                 const n = clock.next();
                 if (n === undefined) break;
                 await clock.advanceTo(n);
+                // The gear keeps 20 s of output history, so a long script is checked as it runs.
+                during(what);
               }
             };
             // The start-up scan and safety profile.
@@ -110,10 +117,14 @@ describe('P-ceiling for console lines and script steps', () => {
               arc = engine.snapshot().ceilingArc;
               checked = now;
             };
+            during = (what) => {
+              if (clock.now() - checked >= CHECK_EVERY_MS) check(what);
+            };
             for (const s of stream) {
-              if (s.kind === 'line') await drive(engine.console(s.text, ctx));
-              else await drive(engine.runScript('p', s.lines.join('\n'), ctx));
-              check(s.kind === 'line' ? s.text : s.lines.join('; '));
+              const what = s.kind === 'line' ? s.text : s.lines.join('; ');
+              if (s.kind === 'line') await drive(engine.console(s.text, ctx), what);
+              else await drive(engine.runScript('p', s.lines.join('\n'), ctx), what);
+              check(what);
             }
             await clock.advance(5000);
             check('tail');
@@ -123,7 +134,7 @@ describe('P-ceiling for console lines and script steps', () => {
           { numRuns: RUNS },
         );
       },
-      timeout(RUNS),
+      timeout(RUNS, 4000),
     );
   }
 });

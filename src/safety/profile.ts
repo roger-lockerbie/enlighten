@@ -288,8 +288,13 @@ export async function applySafetyProfile(
 }
 
 /**
- * RESET under the unlock (SPEC section 5): send it, wait 300 ms, send OFF, then re-apply the safety
- * profile and read it back. The caller warns first that the tape will go to full output.
+ * RESET under the unlock (SPEC section 5): send it, wait `RESET_OFF_AFTER_MS` (the gear's 300 ms and
+ * a margin), send OFF, then re-apply the safety profile and read it back. The caller warns first that the tape will go to full output.
+ *
+ * `once` sends the RESET and the OFF without retrying: a refused RESET is refused at once, so it can
+ * never go out seconds after a person stopped the line, and a refused OFF goes straight to panic's
+ * OFF (security review of ADR 0015, M1 and M2). `sent` says the RESET went out, so a caller can warn
+ * that MAX LEVEL may be 254 when the rest did not finish.
  */
 export async function resetAndRestore(
   n: number,
@@ -298,21 +303,31 @@ export async function resetAndRestore(
   wait: (ms: number) => Promise<void>,
   source: Source,
   emergencyOff: () => Promise<void>,
-): Promise<Outcome & { profile?: ProfileResult }> {
+  once: Submit = submit,
+): Promise<Outcome & { profile?: ProfileResult; sent?: true }> {
   const a = short(n);
-  const r = await submit(tx([q('RESET', a)], source, 'RESET'));
+  const r = await once(tx([q('RESET', a)], source, 'RESET'));
   if (r.kind !== 'done') return { ok: false, reason: r.reason };
   await wait(RESET_OFF_AFTER_MS);
   // The tape is at full output: the OFF goes ahead of anything queued, and if it fails, panic's
   // ungated OFF follows (security review M2).
-  const off = await submit(tx([q('OFF', a)], source, 'OFF after RESET'), 'urgent');
+  const off = await once(tx([q('OFF', a)], source, 'OFF after RESET'), 'urgent');
   if (off.kind !== 'done') {
     await emergencyOff();
-    return { ok: false, reason: `OFF after RESET: ${off.reason}. Panic sent OFF instead.` };
+    return {
+      ok: false,
+      reason: `OFF after RESET: ${off.reason}. Panic sent OFF instead.`,
+      sent: true,
+    };
   }
   await scanAddress(n, governor, submit);
   const profile = await applySafetyProfile(n, governor, submit);
   return profile.verified
-    ? { ok: true, profile }
-    : { ok: false, reason: profile.reason ?? 'The safety profile did not verify.', profile };
+    ? { ok: true, profile, sent: true }
+    : {
+        ok: false,
+        reason: profile.reason ?? 'The safety profile did not verify.',
+        profile,
+        sent: true,
+      };
 }

@@ -61,6 +61,8 @@ interface Gear {
   scenes?: number[];
   phys?: number;
   curve?: number;
+  /** The QUERY STATUS reply: 0x10 says the gear is fading. */
+  status?: number;
 }
 
 /** Every read-back a scan takes, then `modelAddress`. */
@@ -92,7 +94,7 @@ function scanInto(g: Governor, n: number, gear: Gear = {}, at = 100) {
   }
   if (types.includes(8)) r('DT8_QUERY_COLOUR_TYPE_FEATURES', gear.colour ?? 0x02);
   for (let k = 0; k < 16; k++) r('QUERY_SCENE_LEVEL', gear.scenes?.[k] ?? 255, k);
-  r('QUERY_STATUS', 0);
+  r('QUERY_STATUS', gear.status ?? 0);
   return g.modelAddress(n);
 }
 
@@ -287,7 +289,10 @@ describe('what observe remembers', () => {
     tell(g, c('DAPC', A, 5), undefined, 1100);
     tell(g, c('OFF', broadcast), undefined, 1110);
     expect(fp(g).resetOff?.targets).toEqual([0, 1]);
+    // The gear is deaf until 1350, so an OFF before then leaves it at full: the follow-up stays due.
     tell(g, c('OFF', A), undefined, 1120);
+    expect(fp(g).resetOff?.targets).toEqual([0, 1]);
+    tell(g, c('OFF', A), undefined, 1350);
     expect(fp(g).resetOff?.targets).toEqual([1]);
   });
   it('new short addresses unverify everything and, on hardware, unmodel it', () => {
@@ -805,5 +810,179 @@ describe('RESET and the rate guard', () => {
     const v = b.governor.judge(tx([c('RESET', A)], 'console'), b.clock.now());
     expect(reason(v)).toBe('Rate guard: one RESET in 10 s (bus).');
     expect(v.kind === 'refuse' ? v.retryAt : 0).toBeGreaterThanOrEqual(sent + 10_000);
+  });
+});
+
+describe('gear in an unknown state moving with other gear (ADR 0016)', () => {
+  // Fade time 7 is 5.657 s, so gear seen fading at 100 may move until 5,857 (with the 100 ms margin).
+  const fadingUntil = 100 + 5657 + 100;
+  /** A0 modelled and settled, A1 seen fading during its scan, so not modelled. Both fade in 5.657 s. */
+  function bench(): Governor {
+    const g = hw();
+    expect(scanInto(g, 0, { fade: 0x77 }).ok).toBe(true);
+    expect(scanInto(g, 1, { fade: 0x77, status: 0x10 })).toEqual(
+      no('The gear was fading during the scan. Scan it again when it settles.'),
+    );
+    g.markInventoryFresh(false);
+    return g;
+  }
+  const mixed = /A1 is in a state the guard does not know/;
+  const waits = /A1 may still be fading in a state the guard does not know/;
+
+  it('refuses a broadcast that moves unknown gear with other gear, until a scan', () => {
+    const g = bench();
+    const v = g.judge(tx([c('DAPC', broadcast, 140)]), 20_000);
+    expect(reason(v)).toMatch(mixed);
+    expect(v).not.toHaveProperty('retryAt');
+    // Two commands in one transaction are two hard steps as well, so refused either way.
+    expect(g.judge(tx([c('DAPC', A, 140), c('DAPC', B, 140)]), 20_000).kind).toBe('refuse');
+  });
+
+  it('lets unknown gear change on its own while nothing else moves', () => {
+    const g = bench();
+    expect(g.judge(tx([c('DAPC', B, 140)]), 20_000).kind).toBe('allow');
+    // Not while modelled gear is still fading. A's step on from off is a hard step, so judge 1.5 s on.
+    tell(g, c('DAPC', A, 200), { kind: 'sent' }, 20_000);
+    expect(reason(g.judge(tx([c('DAPC', B, 140)]), 21_500))).toMatch(mixed);
+    expect(g.judge(tx([c('DAPC', B, 140)]), 26_000).kind).toBe('allow');
+  });
+
+  it('holds other gear while unknown gear may still be fading, and says when to ask again', () => {
+    const g = bench();
+    const v = g.judge(tx([c('DAPC', A, 140)]), 1000);
+    expect(reason(v)).toMatch(waits);
+    expect(v).toMatchObject({ retryAt: fadingUntil });
+    expect(g.judge(tx([c('DAPC', A, 140)]), fadingUntil).kind).toBe('allow');
+  });
+
+  it('counts a light change sent to unknown gear as moving for its longest fade', () => {
+    const g = bench();
+    tell(g, c('DAPC', B, 140), { kind: 'sent' }, 30_000);
+    expect(reason(g.judge(tx([c('DAPC', A, 140)]), 31_500))).toMatch(waits);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 30_000 + 5657 + 100 + 10).kind).toBe('allow');
+  });
+
+  it('takes the longest fade DALI allows once a fade setting goes to unknown gear', () => {
+    const g = bench();
+    tell(g, c('DTR0', undefined, 15), { kind: 'sent' }, 30_000);
+    tell(g, c('SET_FADE_TIME', B), { kind: 'sent' }, 30_000);
+    tell(g, c('DAPC', B, 140), { kind: 'sent' }, 30_010);
+    // 16 minutes, the longest extended fade, so a refusal still has a time to ask again (S6-S16-1).
+    const v = g.judge(tx([c('DAPC', A, 140)]), 100_000);
+    expect(reason(v)).toMatch(waits);
+    expect(v).toMatchObject({ retryAt: 30_010 + 16 * 60_000 + 100 });
+    // A scan clears it sooner.
+    expect(scanInto(g, 1, { fade: 0xf7 }, 100_000).ok).toBe(true);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 100_100).kind).toBe('allow');
+  });
+
+  it('never marks an address a scan found empty, and a scan that finds it empty clears it', () => {
+    const g = bench();
+    const empty = (n: number, at: number) => {
+      g.beginScan(n);
+      tell(g, c('QUERY_CONTROL_GEAR_PRESENT', short(n)), NONE, at);
+    };
+    empty(40, 20_000);
+    tell(g, c('DAPC', short(40), 100), { kind: 'sent' }, 20_100);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 21_500).kind).toBe('allow');
+    // An address never scanned may hold gear, so it is marked, until a scan finds nothing there.
+    tell(g, c('DAPC', short(63), 100), { kind: 'sent' }, 30_000);
+    expect(reason(g.judge(tx([c('DAPC', A, 140)]), 31_500))).toMatch(/A63 may still be fading/);
+    empty(63, 31_600);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 31_700).kind).toBe('allow');
+  });
+
+  it('lets OFF through while unknown gear moves, and OFF stops the gear it reaches', () => {
+    const g = bench();
+    // A1 may be fading until 5,857, but an OFF crosses nothing.
+    expect(g.judge(tx([c('OFF', A)]), 1000).kind).toBe('allow');
+    expect(g.judge(tx([c('OFF', broadcast)]), 1000).kind).toBe('allow');
+    // Without an OFF, A0 waits for A1 until 5,857. An OFF to A1 ends its fade, and A0 can go once the
+    // room's one hard step a second allows.
+    expect(reason(g.judge(tx([c('DAPC', A, 140)]), 2100))).toMatch(waits);
+    tell(g, c('OFF', B), { kind: 'sent' }, 1000);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 2100).kind).toBe('allow');
+  });
+
+  it('a broadcast OFF, as panic sends, ends every mark', () => {
+    const g = bench();
+    tell(g, c('DAPC', short(63), 100), { kind: 'sent' }, 900);
+    expect(reason(g.judge(tx([c('DAPC', A, 140)]), 2100))).toMatch(waits);
+    tell(g, c('OFF', broadcast), { kind: 'sent' }, 1000);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 2100).kind).toBe('allow');
+  });
+
+  it('a fault on a light change to modelled gear marks it as moving for its longest fade', () => {
+    const g = hw();
+    expect(scanInto(g, 0, { fade: 0x77 }).ok).toBe(true);
+    expect(scanInto(g, 1, { fade: 0x77 }).ok).toBe(true);
+    g.markInventoryFresh(false);
+    tell(g, c('DAPC', A, 200), { kind: 'fault', reason: 'x' }, 20_000);
+    const v = g.judge(tx([c('DAPC', B, 120)]), 21_500);
+    expect(reason(v)).toMatch(/A0 may still be fading/);
+    expect(v).toMatchObject({ retryAt: 20_000 + 5657 + 100 });
+  });
+
+  it('a scan that models the gear clears it', () => {
+    const g = bench();
+    expect(scanInto(g, 1, { fade: 0x77 }, 200).ok).toBe(true);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 1000).kind).toBe('allow');
+    expect(g.judge(tx([c('DAPC', broadcast, 140)]), 1000).kind).toBe('allow');
+  });
+
+  it('counts CONTINUOUS UP and DOWN at the fade rate (S6-D16-2)', () => {
+    // A1 has fade time 0 and fade rate 15, which runs the whole range in 90.5 s.
+    const at = (cmd: string) => {
+      const g = hw();
+      expect(scanInto(g, 0, { fade: 0x77 }).ok).toBe(true);
+      scanInto(g, 1, { fade: 0x0f, status: 0x10 });
+      g.markInventoryFresh(false);
+      tell(g, c(cmd, B, cmd === 'DAPC' ? 140 : undefined), { kind: 'sent' }, 200_000);
+      return g.judge(tx([c('DAPC', A, 140)]), 201_500);
+    };
+    expect(at('DAPC').kind).toBe('allow');
+    const v = at('CONTINUOUS_DOWN');
+    expect(reason(v)).toMatch(waits);
+    expect(v.kind === 'refuse' ? (v.retryAt ?? 0) : 0).toBeGreaterThan(200_000 + 90_000);
+  });
+
+  it('a fade setting sent during a rescan leaves no stale fade time (S6-D16-4)', () => {
+    const g = hw();
+    expect(scanInto(g, 0, { fade: 0x77 }).ok).toBe(true);
+    expect(scanInto(g, 1).ok).toBe(true);
+    g.markInventoryFresh(false);
+    // A rescan of A1 that a fast fade setting interrupts leaves it unmodelled.
+    g.beginScan(1);
+    tell(g, c('DTR0', undefined, 27), { kind: 'sent' }, 150_000);
+    tell(g, c('DT6_STORE_DTR_AS_FAST_FADE_TIME', B), { kind: 'sent' }, 150_000);
+    expect(g.modelAddress(1).ok).toBe(false);
+    tell(g, c('DAPC', B, 140), { kind: 'sent' }, 200_000);
+    const v = g.judge(tx([c('DAPC', A, 140)]), 201_500);
+    expect(reason(v)).toMatch(waits);
+    expect(v.kind === 'refuse' ? (v.retryAt ?? 0) : 0).toBeGreaterThan(200_000 + 15 * 60_000);
+  });
+
+  it('treats gear the inventory has not found as gear in an unknown state (S6-D16-3)', () => {
+    const g = hw();
+    expect(scanInto(g, 0, { fade: 0x77 }).ok).toBe(true);
+    expect(scanInto(g, 1, { fade: 0x77 }).ok).toBe(true);
+    g.markInventoryFresh(true);
+    const unfound = /Gear the inventory has not found/;
+    // A broadcast moves the unaddressed gear with A0 and A1.
+    expect(reason(g.judge(tx([c('DAPC', broadcast, 140)]), 20_000))).toMatch(unfound);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 20_000).kind).toBe('allow');
+    // A frame to unaddressed gear alone goes, and other gear then waits for it or a fresh inventory.
+    expect(g.judge(tx([c('DAPC', unaddressed, 140)]), 20_000).kind).toBe('allow');
+    tell(g, c('DAPC', unaddressed, 140), { kind: 'sent' }, 20_000);
+    expect(reason(g.judge(tx([c('DAPC', A, 140)]), 21_500))).toMatch(
+      /Gear the inventory has not found may still be fading/,
+    );
+    g.markInventoryFresh(false);
+    expect(g.judge(tx([c('DAPC', A, 140)]), 21_500).kind).toBe('allow');
+  });
+
+  it('applies only to hardware', () => {
+    const g = sim();
+    expect(g.judge(tx([c('DAPC', broadcast, 140)]), 1000).kind).toBe('allow');
   });
 });

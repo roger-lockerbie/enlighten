@@ -15,6 +15,8 @@ import { consoleSteps } from '../harness/console-gen.ts';
 import { timeout } from '../harness/gen.ts';
 
 const RUNS = Number(process.env['PROP_RUNS'] ?? 25);
+/** A case runs whole scripts on the bench: about 1.6 s each at 1,000 runs with the other files. */
+const SCRIPT_MS = 4000;
 
 async function check(swings: number): Promise<void> {
   const ctx = { aliases: new Map<string, number>() };
@@ -70,11 +72,34 @@ async function check(swings: number): Promise<void> {
       engine.dispose();
       expect(rateProblems(rec, swings)).toEqual([]);
     }),
-    { numRuns: RUNS },
+    {
+      numRuns: RUNS,
+      examples: [
+        // A fade to 0 cut short by a step back on, then a scene, a DAPC, UP and ON: found at 25 runs.
+        [
+          [
+            { kind: 'script', lines: ['level 0 0 fade 300ms', 'level 0 115'] },
+            { kind: 'line', text: 'scene 0 recall 0' },
+            { kind: 'line', text: 'dapc 0,1 154' },
+            { kind: 'line', text: 'up g0' },
+            { kind: 'line', text: 'on 0' },
+          ],
+        ],
+        // Blue rose under the 2% floor, then passed it 0.699 s later: a fast leg to the checker, on
+        // the border to the guard (S6-P8). Found at 1,000 runs, unlocked.
+        [
+          [
+            { kind: 'line', text: 'dapc 0..1 96' },
+            { kind: 'line', text: 'rgb 1 0 0 26 w 24' },
+            { kind: 'script', lines: ['level 1 39%', 'cap 30'] },
+          ],
+        ],
+      ],
+    },
   );
 }
 
 describe('P-rate for console lines and script steps', () => {
-  it('default: one swing a second', () => check(1), timeout(RUNS));
-  it('unlocked: three swings a second', () => check(3), timeout(RUNS));
+  it('default: one swing a second', () => check(1), timeout(RUNS, SCRIPT_MS));
+  it('unlocked: three swings a second', () => check(3), timeout(RUNS, SCRIPT_MS));
 });

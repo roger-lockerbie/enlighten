@@ -13,7 +13,8 @@ import {
   tcCommands,
   type TxFrame,
 } from '../dali/sequences.ts';
-import { makeBench } from '../../tests/harness/bench.ts';
+import { asSubmit, makeBench } from '../../tests/harness/bench.ts';
+import { raiseCeiling } from './ceiling.ts';
 import { Rig } from '../sim/rig.ts';
 import { da5l } from '../sim/profile.ts';
 import { Simulator } from '../sim/simulator.ts';
@@ -375,8 +376,10 @@ describe('the OFF that follows an unlocked RESET', () => {
     // After the gear's 300 ms of deafness, inside the RESET's 2 s.
     const at = b.clock.now() + 400;
     expect(b.governor.judge(tx([c('OFF', A)]), at).kind).toBe('allow');
-    expect(b.governor.judge(tx([c('DAPC', A, 0)]), at).kind).toBe('refuse');
-    expect(b.governor.judge(tx([c('OFF', A), c('DAPC', A, 0)]), at).kind).toBe('refuse');
+    // A level is judged with the OFF the RESET is waiting to send (DALI review of ADR 0015): back on
+    // straight after it is a second hard step.
+    expect(b.governor.judge(tx([c('DAPC', A, 200)]), at).kind).toBe('refuse');
+    expect(b.governor.judge(tx([c('OFF', A), c('DAPC', A, 200)]), at).kind).toBe('refuse');
     const fp = JSON.parse(b.governor.fingerprint()) as { resetOff: unknown };
     expect(fp.resetOff).toEqual({ targets: [0], until: expect.any(Number) as number });
     tell(b.governor, c('OFF', A), { kind: 'sent' }, at);
@@ -384,6 +387,40 @@ describe('the OFF that follows an unlocked RESET', () => {
       targets: [],
       until: expect.any(Number) as number,
     });
+  });
+  it('judges a change made before the OFF with the OFF that will follow it', async () => {
+    // A is at full, so the RESET makes no jump and its OFF is its one hard step. A level for A judged
+    // before the OFF goes would follow it out (the OFF jumps the queue): full, off, then back on, a
+    // flash the guard did not see while it judged the level without the OFF (DALI review of ADR 0015).
+    const b = makeBench();
+    await b.ready();
+    await b.clock.advance(3000);
+    b.governor.unlock('rate', 'ui', true);
+    b.governor.setSwingLimit(3, 'ui');
+    expect((await b.drive(raiseCeiling(b.governor, 254, asSubmit(b), 'ui', true))).ok).toBe(true);
+    expect((await b.run(tx([c('DAPC', A, 254)]))).kind).toBe('done');
+    await b.clock.advance(3000);
+    b.governor.unlock('reset', 'console', true);
+    expect((await b.run(tx([c('RESET', A)], 'console'))).kind).toBe('done');
+    const at = b.clock.now() + 400;
+    expect(reason(b.governor.judge(tx([c('DAPC', A, 200)]), at))).toMatch(/hard step|swing/);
+  });
+  it('still judges with the OFF when it is late, until the follow-up window ends', async () => {
+    // On hardware the OFF can go later than 350 ms after the RESET. While it would still pass as the
+    // follow-up, every judgement includes it (second DALI review of ADR 0015, finding 2).
+    const b = makeBench();
+    await b.ready();
+    await b.clock.advance(3000);
+    b.governor.unlock('rate', 'ui', true);
+    b.governor.setSwingLimit(3, 'ui');
+    expect((await b.drive(raiseCeiling(b.governor, 254, asSubmit(b), 'ui', true))).ok).toBe(true);
+    expect((await b.run(tx([c('DAPC', A, 254)]))).kind).toBe('done');
+    await b.clock.advance(3000);
+    b.governor.unlock('reset', 'console', true);
+    expect((await b.run(tx([c('RESET', A)], 'console'))).kind).toBe('done');
+    const t = b.clock.now();
+    expect(reason(b.governor.judge(tx([c('DAPC', A, 200)]), t + 750))).toMatch(/hard step|swing/);
+    expect(reason(b.governor.judge(tx([c('DAPC', A, 200)]), t + 1900))).toMatch(/hard step|swing/);
   });
   it('a group OFF is not the follow-up, and does not end it', async () => {
     const b = makeBench();
@@ -411,15 +448,11 @@ describe('the OFF that follows an unlocked RESET', () => {
     expect((await b.run(tx([c('RESET', A)], 'console'))).kind).toBe('done');
     const { until } = (JSON.parse(b.governor.fingerprint()) as { resetOff: { until: number } })
       .resetOff;
-    expect(b.governor.setCeiling(254, 'ui', true)).toEqual(OK);
-    // Two legs that are not hard steps: down to 230 and back to full.
-    await b.clock.advance(1200);
-    expect((await b.run(tx([c('DAPC', A, 230)]))).kind).toBe('done');
-    await b.clock.advance(400);
-    expect((await b.run(tx([c('DAPC', A, 254)]))).kind).toBe('done');
-    // Inside the 2 s the OFF is the RESET's follow-up. After them it is a third leg in a second.
+    // A went from off to full: the RESET's jump is a hard step. Inside the 2 s the OFF is its
+    // follow-up and part of that hard step. After them it is a second hard step within 2 s of it.
+    // (A change other than the OFF in that time is judged with the pending OFF, so is held.)
     expect(b.governor.judge(tx([c('OFF', A)]), until - 100).kind).toBe('allow');
-    expect(reason(b.governor.judge(tx([c('OFF', A)]), until + 1))).toMatch(/swing/);
+    expect(reason(b.governor.judge(tx([c('OFF', A)]), until + 1))).toMatch(/hard step/);
   });
 });
 

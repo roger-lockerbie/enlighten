@@ -5,7 +5,7 @@
  * any other source (SPEC S2.2). Nothing here sends a frame itself.
  */
 import type { Address } from '../dali/address.ts';
-import { decodeSpec, type Command } from '../dali/codec.ts';
+import { decode, decodeSpec, type Command } from '../dali/codec.ts';
 import { spec } from '../dali/commands.ts';
 import { percentText } from '../dali/curve.ts';
 import { extendedFades, fadeInUse, standardFades } from '../dali/fade.ts';
@@ -52,6 +52,8 @@ export interface ConsoleHost {
   setTarget(t: OutputTarget, source: Source): Promise<Outcome>;
   rescan(source: Source): Promise<Outcome>;
   reapplyProfile(source: Source): Promise<Outcome>;
+  /** RESET one driver, then OFF and the safety profile (SPEC section 5). */
+  reset(n: number, source: Source): Promise<Outcome>;
   unlock(u: UnlockName, source: Source, confirmed: boolean): Outcome;
   lock(u?: UnlockName): void;
   resume(source: Source): Outcome;
@@ -683,6 +685,7 @@ export class ConsoleExec {
     value: number | undefined,
     many: boolean,
   ): Promise<boolean> {
+    if (id === 'RESET') return this.reset(a);
     const s = spec(id);
     const cmd: Command = {
       id,
@@ -715,6 +718,32 @@ export class ConsoleExec {
     return true;
   }
 
+  /**
+   * RESET goes only through the engine's reset, which sends OFF 350 ms later and writes the safety
+   * profile again. A bare RESET left the driver at full with MAX LEVEL 254 (DALI review S6-R1).
+   */
+  private async reset(a: Address | undefined): Promise<boolean> {
+    if (a?.kind !== 'short') {
+      this.out(
+        'refused',
+        'refused: RESET goes to one short address at a time, so its OFF and the safety profile can follow.',
+      );
+      return false;
+    }
+    const at = `A${String(a.n)}`;
+    this.out(
+      'note',
+      `${at} goes to full output for about 0.3 s, then OFF, then the safety profile is written again.`,
+    );
+    const r = await this.host.reset(a.n, this.o.source);
+    if (!r.ok) {
+      this.out('refused', `refused: ${r.reason}`);
+      return false;
+    }
+    this.out('out', `${at} reset, off, and the safety profile verified`);
+    return true;
+  }
+
   private async raw(a: number, b: number, twice: boolean): Promise<boolean> {
     const s = decodeSpec({ a, b });
     const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
@@ -732,6 +761,7 @@ export class ConsoleExec {
       this.out('refused', `refused: ${label} is not a send-twice command, so x2 does not apply.`);
       return false;
     }
+    if (s.id === 'RESET') return this.reset(decode({ a, b })?.address);
     const r = await this.submit({ kind: 'raw', a, b });
     if (!r.ok) return this.failed(r, '');
     const note = s.sendTwice && !twice ? ' (sent twice, as the command needs)' : '';
