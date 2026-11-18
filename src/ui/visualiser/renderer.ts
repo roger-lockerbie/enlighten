@@ -25,6 +25,7 @@ import {
   Vector3,
   Vector4,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from 'three';
 import type { Camera } from '../../light/camera.ts';
 import { whiteLuminance } from '../../light/colour/exposure.ts';
@@ -46,10 +47,23 @@ const LIFT = 0.0003;
 /** How far each face is drawn past its own outer edge, in metres. */
 const OVERLAP = 0.002;
 
+const MEASURE_WIDTH = 1440;
+const MEASURE_HEIGHT = 900;
+const MEASURE_FRAMES = 60;
+const MEASURE_WARM_UP = 8;
+/** A frame slower than this ends the measurement: the page must stay live. */
+const MEASURE_SLOW_MS = 50;
+/** How long one tick may draw for before the page gets its turn. */
+const MEASURE_TICK_MS = 40;
+/** The measurement ends after this long whatever it has. */
+const MEASURE_LIMIT_MS = 3000;
+
 export interface Measured {
   /** Milliseconds a frame at 1440 by 900, each frame forced to finish. */
   readonly ms: number;
   readonly frames: number;
+  /** True when the measurement was cut short: a frame was too slow, or it ran out of time. */
+  readonly stopped: boolean;
   /** What the browser says is drawing. */
   readonly gpu: string;
 }
@@ -217,6 +231,32 @@ function rippleTexture(tables: readonly RippleTable[], mounts: number): DataText
   return t;
 }
 
+interface Stage {
+  readonly mesh: Mesh<BufferGeometry, RawShaderMaterial>;
+  readonly uniforms: Uniforms;
+  readonly mounts: number;
+}
+
+function aim(camera: PerspectiveCamera, view: Camera): void {
+  camera.fov = view.fovY;
+  camera.near = 0.02;
+  camera.far = 60;
+  camera.position.set(view.position[0], view.position[1], view.position[2]);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(view.target[0], view.target[1], view.target[2]);
+  camera.updateMatrixWorld();
+}
+
+function light(u: Uniforms, frame: Frame): void {
+  frame.mounts.forEach((m, i) => {
+    u.mountLight.value[i]?.set(m.shown[0], m.shown[1], m.shown[2]);
+    for (let c = 0; c < MAX_CHANNELS; c++) {
+      const x = m.channels[c] ?? [0, 0, 0];
+      u.channelLight.value[i * MAX_CHANNELS + c]?.set(x[0], x[1], x[2]);
+    }
+  });
+}
+
 export class HallwayRenderer {
   /** The colour space the canvas took: Display P3 where the screen has it, sRGB otherwise. */
   readonly display: Display;
@@ -248,9 +288,8 @@ export class HallwayRenderer {
     this.display = display;
   }
 
-  /** Build the surfaces, the tapes and the shader for a scene. The lightmap starts dark. */
-  setScene(g: Geometry, atlas: Atlas, tables: readonly RippleTable[], view: Camera): void {
-    this.disposeScene();
+  /** The surfaces, the tapes and the shader for a scene, with a dark lightmap. */
+  private stage(g: Geometry, atlas: Atlas, tables: readonly RippleTable[]): Stage {
     const mounts = Math.max(1, g.emitters.length);
     const segments = g.emitters.flatMap((e) => e.segments.map((s) => ({ e, s })));
     const cells = Math.max(1, g.portals.length);
@@ -309,17 +348,18 @@ export class HallwayRenderer {
     });
     const mesh = new Mesh(buildMesh(g, atlas), material);
     mesh.frustumCulled = false;
+    return { mesh, uniforms, mounts };
+  }
+
+  /** Show a scene from a view. The lightmap starts dark. */
+  setScene(g: Geometry, atlas: Atlas, tables: readonly RippleTable[], view: Camera): void {
+    this.disposeScene();
+    const { mesh, uniforms, mounts } = this.stage(g, atlas, tables);
     this.world.add(mesh);
     this.mesh = mesh;
     this.uniforms = uniforms;
     this.mounts = mounts;
-    this.camera.fov = view.fovY;
-    this.camera.near = 0.02;
-    this.camera.far = 60;
-    this.camera.position.set(view.position[0], view.position[1], view.position[2]);
-    this.camera.up.set(0, 1, 0);
-    this.camera.lookAt(view.target[0], view.target[1], view.target[2]);
-    this.camera.updateMatrixWorld();
+    aim(this.camera, view);
     this.fit();
     this.schedule();
   }
@@ -332,6 +372,7 @@ export class HallwayRenderer {
     const { width, height } = old.image;
     const size = width * height;
     const fits = response?.atlas.width === width && response.atlas.height === height;
+    // The caller has checked that the response's lightmap is laid out as this scene's is.
     const data = fits
       ? halfLayers(response.layers, size, this.mounts)
       : new Uint16Array(size * this.mounts);
@@ -342,15 +383,8 @@ export class HallwayRenderer {
 
   /** What each mount is giving out now. */
   setFrame(frame: Frame): void {
-    const u = this.uniforms;
-    if (u === undefined) return;
-    frame.mounts.forEach((m, i) => {
-      u.mountLight.value[i]?.set(m.shown[0], m.shown[1], m.shown[2]);
-      for (let c = 0; c < MAX_CHANNELS; c++) {
-        const x = m.channels[c] ?? [0, 0, 0];
-        u.channelLight.value[i * MAX_CHANNELS + c]?.set(x[0], x[1], x[2]);
-      }
-    });
+    if (this.uniforms === undefined) return;
+    light(this.uniforms, frame);
     this.schedule();
   }
 
@@ -405,31 +439,81 @@ export class HallwayRenderer {
   }
 
   /**
-   * Time the frame at 1440 by 900, the size the budget is set for (docs/TEST_PLAN.md, Perf-frame).
-   * Each frame is forced to finish by reading one pixel back.
+   * Time the frame for a scene at 1440 by 900, the size the budget is set for (docs/TEST_PLAN.md,
+   * Perf-frame). The scene is drawn off screen, so the picture on the page does not change, and
+   * one frame at a time, so the page stays live and Panic is never held up (SPEC S4). A renderer
+   * too slow to say anything about the budget is stopped at once.
    */
-  measure(frames = 60): Measured {
+  measure(
+    g: Geometry,
+    atlas: Atlas,
+    tables: readonly RippleTable[],
+    view: Camera,
+    frame: Frame,
+    ev: number,
+  ): Promise<Measured> {
     const gl = this.gl;
     const info = gl.getExtension('WEBGL_debug_renderer_info');
     const gpu = String(gl.getParameter(info === null ? gl.RENDERER : info.UNMASKED_RENDERER_WEBGL));
-    const { width, height } = this;
-    this.width = 1440;
-    this.height = 900;
-    this.fit();
+    const stage = this.stage(g, atlas, tables);
+    light(stage.uniforms, frame);
+    stage.uniforms.exposure.value = 1 / whiteLuminance(ev);
+    const world = new ThreeScene();
+    world.add(stage.mesh);
+    const camera = new PerspectiveCamera();
+    aim(camera, view);
+    camera.aspect = MEASURE_WIDTH / MEASURE_HEIGHT;
+    camera.updateProjectionMatrix();
+    const target = new WebGLRenderTarget(MEASURE_WIDTH, MEASURE_HEIGHT, { samples: 0 }); // Not multisampled: see ADR 0017.;
     const px = new Uint8Array(4);
-    const once = (): void => {
-      this.draw();
-      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    };
-    for (let i = 0; i < 10; i++) once();
-    const start = performance.now();
-    for (let i = 0; i < frames; i++) once();
-    const ms = (performance.now() - start) / frames;
-    this.width = width;
-    this.height = height;
-    this.fit();
-    this.draw();
-    return { ms, frames, gpu };
+    const times: number[] = [];
+    let drawn = 0;
+    const began = performance.now();
+    return new Promise((resolve) => {
+      const finish = (stopped: boolean): void => {
+        this.renderer.setRenderTarget(null);
+        target.dispose();
+        stage.mesh.geometry.dispose();
+        stage.mesh.material.dispose();
+        stage.uniforms.layers.value.dispose();
+        stage.uniforms.ripple.value.dispose();
+        const ms = times.length === 0 ? 0 : times.reduce((a, t) => a + t, 0) / times.length;
+        resolve({ ms, frames: times.length, gpu, stopped });
+      };
+      const step = (): void => {
+        // A short run of frames back to back in each tick, then the page gets its turn. Frames
+        // drawn one to a tick each start on an idle GPU and read slow.
+        const tick = performance.now();
+        for (;;) {
+          const start = performance.now();
+          this.renderer.setRenderTarget(target);
+          this.renderer.render(world, camera);
+          // Reading a pixel back forces the frame to finish.
+          this.renderer.readRenderTargetPixels(target, 0, 0, 1, 1, px);
+          this.renderer.setRenderTarget(null);
+          const end = performance.now();
+          const took = end - start;
+          drawn++;
+          // The first frames compile the shader and fill caches.
+          if (drawn > MEASURE_WARM_UP) times.push(took);
+          if (drawn > 1 && took > MEASURE_SLOW_MS) {
+            finish(true);
+            return;
+          }
+          if (end - began > MEASURE_LIMIT_MS) {
+            finish(true);
+            return;
+          }
+          if (times.length >= MEASURE_FRAMES) {
+            finish(false);
+            return;
+          }
+          if (end - tick > MEASURE_TICK_MS) break;
+        }
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
   }
 
   private disposeScene(): void {

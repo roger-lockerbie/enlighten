@@ -20,7 +20,9 @@ test('the frame with six mounts is within its budget', async ({ page }) => {
   let gpu = '';
   for (let i = 0; i < 5; i++) {
     await page.getByTestId('measure').click();
+    await expect(page.getByTestId('measure')).toBeEnabled({ timeout: 10_000 });
     const text = await page.getByTestId('measured').innerText();
+    expect(text).not.toContain('stopped early');
     const ms = /^([\d.]+) ms a frame/.exec(text)?.[1];
     expect(ms).toBeDefined();
     times.push(Number(ms));

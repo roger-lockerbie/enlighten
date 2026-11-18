@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { cspDirectives } from '../config/security.ts';
+import { GL_READBACK } from './harness.ts';
 
 test('every page loads with no CSP violation, console error or page error', async ({ page }) => {
   const problems: string[] = [];
@@ -9,7 +10,7 @@ test('every page loads with no CSP violation, console error or page error', asyn
     // still names it for platforms that do, so this one warning is allowed.
     if (msg.text().includes("Unrecognized feature: 'bluetooth'")) return;
     // Headless Chromium draws WebGL in software and warns when it reads a frame back to show it.
-    if (msg.text().includes('GPU stall due to ReadPixels')) return;
+    if (msg.type() === 'warning' && GL_READBACK.test(msg.text())) return;
     if (msg.type() === 'error' || msg.type() === 'warning') {
       problems.push(`console ${msg.type()}: ${msg.text()}`);
     }

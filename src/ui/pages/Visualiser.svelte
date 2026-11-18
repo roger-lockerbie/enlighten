@@ -90,7 +90,11 @@
   });
 
   onMount(() => {
-    const solver = new LightSolver(new LightStore(app.store.backend), startLightWorker);
+    const solver = new LightSolver(
+      new LightStore(app.store.lightBackend()),
+      startLightWorker,
+      atlas,
+    );
     let live: HallwayRenderer | undefined;
     let gone = false;
     let observer: ResizeObserver | undefined;
@@ -192,13 +196,16 @@
           }),
   );
 
+  let measuring = $state(false);
+
   /**
-   * Time the frame with six mounts, all lit, which is what the budget is set for (Perf-frame).
-   * The page's own scene goes back afterwards.
+   * Time the frame with six mounts, all lit, which is what the budget is set for (Perf-frame). It
+   * is drawn off screen, a frame at a time, so the picture and the page are left alone.
    */
-  function measure(): void {
+  async function measure(): Promise<void> {
     const r = renderer;
-    if (r === undefined) return;
+    if (r === undefined || measuring) return;
+    measuring = true;
     const six = sixMountScene();
     const g = buildGeometry(six);
     const full = { terminals: [1, 1, 1, 1, 1], labels: ['R', 'G', 'B', 'WW', 'CW'] as const };
@@ -210,16 +217,11 @@
       ]),
       { display, balance },
     );
-    r.setScene(g, layout(g), rippleTables(six), defaultCamera(six));
-    r.setFrame(lit);
-    r.setExposure(ev);
-    r.setFalseColour(undefined);
-    measured = r.measure();
-    r.setScene(geometry, atlas, tables, camera);
-    r.setResponse(response);
-    r.setFrame(frame);
-    r.setExposure(ev);
-    r.setFalseColour(falseScale);
+    try {
+      measured = await r.measure(g, layout(g), rippleTables(six), defaultCamera(six), lit, ev);
+    } finally {
+      measuring = false;
+    }
   }
 </script>
 
@@ -397,15 +399,18 @@
     <div class="row">
       <button
         type="button"
-        onclick={measure}
-        disabled={renderer === undefined}
+        onclick={() => void measure()}
+        disabled={renderer === undefined || measuring}
         data-testid="measure">Measure frame time</button
       >
       {#if measured !== undefined}
         <span class="small" data-testid="measured">
-          {measured.ms.toFixed(2)} ms a frame with six mounts at 1440 by 900, over {measured.frames}
-          frames, on
-          {measured.gpu}.
+          {#if measured.frames === 0}
+            Too slow to measure on {measured.gpu}.
+          {:else}
+            {measured.ms.toFixed(2)} ms a frame with six mounts at 1440 by 900, over
+            {measured.frames} frames{measured.stopped ? ', stopped early' : ''}, on {measured.gpu}.
+          {/if}
         </span>
       {/if}
     </div>

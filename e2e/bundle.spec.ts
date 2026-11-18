@@ -35,6 +35,8 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   const marker = 'WebGLRenderer';
   expect(read(renderer[0] ?? '')).toContain(marker);
   for (const c of chunks.filter((c) => c !== renderer[0])) expect(read(c)).not.toContain(marker);
+  // three.js's loaders are left out: the renderer's chunk fetches nothing and makes no blob URL.
+  expect(read(renderer[0] ?? '')).not.toMatch(/\bfetch\(|createObjectURL/);
   // The entry reaches the Visualiser only by a dynamic import, and never names the renderer.
   expect(js).toContain(visualiser[0] ?? 'missing');
   expect(js).not.toContain(renderer[0] ?? 'missing');

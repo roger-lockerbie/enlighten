@@ -4,6 +4,10 @@
  */
 import type { Page } from '@playwright/test';
 
+/** Chromium's own notice that its software GL read a frame back. */
+export const GL_READBACK =
+  /^\[\.WebGL-0x[0-9a-f]+\]\s?GL Driver Message \(OpenGL, Performance, [A-Z_]+, High\): GPU stall due to ReadPixels/;
+
 export interface Watch {
   /** Everything that went wrong, as text. A test asserts this is empty. */
   problems(): Promise<string[]>;
@@ -20,8 +24,8 @@ export async function watch(
     // names it for platforms that do, so this one warning is allowed.
     if (text.includes("Unrecognized feature: 'bluetooth'") || allow(text)) return;
     // Headless Chromium draws WebGL in software and reads each frame back to show it, and its GL
-    // layer warns about that read. The app reads pixels back only when asked to time a frame.
-    if (text.includes('GPU stall due to ReadPixels')) return;
+    // layer warns about that read. Only that warning, in that form, is let through.
+    if (msg.type() === 'warning' && GL_READBACK.test(text)) return;
     if (msg.type() === 'error' || msg.type() === 'warning')
       problems.push(`console ${msg.type()}: ${text}`);
   });

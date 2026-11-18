@@ -191,9 +191,17 @@ Stage 7 shows one fixed hallway from one fixed camera: tape A in a skirting slot
 
 Measured on an Apple M1 Pro:
 
-- Frame: 3.1 to 3.3 ms with six mounts, all lit, at 1440 by 900, against 4 ms.
+- Frame: about 3.1 ms with six mounts, all lit, at 1440 by 900 in steady state, against 4 ms. A single frame drawn from an idle GPU takes 5 to 8 ms.
 - Solve: 0.65 s per mount with six mounts (4,348 patches) and 0.73 s for the default scene, against 2 s per mount.
 - Against the reference path tracer: direct light within 1% at all 124 points. Indirect light within 5% at 122, with one corner point 8% high and one shadow-edge point 21% high.
+
+Stage close:
+
+- `pnpm verify` passes: lint, the typecheck, the unit and property tests with coverage, the build, and both e2e configs.
+- `security-reviewer` passed the stage with follow-ups (S7-M1 and S7-L1 to S7-L5 in `docs/SECURITY_FINDINGS.md`), all fixed. `dali-reviewer` did not run: nothing in `src/dali`, `src/sim`, `src/bus` or `src/safety` changed.
+- `pnpm mutate` was not run: it covers `src/safety` and the codec, which this stage did not touch.
+- V-ui baselines were rewritten: the rail has a new entry and there is a new page.
+- The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove Chromium only.
 
 Known gaps, all in ADR 0017:
 

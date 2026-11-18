@@ -48,6 +48,7 @@ Stage 7 builds the engine for every mount kind in R11 and shows one fixed hallwa
 
 - The light worker's messages are checked both ways: the worker checks the scene, and the page checks the layers that come back, for shape, size and values in range.
 - A newer request ends the worker and starts another. `src/workers/policy.ts` stays the one place a worker is made.
+- The cache reaches the store's backend through `Store.lightBackend()`, which passes only the cache's own keys. A response, kept or fresh, is used only when its lightmap is laid out face for face as the page's is.
 - A solved response is kept under a key that hashes the solver's version and the scene's geometry text. The hash is not a security measure: the text is stored beside the layers and compared on read. Tape type, cover and binding are not in the key, because they only weight a mount's response. Four scenes are kept, least recently used first out. A record that is not this scene's, or fails its checks, is deleted and solved again. It is not set aside, because it holds nothing that a solve does not give back.
 - three.js loads in a chunk of its own, with the Visualiser page and the light core in a second lazy chunk. The light cache has its own store module (`src/store/light.ts`) so the entry chunk does not carry it.
 - Preferences move to version 3 with the exposure, white balance and false-colour view.
@@ -60,7 +61,8 @@ Stage 7 builds the engine for every mount kind in R11 and shows one fixed hallwa
 
 ## Consequences
 
-- Measured on an Apple M1 Pro: a frame with six mounts, all lit, takes 3.1 to 3.3 ms at 1440 by 900 (`pnpm perf:frame`), against the 4 ms budget. The margin is thin. The fallbacks in `rendering.md` section 3 are still available.
+- Measured on an Apple M1 Pro: a frame with six mounts, all lit, takes about 3.1 ms at 1440 by 900 in steady state (`pnpm perf:frame`: medians of 3.05 to 3.34 ms over several runs, single readings from 2.4 to 4.1), against the 4 ms budget. The margin is thin. A frame drawn after a pause, when the GPU has gone idle, takes 5 to 8 ms: the app draws only on change, so isolated frames are of that kind, and a fade's frames are of the steady kind. The fallbacks in `rendering.md` section 3 are still available.
+- The measurement draws its six-mount scene off screen, in runs of at most 40 ms with the page free between them, and stops at a frame over 50 ms. It never changes the picture and cannot hold up Panic (S7-M1, S7-L1). Its off-screen target is not multisampled. The canvas is, and the two read the same within the noise.
 - The solve takes about 0.65 s per mount with six mounts at 4,348 patches, and 0.73 s in all for the default scene (`pnpm perf:solve`), against 2 s per mount.
 - Against the reference path tracer in `tools/reference`, direct light agrees within 1% at every probe point, inside the openings included. Indirect light agrees within 5% at 122 of 124 points. A point on the ceiling 30 mm from the wall above a reveal is 8% high. A point on the floor under a low reveal is 21% high: it sits on a shadow edge of bounced light, which the mesh smooths over a 12.5 mm patch. The tests hold every point to 10% and that one to 25%.
 - In a closed box the solve balances energy within 1% for reflectances from 0.05 to 0.9.

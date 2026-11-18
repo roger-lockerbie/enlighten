@@ -56,7 +56,7 @@ Assets, not packages, in `src/assets/fonts/` with their licence texts and SHA-25
 
 Versions are pinned exactly in `package.json`, and `pnpm-lock.yaml` is committed.
 
-`@types/three` depends on six packages that exist to type three.js addons: `@dimforge/rapier3d-compat` 0.12.0, `@tweenjs/tween.js` 23.1.3, `@types/stats.js` 0.17.4, `@types/webxr` 0.5.24, `fflate` 0.8.3 and `meshoptimizer` 1.1.1. The app uses no addons, imports none of these, and none reaches `dist/`. They sit in `node_modules` with their install scripts blocked like every other package. The way to drop them is to write our own declarations for the dozen three.js classes the renderer uses.
+`@types/three` depends on six packages that exist to type three.js addons: `@dimforge/rapier3d-compat` 0.12.0 (Apache-2.0), `@tweenjs/tween.js` 23.1.3 (MIT), `@types/stats.js` 0.17.4 (MIT), `@types/webxr` 0.5.24 (MIT), `fflate` 0.8.3 (MIT) and `meshoptimizer` 1.1.1 (MIT). The app uses no addons, imports none of these, and none reaches `dist/`. They sit in `node_modules` with their install scripts blocked like every other package. The way to drop them is to write our own declarations for the dozen three.js classes the renderer uses.
 
 ## Python: the hardware server
 

@@ -234,3 +234,20 @@ test('replaces a kept record that fails its checks', async ({ page }) => {
   });
   await noProblems(w);
 });
+
+test('measuring the frame leaves the picture and the page alone', async ({ page }) => {
+  const w = await openApp(page);
+  await openVisualiser(page);
+  const canvas = page.getByTestId('hallway-canvas');
+  const before = await canvas.screenshot();
+  await page.getByTestId('measure').click();
+  // The page stays live while it measures: Panic is there to press.
+  await expect(page.getByRole('button', { name: 'Panic' })).toBeEnabled();
+  await expect(page.getByTestId('measured')).toContainText(/ms a frame|Too slow/, {
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId('measure')).toBeEnabled();
+  // Nothing was drawn to the picture: it is the same unlit hallway.
+  expect((await canvas.screenshot()).equals(before)).toBe(true);
+  await noProblems(w);
+});

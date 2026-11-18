@@ -37,7 +37,7 @@ One fixed hallway from one fixed camera, at eye level looking down it. From the 
 
 - The picture is a button, so it takes focus. The probe follows the pointer over it, and the arrow keys move it by 2% of the picture, or 10% with Shift. A ring marks where it is.
 - The view controls are three segmented controls with a number field each: exposure (night-adapted, evening, day, manual, with EV), white balance (adapted to the scene, daylight, chosen, with K), and what to show (the picture, lux, cd/m²) with the false-colour legend.
-- "What this shows" says the picture is a best-effort estimate, lists each mount with its tape, cover, place, driver and present output, and has "Measure frame time", which reports milliseconds a frame for six mounts and the GPU.
+- "What this shows" says the picture is a best-effort estimate, lists each mount with its tape, cover, place, driver and present output, and has "Measure frame time", which draws a six-mount scene off screen and reports milliseconds a frame and the GPU. The picture does not change while it runs.
 - The inspector says the hallway and mounts are fixed in this version. Stage 8 puts the selected mount there.
 
 ## 2. Layout

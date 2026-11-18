@@ -102,4 +102,6 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Security
 
+- Stage 7 review: the frame-time measurement draws off screen in short runs and cannot hold up Panic or change the picture; the light cache reaches only its own keys in the store; a solved response is used only when its lightmap matches the page's layout.
+
 - qs, a transitive dependency of Stryker, is overridden to 6.16.2 to clear four advisories. The two advisories left open (minimatch, deepmerge) are explained in `docs/DEPENDENCIES.md`.

@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { LightStore } from '../store/light.ts';
-import { MemoryBackend } from '../store/store.ts';
+import { MemoryBackend, Store } from '../store/store.ts';
 import {
   CACHE_INDEX_KEY,
   MAX_CACHED,
@@ -204,6 +204,31 @@ describe('the store keeps solved light', () => {
     await new LightStore(half).save(scene, solved);
     half.put = () => Promise.reject(new Error('no'));
     expect(await new LightStore(half).load(scene)).toEqual(solved);
+  });
+});
+
+describe('the backend the cache is given', () => {
+  it('reaches the cache keys and no others', async () => {
+    const b = new MemoryBackend();
+    await b.put('preferences', { version: 3, data: {} });
+    await b.put('set-aside:preferences:x', 1);
+    const light = new Store(b, () => 'now').lightBackend();
+    const key = cacheKey(scene);
+    await light.put(key, { a: 1 });
+    await light.put(CACHE_INDEX_KEY, [key]);
+    expect(await light.get(key)).toEqual({ a: 1 });
+    expect((await light.keys()).sort()).toEqual([key, CACHE_INDEX_KEY].sort());
+    await expect(light.get('preferences')).rejects.toThrow();
+    await expect(light.put('preferences', {})).rejects.toThrow();
+    await expect(light.delete('set-aside:preferences:x')).rejects.toThrow();
+    await expect(light.put('light:xyz', {})).rejects.toThrow();
+    await light.delete(key);
+    expect(b.map.has(key)).toBe(false);
+    expect(b.map.has('preferences')).toBe(true);
+    // The cache works through it as through the whole backend.
+    const store = new LightStore(light);
+    await store.save(scene, solved);
+    expect(await store.load(scene)).toEqual(solved);
   });
 });
 
