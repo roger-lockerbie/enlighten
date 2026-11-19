@@ -249,7 +249,8 @@
           ? 'facing down'
           : `facing ${f === 'both' ? 'up and down' : (f ?? m.facing)}`;
     const at = m.kind === 'skirting' ? '' : ` at ${String(Math.round(m.height * 1000))} mm`;
-    return `${sideName(m.side)}: ${KIND_NAMES[m.kind].toLowerCase()}${at}, ${way}. ${tapeName(m.tape)}, address ${String(m.address)}, ${DIFFUSERS[m.diffuser].name.toLowerCase()} cover.`;
+    const cover = m.diffuser === 'none' ? 'no cover' : `${DIFFUSERS[m.diffuser].name} cover`;
+    return `${sideName(m.side)}: ${KIND_NAMES[m.kind].toLowerCase()}${at}, ${way}. ${tapeName(m.tape)}, address ${String(m.address)}, ${cover}.`;
   }
 
   /** Why a mount may be dark or partly dark whatever is sent. */

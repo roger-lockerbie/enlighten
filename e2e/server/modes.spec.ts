@@ -4,6 +4,7 @@
  * hasseb or the server goes away, commissioning, the hardware check, and panic reaching the bus.
  */
 import { expect, test } from '@playwright/test';
+import { openConsole, typeLine } from '../app.ts';
 import { watch } from '../harness.ts';
 import { connect, goTo } from './connect.ts';
 import { startServer, type Server } from './fixture.ts';
@@ -174,3 +175,34 @@ test('panic by button and by Escape twice reaches the bus as TERMINATE then OFF,
   await server.waitFor(() => server?.bus(again).includes('general.Off') ?? false);
   expect(await w.problems()).toEqual([]);
 });
+
+for (const target of ['Hardware', 'Both'] as const) {
+  test(`the Visualiser follows the drivers in ${target} and labels the picture a prediction`, async ({
+    page,
+  }) => {
+    server = await startServer();
+    const w = await watch(page);
+    await page.goto(server.url);
+    await connect(page, target);
+    await goTo(page, 'Visualiser');
+    const header = page.getByRole('main').locator('header');
+    await expect(header.getByText('prediction')).toBeVisible();
+    await expect(header.getByText('estimated')).toHaveCount(0);
+    await expect(page.getByTestId('solve-status')).toContainText('Bounced light ready', {
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId('mount-0-flux')).toHaveText('0.00');
+    await openConsole(page);
+    await typeLine(page, 'tc 0 3000K 30%');
+    await page.keyboard.press('Control+Backquote');
+    await expect(page.getByTestId('mount-0-flux')).not.toHaveText('0.00', { timeout: 15_000 });
+    // A mount on an address with no driver on this bus is drawn unlit and says so.
+    await page.getByTestId('mount-row-m2').click();
+    const address = page.getByTestId('mount-address').locator('input');
+    await address.fill('9');
+    await address.press('Enter');
+    await expect(page.getByTestId('mount-1')).toContainText('No driver at address 9.');
+    await expect(page.getByTestId('mount-1-flux')).toHaveText('0.00');
+    expect(await w.problems()).toEqual([]);
+  });
+}

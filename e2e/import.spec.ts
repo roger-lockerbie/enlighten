@@ -32,7 +32,7 @@ test('exports the workspace, and imports it back after listing the changes', asy
   const file = await exported(page);
   expect(file).toMatchObject({
     format: 'enlighten-workspace',
-    version: 2,
+    version: 3,
     ceiling: 220,
     preferences: {
       playgroundMode: 'live',
@@ -110,7 +110,7 @@ test('refuses oversized, malformed, foreign, newer and hostile files, and change
     ],
     ['{', 'not valid JSON'],
     ['{"format":"other"}', 'not an Enlighten workspace file'],
-    ['{"format":"enlighten-workspace","version":3}', 'newer version of the app'],
+    ['{"format":"enlighten-workspace","version":4}', 'newer version of the app'],
     ['{"format":"enlighten-workspace","version":1,"__proto__":{"ceiling":1}}', 'not allowed'],
     ['{"format":"enlighten-workspace","version":1,"looks":[]}', 'unknown key "looks"'],
     [
@@ -128,5 +128,49 @@ test('refuses oversized, malformed, foreign, newer and hostile files, and change
     await expect(page.getByTestId('import-dialog')).toBeHidden();
   }
   await expect(page.getByTestId('ceiling')).toContainText('arc 220');
+  await noProblems(w);
+});
+
+test("carries the Visualiser's set-ups and view settings, and checks them before import", async ({
+  page,
+}) => {
+  const w = await openApp(page);
+  await goTo(page, 'Visualiser');
+  await expect(page.getByTestId('solve-status')).toContainText('Bounced light ready', {
+    timeout: 60_000,
+  });
+  await page.getByTestId('preset-mirrored').click();
+  await page.getByTestId('exposure').getByRole('button', { name: 'Night-adapted' }).click();
+  await goTo(page, 'Settings');
+  const file = await exported(page);
+  expect(file['preferences']).toMatchObject({ exposure: 'night', falseColour: 'off' });
+  expect(file['hallway']).toMatchObject({ length: 5, width: 1.2, height: 2.7 });
+  expect(file['mounts']).toHaveLength(2);
+  expect(file['links']).toEqual([{ kind: 'mirror', a: 'm1', b: 'm2' }]);
+  // Set-up B is still the default, so it is written beside A.
+  expect(file['compare']).toMatchObject({ links: [] });
+
+  // A set-up that fails the light core's check is refused, with where.
+  await importText(page, JSON.stringify({ ...file, mounts: [{ id: 'm1' }] }));
+  await expect(page.getByTestId('import-error')).toContainText('Set-up A:');
+  await expect(page.getByTestId('import-dialog')).toBeHidden();
+
+  // Change the set-up, then bring the file back.
+  await goTo(page, 'Visualiser');
+  await page.getByTestId('preset-channel').click();
+  await page.getByTestId('exposure').getByRole('button', { name: 'Day', exact: true }).click();
+  await page.waitForTimeout(900);
+  await goTo(page, 'Settings');
+  await importText(page, JSON.stringify(file));
+  const changes = page.getByTestId('import-changes');
+  await expect(changes).toContainText('Visualiser exposure: night.');
+  await expect(changes).toContainText('Set-up A: 2 mounts, replacing 1.');
+  await page.getByTestId('import-dialog').getByRole('button', { name: 'Import' }).click();
+  await expect(page.getByTestId('import-done')).toContainText('Imported.');
+  await goTo(page, 'Visualiser');
+  await expect(page.getByTestId('mount-row-m1')).toContainText('Mirrored with m2.');
+  await expect(
+    page.getByTestId('exposure').getByRole('button', { name: 'Night-adapted' }),
+  ).toHaveAttribute('aria-pressed', 'true');
   await noProblems(w);
 });
