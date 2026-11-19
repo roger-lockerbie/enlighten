@@ -40,6 +40,15 @@ One fixed hallway from one fixed camera, at eye level looking down it. From the 
 - "What this shows" says the picture is a best-effort estimate, lists each mount with its tape, cover, place, driver and present output, and has "Measure frame time", which draws a six-mount scene off screen and reports milliseconds a frame and the GPU. The picture does not change while it runs.
 - The inspector says the hallway and mounts are fixed in this version. Stage 8 puts the selected mount there.
 
+### The Visualiser in Stage 8
+
+Stage 8 makes the page a design tool (ADR 0018). From the top: the title, chip and solve state, as in Stage 7, with one line each for A and B in the A/B view; the camera bar and the A/B switch; the picture, or two side by side; the probe, with a reading for each picture; the view controls; the mounts card; the hallway card; and what the picture shows.
+
+- **Camera bar.** Walk, Orbit and Close up, with "Down the hall" and "At the left wall" (or right, by the selected mount) as cuts. Each mode has number fields for its settings: along, across, turn and tilt for a walk; turn, tilt and distance for an orbit; and which mount for a close-up. Nothing animates.
+- **Mounts card.** In the A/B view, a switch chooses whether the editor changes set-up A or B, with "Copy A to B". One row per mount: "Left: skirting slot, facing down. Tunable white, 120 LEDs/m, address 0, Opal (Linear Lux) cover." A row adds "Mirrored with m2." for a linked mount, "No driver at address N." when nothing drives its address, and which tape channels its driver does not feed. Selecting a row opens the inspector on that mount. Below the rows: add a mount by kind and wall, with a count out of six; a status line that gives the reason when an edit is refused; and the five presets, each a button with a small drawing of the hallway in section and a line of description.
+- **Hallway card.** Length, width and height, end walls open or closed, and a finish for the ceiling, walls and floor, each by preset or by reflectance, with where the preset's figure comes from and an "assumed" chip for the floor's placeholders.
+- **Inspector.** The selected mount: kind, wall, height, facing (up, down or both for a reveal), tape, cover with its transmission, the opening's sizes, start and length, voltage drop, address, and "Mirror on the other wall". Each default shows its basis and whether it is sourced or assumed (R11.2). A status line gives the reason when an edit is refused. "Remove this mount" is last.
+
 ## 2. Layout
 
 Designed for a laptop at 1440 by 900 and up. No mobile layout.
@@ -93,6 +102,17 @@ A single Escape keeps its usual meaning: close a dialog, cancel a search, releas
 | Home, End             | The minimum, and the ceiling or maximum |
 | Enter                 | Apply, in Commit mode                   |
 | Space, held           | Hold a dim button or a plate button     |
+
+### The Visualiser's picture
+
+| Key                   | Action                                                 |
+| --------------------- | ------------------------------------------------------ |
+| W, S                  | Walk forward or back a quarter metre, in the walk view |
+| A, D                  | Step left or right a quarter metre, in the walk view   |
+| Shift with W, A, S, D | Step a metre                                           |
+| Left, Right, Up, Down | Move the probe by 2% of the picture, or 10% with Shift |
+
+Dragging the picture turns the view, and the wheel moves in or out. Every camera setting also has a number field.
 
 ### Console
 

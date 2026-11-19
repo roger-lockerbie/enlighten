@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 6 are merged. Stage 7 (visualiser engine: light and colour) is on `stage-7-visualiser`, on Fable as planned. The rate guard stage the owner chose on 2026-11-18 has not run: Stage 7 ran beside it and changed nothing in `src/safety`, `src/sim`, `src/bus` or `src/dali`.
+Stages 0 to 7 are merged. Stage 8 (hallway, mounts and tapes) is on `stage-8-hallway`, on Opus as planned. The rate guard stage the owner chose on 2026-11-18 has not run: Stage 8 ran beside it and changed nothing in `src/safety`, `src/sim`, `src/bus` or `src/dali`.
 
 ## Done in Stage 0
 
@@ -176,7 +176,7 @@ Open, for the owner or later stages:
 - `pnpm mutate` on the new `src/safety/rate` code, and the 57 mutants from Stage 5 that only the old checker killed.
 - The hardware-day list in `docs/research` gains nothing from this stage.
 
-## Stage 7 (visualiser engine: light and colour), in review
+## Stage 7 (visualiser engine: light and colour), merged
 
 Branch `stage-7-visualiser`. ADR 0017 records what was built, the choices ADR 0008 left open, and three differences from the approved plan. What is in it:
 
@@ -207,14 +207,47 @@ Known gaps, all in ADR 0017:
 
 - No glossy floor term, no tinted surfaces, and tape emission is even with angle.
 - Tape and cover data are placeholders. Every cover's haze is assumed.
-- The view settings are not in workspace files yet.
+- The view settings are not in workspace files yet. Stage 8 adds them.
 - Bounced light within about 50 mm of an opening's shadow edge is smoothed over one 12.5 mm patch.
 - The frame budget is met with a thin margin.
 
+## Stage 8 (hallway, mounts and tapes), in review
+
+Branch `stage-8-hallway`. ADR 0018 records what was built and two differences from the approved plan. What is in it:
+
+- `src/light/scene.ts`: a mount binds to a short address, 0 to 63, in place of a bench unit. `src/ui/visualiser/drives.ts` reads each driver's drive by address.
+- `src/light/setup.ts`, pure: the set-up (a scene and its links), every edit as a function that returns the new set-up or a reason, five presets with their drawings' data, finishes and tapes with their basis, and `parseSetup`.
+- `src/light/camera.ts`: walk, orbit and close-up views, the presets down the hall and at a wall, moves by key and wheel, and `keepInside`.
+- `src/light/saved.ts`: the stored `visualiser` record and the workspace file's form of the set-ups, loaded only by the Visualiser and Settings.
+- The Visualiser page: the camera bar, the A/B view, the mounts card with presets, the hallway card, and the mount editor in the inspector.
+- Workspace files version 3, with set-ups A and B and the view settings. Version 2 files migrate.
+- e2e: `mounts.spec.ts`, `ab.spec.ts`, set-ups in `import.spec.ts`, the prediction label and no-driver note in `server/modes.spec.ts`, and ten new V-hallway pictures.
+
+Owner decision in planning: a mount binds to any address, but no simulated drivers are added. A mount on an address with no driver draws unlit and says so. Extra drivers wait for Stage 9. This is a recorded gap against R14.2's "simulated only" wording.
+
+Measured on an Apple M1 Pro:
+
+- Solve: 0.37 s per mount for the default scene (2,520 patches) and 0.65 s per mount with six mounts (4,348 patches), against 2 s per mount.
+- Frame: a median of 3.10 ms with six mounts, all lit, at 1440 by 900 (`pnpm perf:frame`: 2.82 to 3.26 ms over five runs), against 4 ms. Unchanged from Stage 7. The A/B view draws two half-width pictures, so about as many pixels as one.
+- The entry chunk is 253.45 kB against its 256,000 byte budget.
+
+Stage close:
+
+- `security-reviewer` passed the stage with follow-ups (S8-L1 to S8-L5 and S8-I1 to S8-I4 in `docs/SECURITY_FINDINGS.md`), all fixed or noted. The main one: an edit cleared the bounced light until the solve came back, so fast clicking dimmed and restored the picture several times a second. The picture now holds until the new light is ready and changes at most once a second. `dali-reviewer` did not run: nothing in `src/dali`, `src/sim`, `src/bus` or `src/safety` changed.
+- V-ui's Visualiser baseline was rewritten for the new page.
+- The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review.
+
+Known gaps:
+
+- No simulated drivers beyond the bench's two addresses (R14.2), until Stage 9.
+- The tape list holds only the three researched tapes. No other density is offered.
+- The floor's finishes are placeholders, and surfaces are neutral and matte.
+- The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove Chromium only.
+
 ## Next
 
-Review and merge the Stage 7 PR. Then, in either order:
+Review and merge the Stage 8 PR. Then, in either order:
 
 - The rate guard stage the owner chose on 2026-11-18 (S6-P13, S6-D18-1 to S6-D18-5, S6-P14 to S6-P16 and S5-P1), which needs a row in `docs/STAGES.md` and a model.
 - The branch coverage target on `src/safety` (95%) failed two CI runs of four on 2026-11-18 and 2026-11-19 at 94.96%. The property tests had no fixed seed, so the branches they reached in `src/safety/rate` changed from run to run. `pnpm coverage` now sets `PROP_SEED=1` and its figures are the same on every run. The margin over 95% is small, so the rate guard stage should add unit tests for the uncovered branches in `legs.ts` and `trace.ts`.
-- Stage 8 (hallway, mounts and tapes) on Opus, in plan mode.
+- Stage 9 (scenes, sequences and effects) on Opus, in plan mode. Its choreography across more addresses than the bench has is where simulated drivers beyond the bench arrive.
