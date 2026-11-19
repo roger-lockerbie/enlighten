@@ -73,7 +73,9 @@ export interface Sourced {
 export const MOUNT_DEFAULTS: Readonly<
   Record<
     MountKind,
-    Readonly<Record<'height' | 'slotHeight' | 'slotDepth' | 'setback' | 'aperture', Sourced>>
+    Readonly<
+      Record<'height' | 'slotHeight' | 'slotDepth' | 'setback' | 'aperture' | 'depth', Sourced>
+    >
   >
 > = {
   skirting: {
@@ -86,6 +88,7 @@ export const MOUNT_DEFAULTS: Readonly<
       basis: 'Linear Lux 1963, 14.3 mm channel less its walls',
       sourced: false,
     },
+    depth: { value: 0.013, basis: 'Linear Lux 1963, scaled from its drawing', sourced: true },
   },
   reveal: {
     height: { value: 2.4, basis: 'A high reveal, 300 mm below a 2.7 m ceiling', sourced: false },
@@ -105,6 +108,11 @@ export const MOUNT_DEFAULTS: Readonly<
       sourced: false,
     },
     aperture: { value: 0.012, basis: 'Linear Lux 1715, 12.3 mm channel', sourced: true },
+    depth: {
+      value: 0.011,
+      basis: 'As the flush channel. No reveal profile is dimensioned',
+      sourced: false,
+    },
   },
   channel: {
     height: { value: 0.6, basis: 'The brief', sourced: true },
@@ -116,14 +124,12 @@ export const MOUNT_DEFAULTS: Readonly<
       basis: 'Linear Lux 5410 and 1715, 12 mm lit aperture',
       sourced: true,
     },
+    depth: {
+      value: 0.011,
+      basis: 'Linear Lux 5410 and 1715, LED to cover 10 to 12 mm',
+      sourced: true,
+    },
   },
-};
-
-/** LED to cover, by kind: 13 mm in the 1963 skirting profile, 11 mm in the others (optics.md). */
-const DEFAULT_DEPTH: Readonly<Record<MountKind, number>> = {
-  skirting: 0.013,
-  reveal: 0.011,
-  channel: 0.011,
 };
 
 /** A mount of a kind with its defaults, running the length of the hallway. */
@@ -150,7 +156,7 @@ export function mount(
     gradient: 0,
     tape: 'A',
     diffuser: 'opal-linear-lux',
-    depth: DEFAULT_DEPTH[kind],
+    depth: d.depth.value,
     address: 0,
     ...over,
   };
@@ -224,8 +230,9 @@ function onlyKeys(o: Record<string, unknown>, keys: readonly string[]): boolean 
   return names.length === keys.length && keys.every((k) => Object.hasOwn(o, k));
 }
 
+/** A number in range. Minus zero comes back as zero, so a scene survives JSON unchanged. */
 function num(v: unknown, min: number, max: number): number | undefined {
-  return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : undefined;
+  return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v + 0 : undefined;
 }
 
 function oneOf<T extends string>(v: unknown, set: readonly T[]): T | undefined {
