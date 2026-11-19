@@ -13,10 +13,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  # `pnpm verify` runs in two jobs at once. On the repo's 2-core runner the whole of it takes
+  # 35 to 40 minutes in one job, where Playwright uses one worker (docs/STATUS.md, Stage 8).
+  checks:
     runs-on: ubuntu-24.04
-    # About 35 minutes on a 2-core runner, where Playwright uses one worker (docs/STATUS.md, Stage 8).
-    timeout-minutes: 45
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Enable pnpm through corepack
+        run: |
+          npm install --global --ignore-scripts corepack@0.36.0
+          corepack enable
+          pnpm --version
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Coverage
+        run: pnpm coverage
+
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -57,8 +83,10 @@ jobs:
       - name: Install Chromium system libraries
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
-      - name: Verify
-        run: pnpm verify
+      - name: Build
+        run: pnpm build
+      - name: End-to-end tests
+        run: pnpm e2e
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -85,7 +85,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The bench preview on the Playground uses the visualiser's tape data and colour path, on one scale where tape A at full is white.
 - three.js 0.187.0 is installed as the app's one runtime dependency, with `@types/three` for development.
 - `e2e/bundle.spec.ts` allows the entry chunk its two lazy chunks and holds three.js to the renderer's.
-- CI's verify job may run for 45 minutes, up from 30. On the repo's 2-core runner Playwright uses one worker, and with Stage 8's tests the suite takes about 35 minutes.
+- CI runs `pnpm verify` in two jobs at once, `checks` and `e2e`. On the repo's 2-core runner Playwright uses one worker, and with Stage 8's tests the suite took 35 to 40 minutes in one job.
 
 ### Fixed
 
