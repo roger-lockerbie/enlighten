@@ -1,0 +1,2261 @@
+{
+ "note": "Written by tools/reference/trace.ts. Lux per lm/m of tape.",
+ "setups": [
+  {
+   "name": "channel",
+   "scene": {
+    "length": 5,
+    "width": 1.2,
+    "height": 2.7,
+    "endWalls": "closed",
+    "reflectance": {
+     "ceiling": 0.9,
+     "walls": 0.8,
+     "floor": 0.5
+    },
+    "mounts": [
+     {
+      "id": "m1",
+      "kind": "channel",
+      "side": "right",
+      "height": 0.6,
+      "facing": "down",
+      "start": 0,
+      "length": 5,
+      "slotHeight": 0,
+      "slotDepth": 0,
+      "setback": 0,
+      "aperture": 0.012,
+      "gradient": 0,
+      "tape": "A",
+      "diffuser": "opal-linear-lux",
+      "depth": 0.011,
+      "unit": "A"
+     }
+    ]
+   },
+   "paths": 2000000,
+   "probes": [
+    {
+     "name": "floor z=0.03",
+     "point": [
+      2.5,
+      0,
+      0.03
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.147307,
+     "indirect": 0.407903,
+     "directError": 0.0000268766,
+     "indirectError": 0.000525632
+    },
+    {
+     "name": "ceiling z=0.03",
+     "point": [
+      2.5,
+      2.7,
+      0.03
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.073439,
+     "indirect": 0.306484,
+     "directError": 0.00000429962,
+     "indirectError": 0.000663665
+    },
+    {
+     "name": "floor z=0.1",
+     "point": [
+      2.5,
+      0,
+      0.1
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.160955,
+     "indirect": 0.414914,
+     "directError": 0.0000270463,
+     "indirectError": 0.000581272
+    },
+    {
+     "name": "ceiling z=0.1",
+     "point": [
+      2.5,
+      2.7,
+      0.1
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.0723635,
+     "indirect": 0.311818,
+     "directError": 0.00000471813,
+     "indirectError": 0.000475956
+    },
+    {
+     "name": "floor z=0.3",
+     "point": [
+      2.5,
+      0,
+      0.3
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.207417,
+     "indirect": 0.408834,
+     "directError": 0.0000329907,
+     "indirectError": 0.000597322
+    },
+    {
+     "name": "ceiling z=0.3",
+     "point": [
+      2.5,
+      2.7,
+      0.3
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.0670026,
+     "indirect": 0.323792,
+     "directError": 0.00000565869,
+     "indirectError": 0.000408481
+    },
+    {
+     "name": "floor z=0.6",
+     "point": [
+      2.5,
+      0,
+      0.6
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.290354,
+     "indirect": 0.391681,
+     "directError": 0.0000837405,
+     "indirectError": 0.000687854
+    },
+    {
+     "name": "ceiling z=0.6",
+     "point": [
+      2.5,
+      2.7,
+      0.6
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.0519005,
+     "indirect": 0.331872,
+     "directError": 0.00000381106,
+     "indirectError": 0.000678318
+    },
+    {
+     "name": "floor z=0.9",
+     "point": [
+      2.5,
+      0,
+      0.9
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.295863,
+     "indirect": 0.374866,
+     "directError": 0.000129399,
+     "indirectError": 0.000557614
+    },
+    {
+     "name": "ceiling z=0.9",
+     "point": [
+      2.5,
+      2.7,
+      0.9
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.0285839,
+     "indirect": 0.330192,
+     "directError": 0.00000228206,
+     "indirectError": 0.000626635
+    },
+    {
+     "name": "floor z=1.17",
+     "point": [
+      2.5,
+      0,
+      1.17
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.0412916,
+     "indirect": 0.34812,
+     "directError": 0.0000217936,
+     "indirectError": 0.00055098
+    },
+    {
+     "name": "ceiling z=1.17",
+     "point": [
+      2.5,
+      2.7,
+      1.17
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.00295365,
+     "indirect": 0.319118,
+     "directError": 1.89854e-7,
+     "indirectError": 0.000602987
+    },
+    {
+     "name": "left y=0.06",
+     "point": [
+      2.5,
+      0.06,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.301459,
+     "indirect": 0.310412,
+     "directError": 0.0000553975,
+     "indirectError": 0.000657347
+    },
+    {
+     "name": "right y=0.06",
+     "point": [
+      2.5,
+      0.06,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.37214,
+     "directError": 0,
+     "indirectError": 0.000499966
+    },
+    {
+     "name": "left y=0.2",
+     "point": [
+      2.5,
+      0.2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.34096,
+     "indirect": 0.318764,
+     "directError": 0.0000646097,
+     "indirectError": 0.000632467
+    },
+    {
+     "name": "right y=0.2",
+     "point": [
+      2.5,
+      0.2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.404942,
+     "directError": 0,
+     "indirectError": 0.00066803
+    },
+    {
+     "name": "left y=0.6",
+     "point": [
+      2.5,
+      0.6,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.401528,
+     "indirect": 0.323084,
+     "directError": 0.0000763667,
+     "indirectError": 0.000507674
+    },
+    {
+     "name": "right y=0.6",
+     "point": [
+      2.5,
+      0.6,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.426021,
+     "directError": 0,
+     "indirectError": 0.000492205
+    },
+    {
+     "name": "left y=1.2",
+     "point": [
+      2.5,
+      1.2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.283788,
+     "indirect": 0.318188,
+     "directError": 0.0000360469,
+     "indirectError": 0.000683504
+    },
+    {
+     "name": "right y=1.2",
+     "point": [
+      2.5,
+      1.2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.413189,
+     "directError": 0,
+     "indirectError": 0.00053739
+    },
+    {
+     "name": "left y=2",
+     "point": [
+      2.5,
+      2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.103306,
+     "indirect": 0.309998,
+     "directError": 0.00000665001,
+     "indirectError": 0.000370073
+    },
+    {
+     "name": "right y=2",
+     "point": [
+      2.5,
+      2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.364131,
+     "directError": 0,
+     "indirectError": 0.000533035
+    },
+    {
+     "name": "left y=2.3",
+     "point": [
+      2.5,
+      2.3,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.0696142,
+     "indirect": 0.311741,
+     "directError": 0.00000536231,
+     "indirectError": 0.000802499
+    },
+    {
+     "name": "right y=2.3",
+     "point": [
+      2.5,
+      2.3,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.348795,
+     "directError": 0,
+     "indirectError": 0.000515051
+    },
+    {
+     "name": "left y=2.5",
+     "point": [
+      2.5,
+      2.5,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.0539446,
+     "indirect": 0.314955,
+     "directError": 0.00000237875,
+     "indirectError": 0.000564093
+    },
+    {
+     "name": "right y=2.5",
+     "point": [
+      2.5,
+      2.5,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.338463,
+     "directError": 0,
+     "indirectError": 0.000557789
+    },
+    {
+     "name": "left y=2.65",
+     "point": [
+      2.5,
+      2.65,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.044808,
+     "indirect": 0.316783,
+     "directError": 0.00000343827,
+     "indirectError": 0.000512239
+    },
+    {
+     "name": "right y=2.65",
+     "point": [
+      2.5,
+      2.65,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.32608,
+     "directError": 0,
+     "indirectError": 0.000606832
+    },
+    {
+     "name": "end0 centre",
+     "point": [
+      0,
+      1.35,
+      0.6
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "direct": 0.0998622,
+     "indirect": 0.345593,
+     "directError": 0.0000210284,
+     "indirectError": 0.000536095
+    },
+    {
+     "name": "floor near end",
+     "point": [
+      0.2,
+      0,
+      0.6
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.189622,
+     "indirect": 0.401106,
+     "directError": 0.0000434892,
+     "indirectError": 0.000816526
+    }
+   ]
+  },
+  {
+   "name": "skirting",
+   "scene": {
+    "length": 5,
+    "width": 1.2,
+    "height": 2.7,
+    "endWalls": "closed",
+    "reflectance": {
+     "ceiling": 0.9,
+     "walls": 0.8,
+     "floor": 0.5
+    },
+    "mounts": [
+     {
+      "id": "m1",
+      "kind": "skirting",
+      "side": "left",
+      "height": 0,
+      "facing": "down",
+      "start": 0,
+      "length": 5,
+      "slotHeight": 0.025,
+      "slotDepth": 0.019,
+      "setback": 0.0095,
+      "aperture": 0.012,
+      "gradient": 0,
+      "tape": "A",
+      "diffuser": "opal-linear-lux",
+      "depth": 0.013,
+      "unit": "A"
+     }
+    ]
+   },
+   "paths": 2000000,
+   "probes": [
+    {
+     "name": "floor z=0.03",
+     "point": [
+      2.5,
+      0,
+      0.03
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 3.11679,
+     "indirect": 1.75085,
+     "directError": 0.0119887,
+     "indirectError": 0.0111543
+    },
+    {
+     "name": "ceiling z=0.03",
+     "point": [
+      2.5,
+      2.7,
+      0.03
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.153875,
+     "directError": 0,
+     "indirectError": 0.00223861
+    },
+    {
+     "name": "floor z=0.1",
+     "point": [
+      2.5,
+      0,
+      0.1
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.223417,
+     "indirect": 0.431443,
+     "directError": 0.0039245,
+     "indirectError": 0.0049133
+    },
+    {
+     "name": "ceiling z=0.1",
+     "point": [
+      2.5,
+      2.7,
+      0.1
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.151087,
+     "directError": 0,
+     "indirectError": 0.00342424
+    },
+    {
+     "name": "floor z=0.3",
+     "point": [
+      2.5,
+      0,
+      0.3
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.0104488,
+     "indirect": 0.186578,
+     "directError": 0.0000078913,
+     "indirectError": 0.00245788
+    },
+    {
+     "name": "ceiling z=0.3",
+     "point": [
+      2.5,
+      2.7,
+      0.3
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.157235,
+     "directError": 0,
+     "indirectError": 0.00281101
+    },
+    {
+     "name": "floor z=0.6",
+     "point": [
+      2.5,
+      0,
+      0.6
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.00136918,
+     "indirect": 0.159374,
+     "directError": 5.27411e-7,
+     "indirectError": 0.0021194
+    },
+    {
+     "name": "ceiling z=0.6",
+     "point": [
+      2.5,
+      2.7,
+      0.6
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.166894,
+     "directError": 0,
+     "indirectError": 0.0028662
+    },
+    {
+     "name": "floor z=0.9",
+     "point": [
+      2.5,
+      0,
+      0.9
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.000407475,
+     "indirect": 0.16229,
+     "directError": 1.02685e-7,
+     "indirectError": 0.00357021
+    },
+    {
+     "name": "ceiling z=0.9",
+     "point": [
+      2.5,
+      2.7,
+      0.9
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.160547,
+     "directError": 0,
+     "indirectError": 0.00373122
+    },
+    {
+     "name": "floor z=1.17",
+     "point": [
+      2.5,
+      0,
+      1.17
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.000183667,
+     "indirect": 0.179439,
+     "directError": 3.0328e-8,
+     "indirectError": 0.00295656
+    },
+    {
+     "name": "ceiling z=1.17",
+     "point": [
+      2.5,
+      2.7,
+      1.17
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.15529,
+     "directError": 0,
+     "indirectError": 0.00238922
+    },
+    {
+     "name": "left y=0.06",
+     "point": [
+      2.5,
+      0.06,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.54187,
+     "directError": 0,
+     "indirectError": 0.0064162
+    },
+    {
+     "name": "right y=0.06",
+     "point": [
+      2.5,
+      0.06,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.284216,
+     "directError": 0,
+     "indirectError": 0.00336126
+    },
+    {
+     "name": "left y=0.2",
+     "point": [
+      2.5,
+      0.2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.206395,
+     "directError": 0,
+     "indirectError": 0.0023452
+    },
+    {
+     "name": "right y=0.2",
+     "point": [
+      2.5,
+      0.2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.299736,
+     "directError": 0,
+     "indirectError": 0.00384519
+    },
+    {
+     "name": "left y=0.6",
+     "point": [
+      2.5,
+      0.6,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.158793,
+     "directError": 0,
+     "indirectError": 0.00215453
+    },
+    {
+     "name": "right y=0.6",
+     "point": [
+      2.5,
+      0.6,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.257658,
+     "directError": 0,
+     "indirectError": 0.00332597
+    },
+    {
+     "name": "left y=1.2",
+     "point": [
+      2.5,
+      1.2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.14546,
+     "directError": 0,
+     "indirectError": 0.00315534
+    },
+    {
+     "name": "right y=1.2",
+     "point": [
+      2.5,
+      1.2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.194469,
+     "directError": 0,
+     "indirectError": 0.00292653
+    },
+    {
+     "name": "left y=2",
+     "point": [
+      2.5,
+      2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.134395,
+     "directError": 0,
+     "indirectError": 0.00241486
+    },
+    {
+     "name": "right y=2",
+     "point": [
+      2.5,
+      2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.160503,
+     "directError": 0,
+     "indirectError": 0.00241847
+    },
+    {
+     "name": "left y=2.3",
+     "point": [
+      2.5,
+      2.3,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.135909,
+     "directError": 0,
+     "indirectError": 0.00317236
+    },
+    {
+     "name": "right y=2.3",
+     "point": [
+      2.5,
+      2.3,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.150875,
+     "directError": 0,
+     "indirectError": 0.00237284
+    },
+    {
+     "name": "left y=2.5",
+     "point": [
+      2.5,
+      2.5,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.133172,
+     "directError": 0,
+     "indirectError": 0.00260982
+    },
+    {
+     "name": "right y=2.5",
+     "point": [
+      2.5,
+      2.5,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.145259,
+     "directError": 0,
+     "indirectError": 0.0032222
+    },
+    {
+     "name": "left y=2.65",
+     "point": [
+      2.5,
+      2.65,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.132889,
+     "directError": 0,
+     "indirectError": 0.00310665
+    },
+    {
+     "name": "right y=2.65",
+     "point": [
+      2.5,
+      2.65,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.141665,
+     "directError": 0,
+     "indirectError": 0.00272976
+    },
+    {
+     "name": "end0 centre",
+     "point": [
+      0,
+      1.35,
+      0.6
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.160993,
+     "directError": 0,
+     "indirectError": 0.0020367
+    },
+    {
+     "name": "floor near end",
+     "point": [
+      0.2,
+      0,
+      0.6
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.00095719,
+     "indirect": 0.167305,
+     "directError": 3.93218e-7,
+     "indirectError": 0.00333216
+    },
+    {
+     "name": "slot back",
+     "point": [
+      2.5,
+      0.0125,
+      -0.019
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 13.9791,
+     "indirect": 6.33786,
+     "directError": 0.0226009,
+     "indirectError": 0.0226341
+    },
+    {
+     "name": "slot floor",
+     "point": [
+      2.5,
+      0,
+      -0.0095
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 19.4406,
+     "indirect": 8.4005,
+     "directError": 0.019955,
+     "indirectError": 0.0178971
+    }
+   ]
+  },
+  {
+   "name": "reveal-up",
+   "scene": {
+    "length": 5,
+    "width": 1.2,
+    "height": 2.7,
+    "endWalls": "closed",
+    "reflectance": {
+     "ceiling": 0.9,
+     "walls": 0.8,
+     "floor": 0.5
+    },
+    "mounts": [
+     {
+      "id": "m1",
+      "kind": "reveal",
+      "side": "right",
+      "height": 2.4,
+      "facing": "up",
+      "start": 0,
+      "length": 5,
+      "slotHeight": 0.03,
+      "slotDepth": 0.025,
+      "setback": 0.015,
+      "aperture": 0.012,
+      "gradient": 0,
+      "tape": "A",
+      "diffuser": "opal-linear-lux",
+      "depth": 0.011,
+      "unit": "A"
+     }
+    ]
+   },
+   "paths": 2000000,
+   "probes": [
+    {
+     "name": "floor z=0.03",
+     "point": [
+      2.5,
+      0,
+      0.03
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.290262,
+     "directError": 0,
+     "indirectError": 0.00278275
+    },
+    {
+     "name": "ceiling z=0.03",
+     "point": [
+      2.5,
+      2.7,
+      0.03
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.0236934,
+     "indirect": 0.386797,
+     "directError": 0.0000034361,
+     "indirectError": 0.00335362
+    },
+    {
+     "name": "floor z=0.1",
+     "point": [
+      2.5,
+      0,
+      0.1
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.297206,
+     "directError": 0,
+     "indirectError": 0.0024139
+    },
+    {
+     "name": "ceiling z=0.1",
+     "point": [
+      2.5,
+      2.7,
+      0.1
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.0282594,
+     "indirect": 0.370184,
+     "directError": 0.000006158,
+     "indirectError": 0.00351869
+    },
+    {
+     "name": "floor z=0.3",
+     "point": [
+      2.5,
+      0,
+      0.3
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.312631,
+     "directError": 0,
+     "indirectError": 0.00356094
+    },
+    {
+     "name": "ceiling z=0.3",
+     "point": [
+      2.5,
+      2.7,
+      0.3
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.0494016,
+     "indirect": 0.37055,
+     "directError": 0.0000132096,
+     "indirectError": 0.00387212
+    },
+    {
+     "name": "floor z=0.6",
+     "point": [
+      2.5,
+      0,
+      0.6
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.317171,
+     "directError": 0,
+     "indirectError": 0.00254836
+    },
+    {
+     "name": "ceiling z=0.6",
+     "point": [
+      2.5,
+      2.7,
+      0.6
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.139392,
+     "indirect": 0.411494,
+     "directError": 0.0000487884,
+     "indirectError": 0.00501509
+    },
+    {
+     "name": "floor z=0.9",
+     "point": [
+      2.5,
+      0,
+      0.9
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.297305,
+     "directError": 0,
+     "indirectError": 0.0034358
+    },
+    {
+     "name": "ceiling z=0.9",
+     "point": [
+      2.5,
+      2.7,
+      0.9
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0.545016,
+     "indirect": 0.503842,
+     "directError": 0.000347047,
+     "indirectError": 0.00390892
+    },
+    {
+     "name": "floor z=1.17",
+     "point": [
+      2.5,
+      0,
+      1.17
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.273483,
+     "directError": 0,
+     "indirectError": 0.00270973
+    },
+    {
+     "name": "ceiling z=1.17",
+     "point": [
+      2.5,
+      2.7,
+      1.17
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.316966,
+     "directError": 0,
+     "indirectError": 0.0019218
+    },
+    {
+     "name": "left y=0.06",
+     "point": [
+      2.5,
+      0.06,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.213693,
+     "directError": 0,
+     "indirectError": 0.00231476
+    },
+    {
+     "name": "right y=0.06",
+     "point": [
+      2.5,
+      0.06,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.193162,
+     "directError": 0,
+     "indirectError": 0.00234919
+    },
+    {
+     "name": "left y=0.2",
+     "point": [
+      2.5,
+      0.2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.226316,
+     "directError": 0,
+     "indirectError": 0.00308329
+    },
+    {
+     "name": "right y=0.2",
+     "point": [
+      2.5,
+      0.2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.206528,
+     "directError": 0,
+     "indirectError": 0.00271273
+    },
+    {
+     "name": "left y=0.6",
+     "point": [
+      2.5,
+      0.6,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.259322,
+     "directError": 0,
+     "indirectError": 0.00291952
+    },
+    {
+     "name": "right y=0.6",
+     "point": [
+      2.5,
+      0.6,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.230115,
+     "directError": 0,
+     "indirectError": 0.00271634
+    },
+    {
+     "name": "left y=1.2",
+     "point": [
+      2.5,
+      1.2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.340512,
+     "directError": 0,
+     "indirectError": 0.00323907
+    },
+    {
+     "name": "right y=1.2",
+     "point": [
+      2.5,
+      1.2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.290063,
+     "directError": 0,
+     "indirectError": 0.00315241
+    },
+    {
+     "name": "left y=2",
+     "point": [
+      2.5,
+      2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.505483,
+     "directError": 0,
+     "indirectError": 0.00387254
+    },
+    {
+     "name": "right y=2",
+     "point": [
+      2.5,
+      2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.388244,
+     "directError": 0,
+     "indirectError": 0.00306867
+    },
+    {
+     "name": "left y=2.3",
+     "point": [
+      2.5,
+      2.3,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.557076,
+     "directError": 0,
+     "indirectError": 0.00629964
+    },
+    {
+     "name": "right y=2.3",
+     "point": [
+      2.5,
+      2.3,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.461141,
+     "directError": 0,
+     "indirectError": 0.00377991
+    },
+    {
+     "name": "left y=2.5",
+     "point": [
+      2.5,
+      2.5,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.032254,
+     "indirect": 0.530097,
+     "directError": 0.00000540334,
+     "indirectError": 0.0027347
+    },
+    {
+     "name": "right y=2.5",
+     "point": [
+      2.5,
+      2.5,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.52115,
+     "directError": 0,
+     "indirectError": 0.00339945
+    },
+    {
+     "name": "left y=2.65",
+     "point": [
+      2.5,
+      2.65,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0.0764179,
+     "indirect": 0.506756,
+     "directError": 0.00000984256,
+     "indirectError": 0.00515398
+    },
+    {
+     "name": "right y=2.65",
+     "point": [
+      2.5,
+      2.65,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.463511,
+     "directError": 0,
+     "indirectError": 0.00394488
+    },
+    {
+     "name": "end0 centre",
+     "point": [
+      0,
+      1.35,
+      0.6
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.323134,
+     "directError": 0,
+     "indirectError": 0.00288528
+    },
+    {
+     "name": "floor near end",
+     "point": [
+      0.2,
+      0,
+      0.6
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.253775,
+     "directError": 0,
+     "indirectError": 0.00297016
+    },
+    {
+     "name": "reveal back",
+     "point": [
+      2.5,
+      2.415,
+      1.225
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 11.7648,
+     "indirect": 7.18191,
+     "directError": 0.0230276,
+     "indirectError": 0.0191964
+    },
+    {
+     "name": "reveal top",
+     "point": [
+      2.5,
+      2.43,
+      1.2125
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 16.1757,
+     "indirect": 8.54322,
+     "directError": 0.0196155,
+     "indirectError": 0.0157986
+    }
+   ]
+  },
+  {
+   "name": "open-ends",
+   "scene": {
+    "length": 5,
+    "width": 1.2,
+    "height": 2.7,
+    "endWalls": "open",
+    "reflectance": {
+     "ceiling": 0.9,
+     "walls": 0.8,
+     "floor": 0.5
+    },
+    "mounts": [
+     {
+      "id": "m1",
+      "kind": "reveal",
+      "side": "left",
+      "height": 0.3,
+      "facing": "down",
+      "start": 0,
+      "length": 5,
+      "slotHeight": 0.03,
+      "slotDepth": 0.025,
+      "setback": 0.015,
+      "aperture": 0.012,
+      "gradient": 0,
+      "tape": "A",
+      "diffuser": "opal-linear-lux",
+      "depth": 0.011,
+      "unit": "A"
+     }
+    ]
+   },
+   "paths": 2000000,
+   "probes": [
+    {
+     "name": "floor z=0.03",
+     "point": [
+      2.5,
+      0,
+      0.03
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.152406,
+     "directError": 0,
+     "indirectError": 0.00262291
+    },
+    {
+     "name": "ceiling z=0.03",
+     "point": [
+      2.5,
+      2.7,
+      0.03
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.131334,
+     "directError": 0,
+     "indirectError": 0.00204596
+    },
+    {
+     "name": "floor z=0.1",
+     "point": [
+      2.5,
+      0,
+      0.1
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.106844,
+     "indirect": 0.265707,
+     "directError": 0.000313104,
+     "indirectError": 0.00231643
+    },
+    {
+     "name": "ceiling z=0.1",
+     "point": [
+      2.5,
+      2.7,
+      0.1
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.133061,
+     "directError": 0,
+     "indirectError": 0.00191757
+    },
+    {
+     "name": "floor z=0.3",
+     "point": [
+      2.5,
+      0,
+      0.3
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.572441,
+     "indirect": 0.337474,
+     "directError": 0.0003154,
+     "indirectError": 0.00250077
+    },
+    {
+     "name": "ceiling z=0.3",
+     "point": [
+      2.5,
+      2.7,
+      0.3
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.14487,
+     "directError": 0,
+     "indirectError": 0.00202589
+    },
+    {
+     "name": "floor z=0.6",
+     "point": [
+      2.5,
+      0,
+      0.6
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.158858,
+     "indirect": 0.281591,
+     "directError": 0.0000453314,
+     "indirectError": 0.00313414
+    },
+    {
+     "name": "ceiling z=0.6",
+     "point": [
+      2.5,
+      2.7,
+      0.6
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.154221,
+     "directError": 0,
+     "indirectError": 0.00287281
+    },
+    {
+     "name": "floor z=0.9",
+     "point": [
+      2.5,
+      0,
+      0.9
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.0578993,
+     "indirect": 0.244426,
+     "directError": 0.0000128999,
+     "indirectError": 0.00397093
+    },
+    {
+     "name": "ceiling z=0.9",
+     "point": [
+      2.5,
+      2.7,
+      0.9
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.160179,
+     "directError": 0,
+     "indirectError": 0.00205569
+    },
+    {
+     "name": "floor z=1.17",
+     "point": [
+      2.5,
+      0,
+      1.17
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.0281182,
+     "indirect": 0.2505,
+     "directError": 0.00000528134,
+     "indirectError": 0.00246021
+    },
+    {
+     "name": "ceiling z=1.17",
+     "point": [
+      2.5,
+      2.7,
+      1.17
+     ],
+     "normal": [
+      0,
+      -1,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.156501,
+     "directError": 0,
+     "indirectError": 0.00191089
+    },
+    {
+     "name": "left y=0.06",
+     "point": [
+      2.5,
+      0.06,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.2204,
+     "directError": 0,
+     "indirectError": 0.00193511
+    },
+    {
+     "name": "right y=0.06",
+     "point": [
+      2.5,
+      0.06,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0.0816757,
+     "indirect": 0.312043,
+     "directError": 0.00000987996,
+     "indirectError": 0.00335868
+    },
+    {
+     "name": "left y=0.2",
+     "point": [
+      2.5,
+      0.2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.258987,
+     "directError": 0,
+     "indirectError": 0.00323709
+    },
+    {
+     "name": "right y=0.2",
+     "point": [
+      2.5,
+      0.2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0.0416258,
+     "indirect": 0.331072,
+     "directError": 0.00000549648,
+     "indirectError": 0.00430219
+    },
+    {
+     "name": "left y=0.6",
+     "point": [
+      2.5,
+      0.6,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.211817,
+     "directError": 0,
+     "indirectError": 0.00333999
+    },
+    {
+     "name": "right y=0.6",
+     "point": [
+      2.5,
+      0.6,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.326914,
+     "directError": 0,
+     "indirectError": 0.00340499
+    },
+    {
+     "name": "left y=1.2",
+     "point": [
+      2.5,
+      1.2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.175553,
+     "directError": 0,
+     "indirectError": 0.00311681
+    },
+    {
+     "name": "right y=1.2",
+     "point": [
+      2.5,
+      1.2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.237941,
+     "directError": 0,
+     "indirectError": 0.00360729
+    },
+    {
+     "name": "left y=2",
+     "point": [
+      2.5,
+      2,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.144134,
+     "directError": 0,
+     "indirectError": 0.00226912
+    },
+    {
+     "name": "right y=2",
+     "point": [
+      2.5,
+      2,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.158074,
+     "directError": 0,
+     "indirectError": 0.00274328
+    },
+    {
+     "name": "left y=2.3",
+     "point": [
+      2.5,
+      2.3,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.134933,
+     "directError": 0,
+     "indirectError": 0.00230953
+    },
+    {
+     "name": "right y=2.3",
+     "point": [
+      2.5,
+      2.3,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.14741,
+     "directError": 0,
+     "indirectError": 0.00271573
+    },
+    {
+     "name": "left y=2.5",
+     "point": [
+      2.5,
+      2.5,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.13154,
+     "directError": 0,
+     "indirectError": 0.00234408
+    },
+    {
+     "name": "right y=2.5",
+     "point": [
+      2.5,
+      2.5,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.14376,
+     "directError": 0,
+     "indirectError": 0.00228126
+    },
+    {
+     "name": "left y=2.65",
+     "point": [
+      2.5,
+      2.65,
+      0
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "direct": 0,
+     "indirect": 0.127818,
+     "directError": 0,
+     "indirectError": 0.00216748
+    },
+    {
+     "name": "right y=2.65",
+     "point": [
+      2.5,
+      2.65,
+      1.2
+     ],
+     "normal": [
+      0,
+      0,
+      -1
+     ],
+     "direct": 0,
+     "indirect": 0.141472,
+     "directError": 0,
+     "indirectError": 0.00279883
+    },
+    {
+     "name": "end0 centre",
+     "point": [
+      0,
+      1.35,
+      0.6
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "direct": 0,
+     "indirect": 0.159255,
+     "directError": 0,
+     "indirectError": 0.00237121
+    },
+    {
+     "name": "floor near end",
+     "point": [
+      0.2,
+      0,
+      0.6
+     ],
+     "normal": [
+      0,
+      1,
+      0
+     ],
+     "direct": 0.107746,
+     "indirect": 0.162936,
+     "directError": 0.0000385706,
+     "indirectError": 0.00317145
+    }
+   ]
+  }
+ ]
+}

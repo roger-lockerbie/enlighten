@@ -55,6 +55,9 @@ export class MemoryBackend implements Backend {
   }
 }
 
+/** The light cache's keys: one per kept scene, and its index (`src/light/cache.ts`). */
+const LIGHT_KEY = /^light:[0-9a-f]{16}$|^light-index$/;
+
 export const PREFERENCES_KEY = 'preferences';
 export const HISTORY_KEY = 'history';
 export const SCRIPTS_KEY = 'scripts';
@@ -119,6 +122,22 @@ export class Store {
     const checked = check(data);
     if (!checked.ok) throw new Error(checked.error);
     await this.backend.put(key, { version, data: checked.value });
+  }
+
+  /**
+   * The backend as the light cache may use it: its own keys and no others, so the cache's code can
+   * never read or write preferences, history, scripts or set-aside records.
+   */
+  lightBackend(): Backend {
+    const b = this.backend;
+    const mine = (key: string): boolean => LIGHT_KEY.test(key);
+    const refuse = (): Promise<never> => Promise.reject(new Error('Not a light cache key.'));
+    return {
+      get: (key) => (mine(key) ? b.get(key) : refuse()),
+      put: (key, value) => (mine(key) ? b.put(key, value) : refuse()),
+      delete: (key) => (mine(key) ? b.delete(key) : refuse()),
+      keys: async () => (await b.keys()).filter(mine),
+    };
   }
 
   loadPreferences(): Promise<Loaded<Preferences>> {

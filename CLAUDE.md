@@ -75,21 +75,24 @@ Applies to docs, UI text, commit messages, PRs and comments.
 
 Use Node 26.13.1 (`.nvmrc`) and pnpm 12.18.0 through corepack. The dev server runs on 127.0.0.1:47820 and the preview on 127.0.0.1:47821, both with a strict port.
 
-| Command          | What it does                                                   |
-| ---------------- | -------------------------------------------------------------- |
-| `pnpm dev`       | Dev server with hot reload and a relaxed CSP for that only.    |
-| `pnpm build`     | Production build into `dist/`, with the meta-tag CSP fallback. |
-| `pnpm preview`   | Serves `dist/` with the full security headers.                 |
-| `pnpm start`     | Build, then preview.                                           |
-| `pnpm test`      | Unit tests (Vitest).                                           |
-| `pnpm test:prop` | Property tests (fast-check, in `*.prop.test.ts` files).        |
-| `pnpm e2e`       | Playwright in Chromium. Builds and starts the preview itself.  |
-| `pnpm coverage`  | Unit and property tests with the coverage targets.             |
-| `pnpm mutate`    | Stryker on `src/safety` and the codec. On demand, not in CI.   |
-| `pnpm golden`    | Regenerate the python-dali golden fixtures in `tests/golden/`. |
-| `pnpm lint`      | ESLint (banned sinks, pure-core boundary) and Prettier check.  |
-| `pnpm format`    | Prettier write.                                                |
-| `pnpm typecheck` | svelte-check over TypeScript and Svelte.                       |
-| `pnpm verify`    | lint, typecheck, coverage, build and e2e.                      |
+| Command           | What it does                                                     |
+| ----------------- | ---------------------------------------------------------------- |
+| `pnpm dev`        | Dev server with hot reload and a relaxed CSP for that only.      |
+| `pnpm build`      | Production build into `dist/`, with the meta-tag CSP fallback.   |
+| `pnpm preview`    | Serves `dist/` with the full security headers.                   |
+| `pnpm start`      | Build, then preview.                                             |
+| `pnpm test`       | Unit tests (Vitest).                                             |
+| `pnpm test:prop`  | Property tests (fast-check, in `*.prop.test.ts` files).          |
+| `pnpm e2e`        | Playwright in Chromium. Builds and starts the preview itself.    |
+| `pnpm coverage`   | Unit and property tests with the coverage targets, fixed seed.   |
+| `pnpm mutate`     | Stryker on `src/safety` and the codec. On demand, not in CI.     |
+| `pnpm golden`     | Regenerate the python-dali golden fixtures in `tests/golden/`.   |
+| `pnpm reference`  | Regenerate the light core's reference fixtures. About 6 minutes. |
+| `pnpm perf:solve` | Time the radiosity solve in Node. By hand, not in CI.            |
+| `pnpm perf:frame` | Time the visualiser's frame in a headed browser. By hand.        |
+| `pnpm lint`       | ESLint (banned sinks, pure-core boundary) and Prettier check.    |
+| `pnpm format`     | Prettier write.                                                  |
+| `pnpm typecheck`  | svelte-check over TypeScript and Svelte.                         |
+| `pnpm verify`     | lint, typecheck, coverage, build and e2e.                        |
 
 First time on a machine: `pnpm install --frozen-lockfile`, then `pnpm exec playwright install chromium`. Node 26 has no bundled corepack, so run `npm install --global corepack` and `corepack enable` first.

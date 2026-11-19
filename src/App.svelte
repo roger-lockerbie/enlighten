@@ -73,6 +73,11 @@
 
   const page = $derived<Page>(app?.prefs.page ?? 'playground');
 
+  // The visualiser and its light core load when the page is first opened, so the rest of the app
+  // does not pay for them (ADR 0002).
+  let visualiser: Promise<typeof import('./ui/pages/Visualiser.svelte')> | undefined;
+  const loadVisualiser = () => (visualiser ??= import('./ui/pages/Visualiser.svelte'));
+
   function setPage(p: Page): void {
     app?.update({ page: p });
   }
@@ -160,6 +165,7 @@
     monitor: 'Bus monitor',
     settings: 'Settings',
     scripts: 'Scripts',
+    visualiser: 'Visualiser',
   };
 </script>
 
@@ -199,6 +205,14 @@
         <BusMonitor {app} />
       {:else if page === 'scripts'}
         <Scripts {app} />
+      {:else if page === 'visualiser'}
+        {#await loadVisualiser()}
+          <p class="muted">Loading the visualiser.</p>
+        {:then loaded}
+          <loaded.default {app} />
+        {:catch}
+          <p class="muted" role="alert">The visualiser could not be loaded. Reload the page.</p>
+        {/await}
       {:else}
         <Settings {app} />
       {/if}

@@ -7,4 +7,5 @@ export const RAIL: readonly { readonly page: Page; readonly label: string }[] = 
   { page: 'monitor', label: 'Bus monitor' },
   { page: 'settings', label: 'Settings' },
   { page: 'scripts', label: 'Scripts' },
+  { page: 'visualiser', label: 'Visualiser' },
 ];

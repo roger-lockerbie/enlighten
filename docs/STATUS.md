@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 5 are merged. Stage 6 (console and scripts) is on `stage-6-console`, on Opus by the owner's choice (the plan said Sonnet). The stage is closed and its PR is open for review.
+Stages 0 to 6 are merged. Stage 7 (visualiser engine: light and colour) is on `stage-7-visualiser`, on Fable as planned. The rate guard stage the owner chose on 2026-11-18 has not run: Stage 7 ran beside it and changed nothing in `src/safety`, `src/sim`, `src/bus` or `src/dali`.
 
 ## Done in Stage 0
 
@@ -138,7 +138,7 @@ Open, for the owner or later stages:
 - three.js waits for Stage 7. `e2e/bundle.spec.ts` checks that the entry chunk stays free of lazy chunks and under 250 kB.
 - S4-R9 (the hardware shadow assumes automatic activation is on) is unchanged. Apply no longer relies on it.
 
-## Stage 6 (console and scripts), in review
+## Stage 6 (console and scripts), merged
 
 Branch `stage-6-console`. ADR 0014 records what was built and the owner's five planning decisions. What is in it:
 
@@ -176,6 +176,45 @@ Open, for the owner or later stages:
 - `pnpm mutate` on the new `src/safety/rate` code, and the 57 mutants from Stage 5 that only the old checker killed.
 - The hardware-day list in `docs/research` gains nothing from this stage.
 
+## Stage 7 (visualiser engine: light and colour), in review
+
+Branch `stage-7-visualiser`. ADR 0017 records what was built, the choices ADR 0008 left open, and three differences from the approved plan. What is in it:
+
+- `src/light`, pure: the scene and its validator, geometry with portal visibility, the edge integral for direct light, the mesh, form factors and solve, the lightmap, tape and cover data, the frame, the probe, the camera, the cache checks and the light worker's protocol. `src/light/colour` holds the colour pipeline.
+- `src/workers/light.worker.ts`, and the second worker URL in the policy file.
+- `src/ui/visualiser`: the three.js renderer and its shaders, the solver manager and the drive mapping. `src/ui/pages/Visualiser.svelte` is the page, sixth in the rail (Alt-6).
+- `src/store`: preferences version 3 and `light.ts`, the cache's store.
+- `tools/reference` (the reference path tracer and `pnpm reference`), `tools/perf` (`pnpm perf:solve`) and `e2e/perf` (`pnpm perf:frame`).
+- three.js 0.187.0 is installed. The entry chunk is 250 kB, with three.js and the light core in lazy chunks.
+
+Stage 7 shows one fixed hallway from one fixed camera: tape A in a skirting slot on the left and tape B in a flush channel on the right. Stage 8 adds the editors, the cameras and the A/B view.
+
+Measured on an Apple M1 Pro:
+
+- Frame: about 3.1 ms with six mounts, all lit, at 1440 by 900 in steady state, against 4 ms. A single frame drawn from an idle GPU takes 5 to 8 ms.
+- Solve: 0.65 s per mount with six mounts (4,348 patches) and 0.73 s for the default scene, against 2 s per mount.
+- Against the reference path tracer: direct light within 1% at all 124 points. Indirect light within 5% at 122, with one corner point 8% high and one shadow-edge point 21% high.
+
+Stage close:
+
+- `pnpm verify` passes: lint, the typecheck, the unit and property tests with coverage, the build, and both e2e configs.
+- `security-reviewer` passed the stage with follow-ups (S7-M1 and S7-L1 to S7-L5 in `docs/SECURITY_FINDINGS.md`), all fixed. `dali-reviewer` did not run: nothing in `src/dali`, `src/sim`, `src/bus` or `src/safety` changed.
+- `pnpm mutate` was not run: it covers `src/safety` and the codec, which this stage did not touch.
+- V-ui baselines were rewritten: the rail has a new entry and there is a new page.
+- The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove Chromium only.
+
+Known gaps, all in ADR 0017:
+
+- No glossy floor term, no tinted surfaces, and tape emission is even with angle.
+- Tape and cover data are placeholders. Every cover's haze is assumed.
+- The view settings are not in workspace files yet.
+- Bounced light within about 50 mm of an opening's shadow edge is smoothed over one 12.5 mm patch.
+- The frame budget is met with a thin margin.
+
 ## Next
 
-Review and merge the Stage 6 PR. Then the rate guard stage the owner chose on 2026-11-18 (S6-P13, S6-D18-1 to S6-D18-5, S6-P14 to S6-P16 and S5-P1), which needs a row in `docs/STAGES.md` and a model, and Stage 7 (visualiser engine: light and colour) on Fable, in plan mode.
+Review and merge the Stage 7 PR. Then, in either order:
+
+- The rate guard stage the owner chose on 2026-11-18 (S6-P13, S6-D18-1 to S6-D18-5, S6-P14 to S6-P16 and S5-P1), which needs a row in `docs/STAGES.md` and a model.
+- The branch coverage target on `src/safety` (95%) failed two CI runs of four on 2026-11-18 and 2026-11-19 at 94.96%. The property tests had no fixed seed, so the branches they reached in `src/safety/rate` changed from run to run. `pnpm coverage` now sets `PROP_SEED=1` and its figures are the same on every run. The margin over 95% is small, so the rate guard stage should add unit tests for the uncovered branches in `legs.ts` and `trace.ts`.
+- Stage 8 (hallway, mounts and tapes) on Opus, in plan mode.

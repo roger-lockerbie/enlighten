@@ -16,6 +16,7 @@
     "@stryker-mutator/vitest-runner": "10.1.1",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@types/node": "26.6.6",
+    "@types/three": "0.187.0",
     "@vitest/coverage-v8": "5.1.0",
     "eslint": "10.14.0",
     "eslint-plugin-svelte": "3.24.0",
@@ -41,15 +42,21 @@
     "e2e": "playwright test && playwright test -c playwright.server.config.ts",
     "e2e:server": "playwright test -c playwright.server.config.ts",
     "e2e:visual": "playwright test -c playwright.visual.config.ts",
+    "perf:frame": "playwright test -c playwright.perf.config.ts",
+    "perf:solve": "node tools/perf/solve.ts",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "verify": "pnpm lint && pnpm typecheck && pnpm coverage && pnpm build && pnpm e2e",
     "golden": "tools/golden/.venv/bin/python -I tools/golden/generate.py",
+    "reference": "REFERENCE_PATHS=2000000 node tools/reference/trace.ts",
     "server": "server/.venv/bin/python -m server",
     "server:demo": "pnpm build && server/.venv/bin/python -m server --demo",
     "test:server": "server/.venv/bin/python -m pytest server -q",
-    "coverage": "vitest run --coverage",
+    "coverage": "PROP_SEED=1 vitest run --coverage",
     "mutate": "PROP_RUNS=5 stryker run"
+  },
+  "dependencies": {
+    "three": "0.187.0"
   }
 }

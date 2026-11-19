@@ -38,7 +38,11 @@
       }}>Hide</button
     >
   </header>
-  {#if page !== 'playground'}
+  {#if page === 'visualiser'}
+    <p class="muted">
+      The hallway and its mounts are fixed in this version. Their editors come with the next stage.
+    </p>
+  {:else if page !== 'playground'}
     <p class="muted">Select a device on the Playground to see its stored values here.</p>
   {:else if device === undefined}
     <p class="muted">No device selected.</p>

@@ -19,5 +19,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "config", "tests", "e2e", "*.ts", "*.js"]
+  "include": ["src", "config", "tests", "e2e", "tools/reference", "tools/perf", "*.ts", "*.js"]
 }

@@ -5,7 +5,14 @@
 import { expect, test, type Page } from '@playwright/test';
 import { goTo, noProblems, openApp, type PageName } from './app.ts';
 
-const PAGES: PageName[] = ['Playground', 'Devices', 'Bus monitor', 'Settings', 'Scripts'];
+const PAGES: PageName[] = [
+  'Playground',
+  'Devices',
+  'Bus monitor',
+  'Settings',
+  'Scripts',
+  'Visualiser',
+];
 const CONTROLS = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Controls a person can reach: visible or visually hidden for screen readers, and enabled. */

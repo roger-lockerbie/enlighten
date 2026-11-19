@@ -2,7 +2,7 @@
 
 Enlighten is a browser app for designing and testing DALI lighting on a two-tape test bench. It will run a simulator and a rendered hallway, drive the real tapes through a hasseb USB DALI Master, or do both at once.
 
-The build is in stages. Stage 4 has the DALI core, the simulator, the safety governor, the bus worker, and a small hardware server with a fake hasseb, behind an interim page. See `docs/BRIEF.md` for the goal and `docs/STAGES.md` for the build plan. `docs/STATUS.md` says where the build is up to.
+The build is in stages. Stage 7 has the DALI core, the simulator, the safety governor, the hardware server with a fake hasseb, the app shell with the playground, console and scripts, and a first view of the rendered hallway. See `docs/BRIEF.md` for the goal and `docs/STAGES.md` for the build plan. `docs/STATUS.md` says where the build is up to.
 
 ## Run it
 

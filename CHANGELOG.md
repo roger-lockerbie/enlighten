@@ -50,6 +50,15 @@ All notable changes to this project are recorded here. The format follows Keep a
 - U-console, U-script, P-history, P-parser, P-ceiling for console lines and scripts, E-console, E-keys, E-script, a script that tries to raise the ceiling, and panic mid-script.
 - ADR 0014: the console and scripts as built.
 
+- Stage 7 light core in `src/light`: the scene as data with its validator; faces, openings and portal visibility; Lambert's edge integral for direct light, clipped by openings; graded meshes; form factors with closed rows, the radiosity solve and the lightmap; tape and cover data with the basis of every value; the per-frame colours; the probe; and the camera.
+- The colour pipeline in `src/light/colour`: XYZ, the black-body locus with colour temperature and Duv, white balance, gamut mapping at held luminance, fixed exposure with a tone curve that keeps hue, and false colour.
+- The light worker, its checked protocol, and a cache of solved light for the four scenes used most recently.
+- The Visualiser page (Alt-6): the default hallway drawn with three.js in its own lazy chunk, direct light per pixel and the lightmap summed on the GPU, with exposure presets and a manual setting, white balance, false colour with a legend, a probe by pointer or arrow keys, and Display P3 where the screen has it.
+- Preferences version 3: exposure, white balance and the false-colour view, with its migration.
+- A reference path tracer (`pnpm reference`) that writes fixtures for the light core's tests, and timing scripts: `pnpm perf:solve` and `pnpm perf:frame`.
+- U-light, U-colour, P-light, G-light, E-visualiser with a check of the shader's pixels against the pure core, four golden images of the hallway, and E-csp over every page and both workers.
+- ADR 0017: the visualiser engine as built.
+
 ### Changed
 
 - The plan for Stages 3, 4, 5 and 12 follows the design: the governor as ADR 0004 sets it out, a Python hardware server before any WebHID transport, and the build settings the spike proved.
@@ -67,6 +76,9 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The DALI name for the temporary colour temperature is python-dali's `set-temporary-colour-temperature`. The spec's `set-temporary-colour-temperature-tc` still works. A name shared with a general command goes to the general command, `dt6-` or `dt8-` reaches a device type one, and a name only device type commands share needs the prefix.
 - The engine's failed results say whether they were refused, dropped or a fault, so the console prints a fault as a fault.
 - Several IndexedDB records share one object store, each under its own key and schema version (ADR 0014).
+- The bench preview on the Playground uses the visualiser's tape data and colour path, on one scale where tape A at full is white.
+- three.js 0.187.0 is installed as the app's one runtime dependency, with `@types/three` for development.
+- `e2e/bundle.spec.ts` allows the entry chunk its two lazy chunks and holds three.js to the renderer's.
 
 ### Fixed
 
@@ -89,5 +101,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 - S6-P2: the trace checker dated hard steps the same way, which gave a false alarm on the console property, and its room sum took 18 minutes on one long run. Both are fixed.
 
 ### Security
+
+- Stage 7 review: the frame-time measurement draws off screen in short runs and cannot hold up Panic or change the picture; the light cache reaches only its own keys in the store; a solved response is used only when its lightmap matches the page's layout.
 
 - qs, a transitive dependency of Stryker, is overridden to 6.16.2 to clear four advisories. The two advisories left open (minimatch, deepmerge) are explained in `docs/DEPENDENCIES.md`.

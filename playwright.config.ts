@@ -3,14 +3,16 @@ import { HOST, PREVIEW_PORT } from './config/security.ts';
 
 export default defineConfig({
   testDir: 'e2e',
-  // The server tests and V-ui have their own configs.
-  testIgnore: ['server/**', 'visual/**'],
+  // The server tests, V-ui and Perf-frame have their own configs.
+  testIgnore: ['server/**', 'visual/**', 'perf/**'],
   fullyParallel: true,
   // The simulated bus runs at DALI speed, so the scan at start takes about 15 s.
   timeout: 90_000,
   forbidOnly: !!process.env['CI'],
   retries: 0,
   reporter: process.env['CI'] ? [['list'], ['html', { open: 'never' }]] : 'list',
+  // V-hallway's pictures are drawn in software, so one set of baselines serves every platform.
+  snapshotPathTemplate: '{testDir}/{testFileName}-snapshots/{arg}{ext}',
   use: {
     baseURL: `http://${HOST}:${String(PREVIEW_PORT)}`,
     trace: 'retain-on-failure',

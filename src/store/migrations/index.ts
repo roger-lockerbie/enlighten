@@ -4,9 +4,10 @@
  */
 import type { Migration } from '../migrate.ts';
 import { preferencesTo2 } from './preferences-2.ts';
+import { preferencesTo3 } from './preferences-3.ts';
 import { workspaceTo2 } from './workspace-2.ts';
 
-export const PREFERENCES_MIGRATIONS: readonly Migration[] = [preferencesTo2];
+export const PREFERENCES_MIGRATIONS: readonly Migration[] = [preferencesTo2, preferencesTo3];
 export const WORKSPACE_MIGRATIONS: readonly Migration[] = [workspaceTo2];
 /** History and scripts start at version 1. */
 export const HISTORY_MIGRATIONS: readonly Migration[] = [];

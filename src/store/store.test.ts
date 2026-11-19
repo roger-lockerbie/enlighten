@@ -151,7 +151,7 @@ describe('the store', () => {
       bench: { B: { presentation: 'tc', settings: { maxLowerPullsDown: false } } },
     };
     await store.savePreferences(p);
-    expect(b.map.get('preferences')).toEqual({ version: 2, data: p });
+    expect(b.map.get('preferences')).toEqual({ version: 3, data: p });
     expect(await store.loadPreferences()).toEqual({ value: p });
   });
 
@@ -307,6 +307,14 @@ describe('Stage 6 records (ADR 0014)', () => {
     bench: {},
   };
 
+  const visualiserDefaults = {
+    exposure: 'evening',
+    exposureEv: 4,
+    whiteBalance: 'scene',
+    whiteBalanceKelvin: 4000,
+    falseColour: 'off',
+  };
+
   it('migrates version 1 preferences, with the history settings at their defaults', async () => {
     const b = new MemoryBackend();
     await b.put('preferences', { version: 1, data: v1Preferences });
@@ -317,7 +325,51 @@ describe('Stage 6 records (ADR 0014)', () => {
       historyLength: 1000,
       historyIgnoreSpace: false,
       verifyMode: true,
+      ...visualiserDefaults,
     });
+  });
+
+  it('migrates version 2 preferences, with the visualiser settings at their defaults', async () => {
+    // The shape Stage 6 stored.
+    const v2Preferences = {
+      ...v1Preferences,
+      historyLength: 500,
+      historyIgnoreSpace: true,
+      verifyMode: false,
+    };
+    const b = new MemoryBackend();
+    await b.put('preferences', { version: 2, data: v2Preferences });
+    const r = await new Store(b, stamp).loadPreferences();
+    expect(r.problem).toBeUndefined();
+    expect(r.value).toEqual({ ...v2Preferences, ...visualiserDefaults });
+    expect(migrate('text', 2, 3, [{ to: 3, run: (d) => d }])).toEqual({ ok: true, value: 'text' });
+  });
+
+  it('refuses visualiser settings out of range', async () => {
+    const store = new Store(new MemoryBackend(), stamp);
+    for (const bad of [
+      { exposure: 'auto' },
+      { exposureEv: 40 },
+      { exposureEv: Number.NaN },
+      { whiteBalance: 'tungsten' },
+      { whiteBalanceKelvin: 500 },
+      { whiteBalanceKelvin: 3000.5 },
+      { falseColour: 'on' },
+    ]) {
+      await expect(
+        store.savePreferences({ ...DEFAULT_PREFERENCES, ...bad } as Preferences),
+      ).rejects.toThrow();
+    }
+    await store.savePreferences({
+      ...DEFAULT_PREFERENCES,
+      page: 'visualiser',
+      exposure: 'manual',
+      exposureEv: 2.5,
+      whiteBalance: 'kelvin',
+      whiteBalanceKelvin: 3000,
+      falseColour: 'luminance',
+    });
+    expect((await store.loadPreferences()).value.exposureEv).toBe(2.5);
   });
 
   it('stores history, merges what another tab added, and keeps the limit', async () => {

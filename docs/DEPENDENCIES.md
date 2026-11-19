@@ -1,12 +1,12 @@
 # Dependencies
 
-Each dependency is justified here with its licence. Add a runtime dependency only with the owner's approval. The app has no runtime dependencies installed yet: it ships only its own code and Svelte's compiled output. The hardware server has three, installed since Stage 4.
+Each dependency is justified here with its licence. Add a runtime dependency only with the owner's approval. The app has one runtime dependency, three.js, installed in Stage 7. Beyond that it ships only its own code and Svelte's compiled output. The hardware server has three, installed since Stage 4.
 
-## Approved, not yet installed
+## Installed: the app's run-time dependency
 
-| Package | Version | Licence | Where            | Why                                                                                                 | Approved                            |
-| ------- | ------- | ------- | ---------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| three   | 0.187.0 | MIT     | The app, Stage 7 | WebGL renderer for the visualiser. Core only, named imports, no addons. No dependencies of its own. | The brief's default stack, ADR 0002 |
+| Package | Version | Licence | Where                                        | Why                                                                                                 | Approved                            |
+| ------- | ------- | ------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| three   | 0.187.0 | MIT     | The app, in a lazily loaded chunk of its own | WebGL renderer for the visualiser. Core only, named imports, no addons. No dependencies of its own. | The brief's default stack, ADR 0002 |
 
 ## Installed: the hardware server's run-time dependencies
 
@@ -52,8 +52,11 @@ Assets, not packages, in `src/assets/fonts/` with their licence texts and SHA-25
 | @vitest/coverage-v8            | 5.1.0   | MIT        | Line and branch coverage for `pnpm coverage`, against the targets in the test plan.   |
 | @stryker-mutator/core          | 10.1.1  | Apache-2.0 | Mutation testing on `src/safety` and the codec (`pnpm mutate`). On demand, not in CI. |
 | @stryker-mutator/vitest-runner | 10.1.1  | Apache-2.0 | Runs Stryker's mutants through Vitest.                                                |
+| @types/three                   | 0.187.0 | MIT        | Types for three.js, which ships none of its own.                                      |
 
 Versions are pinned exactly in `package.json`, and `pnpm-lock.yaml` is committed.
+
+`@types/three` depends on six packages that exist to type three.js addons: `@dimforge/rapier3d-compat` 0.12.0 (Apache-2.0), `@tweenjs/tween.js` 23.1.3 (MIT), `@types/stats.js` 0.17.4 (MIT), `@types/webxr` 0.5.24 (MIT), `fflate` 0.8.3 (MIT) and `meshoptimizer` 1.1.1 (MIT). The app uses no addons, imports none of these, and none reaches `dist/`. They sit in `node_modules` with their install scripts blocked like every other package. The way to drop them is to write our own declarations for the dozen three.js classes the renderer uses.
 
 ## Python: the hardware server
 

@@ -101,6 +101,14 @@ export const int =
       ? ok(x)
       : fail(`${where(path)}: a whole number from ${String(min)} to ${String(max)}.`);
 
+/** A finite number in a range, whole or not. */
+export const num =
+  (min: number, max: number): Schema<number> =>
+  (x, path) =>
+    typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max
+      ? ok(x)
+      : fail(`${where(path)}: a number from ${String(min)} to ${String(max)}.`);
+
 export const bool: Schema<boolean> = (x, path) =>
   typeof x === 'boolean' ? ok(x) : fail(`${where(path)}: true or false.`);
 

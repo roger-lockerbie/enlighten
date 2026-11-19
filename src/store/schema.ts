@@ -1,9 +1,12 @@
 /**
  * What is stored and what a workspace file holds (ADR 0009, SPEC section 8). Version 1 of the
  * workspace carries the ceiling, preferences and devices. Version 2 adds scripts and the console's
- * history settings (ADR 0014). Later stages add their keys with a new version and a migration.
+ * history settings (ADR 0014). Preferences version 3 adds the visualiser's exposure, white balance
+ * and false-colour view (ADR 0017). Later stages add their keys with a new version and a migration.
  */
 import { DEFAULT_HISTORY, MAX_LINE } from '../console/history.ts';
+import { ADAPT_MAX_K, ADAPT_MIN_K } from '../light/colour/adapt.ts';
+import { EV_MAX, EV_MIN, PRESET_EV } from '../light/colour/exposure.ts';
 import { DEFAULT_CEILING_ARC } from '../safety/governor.ts';
 import { BUILTIN_SCRIPTS } from '../script/builtin.ts';
 import { MAX_BYTES, MAX_LINES, scriptNameProblem } from '../script/parse.ts';
@@ -13,6 +16,7 @@ import {
   bool,
   custom,
   int,
+  num,
   object,
   oneOf,
   opt,
@@ -28,7 +32,14 @@ import {
 /** Names are at most 60 characters (SPEC section 8). */
 export const MAX_NAME = 60;
 
-export const PAGES = ['playground', 'devices', 'monitor', 'settings', 'scripts'] as const;
+export const PAGES = [
+  'playground',
+  'devices',
+  'monitor',
+  'settings',
+  'scripts',
+  'visualiser',
+] as const;
 export type Page = (typeof PAGES)[number];
 
 const unitSetup: Schema<UnitSetup> = custom(parseUnitSetup);
@@ -41,7 +52,11 @@ export const DRAWER_MAX = 800;
 export const HISTORY_MIN = 100;
 export const HISTORY_MAX = 10_000;
 
-const preferencesV2 = object({
+export const EXPOSURES = ['night', 'evening', 'day', 'manual'] as const;
+export const BALANCES = ['scene', 'daylight', 'kelvin'] as const;
+export const FALSE_VIEWS = ['off', 'illuminance', 'luminance'] as const;
+
+const preferencesV3 = object({
   ceilingArc: req(int(1, 254)),
   playgroundMode: req(oneOf('live', 'commit')),
   page: req(oneOf(...PAGES)),
@@ -57,11 +72,18 @@ const preferencesV2 = object({
   historyIgnoreSpace: req(bool),
   /** Show an expanded history line for Enter before it runs, as zsh's HIST_VERIFY. */
   verifyMode: req(bool),
+  /** The visualiser's exposure: a preset, or the manual EV100 below (ADR 0008). */
+  exposure: req(oneOf(...EXPOSURES)),
+  exposureEv: req(num(EV_MIN, EV_MAX)),
+  /** White balance: adapted to the scene, daylight, or the colour temperature below. */
+  whiteBalance: req(oneOf(...BALANCES)),
+  whiteBalanceKelvin: req(int(ADAPT_MIN_K, ADAPT_MAX_K)),
+  falseColour: req(oneOf(...FALSE_VIEWS)),
 });
 
-export type Preferences = Extract<ReturnType<typeof preferencesV2>, { ok: true }>['value'];
+export type Preferences = Extract<ReturnType<typeof preferencesV3>, { ok: true }>['value'];
 
-export const PREFERENCES_VERSION = 2;
+export const PREFERENCES_VERSION = 3;
 
 export const DEFAULT_PREFERENCES: Preferences = {
   ceilingArc: DEFAULT_CEILING_ARC,
@@ -76,10 +98,15 @@ export const DEFAULT_PREFERENCES: Preferences = {
   historyLength: DEFAULT_HISTORY,
   historyIgnoreSpace: false,
   verifyMode: true,
+  exposure: 'evening',
+  exposureEv: PRESET_EV.evening,
+  whiteBalance: 'scene',
+  whiteBalanceKelvin: 4000,
+  falseColour: 'off',
 };
 
 export function checkPreferences(x: unknown): Result<Preferences> {
-  return preferencesV2(x, '');
+  return preferencesV3(x, '');
 }
 
 // -------------------------------------------------------------------------------------------------
