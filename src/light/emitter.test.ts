@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cct, locusXy, xyzToXy } from './colour/index.ts';
 import { DIFFUSERS, RIPPLE_SAMPLES, contrast, ripple } from './diffuser.ts';
-import { TAPES, channelDrives, channelFor, emitted } from './emitter.ts';
+import { TAPES, channelDrives, channelFor, emitted, undriven } from './emitter.ts';
 import type { Drive } from './emitter.ts';
 import { buildFrame, rippleTables, roomLight, shade } from './frame.ts';
 import { buildGeometry } from './geometry.ts';
@@ -47,6 +47,13 @@ describe('tape profiles', () => {
     expect(channelFor('W')).toBe('WW');
     expect(channelFor('mono')).toBe('WW');
     expect(channelFor('unused')).toBeUndefined();
+  });
+
+  it('names the channels of a tape that a driver does not feed', () => {
+    expect(undriven(tcDrive(0, 0), 'A')).toEqual([]);
+    expect(undriven(tcDrive(0, 0), 'B')).toEqual(['R', 'G', 'B']);
+    expect(undriven(rgbDrive(0, 0, 0, 0, 0), 'A')).toEqual([]);
+    expect(undriven({ terminals: [0], labels: ['unused'] }, 'COB')).toEqual(['WW', 'CW']);
   });
 
   it('reads the drive on each channel, averaging terminals that carry the same colour', () => {

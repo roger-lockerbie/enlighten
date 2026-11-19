@@ -364,6 +364,16 @@ export class HallwayRenderer {
     this.schedule();
   }
 
+  /**
+   * Move the camera. Only a person moves it: the picture has no motion of its own (SPEC S6.3).
+   * The drawing buffer keeps its size, so nothing is cleared before the next draw.
+   */
+  setCamera(view: Camera): void {
+    aim(this.camera, view);
+    this.camera.updateProjectionMatrix();
+    this.schedule();
+  }
+
   /** Put a solved response's layers in the lightmap, or clear it while a solve runs. */
   setResponse(response: Response | undefined): void {
     const u = this.uniforms;

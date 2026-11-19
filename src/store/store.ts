@@ -61,6 +61,8 @@ const LIGHT_KEY = /^light:[0-9a-f]{16}$|^light-index$/;
 export const PREFERENCES_KEY = 'preferences';
 export const HISTORY_KEY = 'history';
 export const SCRIPTS_KEY = 'scripts';
+export const VISUALISER_KEY = 'visualiser';
+export const VISUALISER_VERSION = 1;
 export const SET_ASIDE_PREFIX = 'set-aside:';
 
 export interface Loaded<T> {
@@ -195,6 +197,18 @@ export class Store {
 
   saveScripts(scripts: readonly StoredScript[]): Promise<void> {
     return this.save(SCRIPTS_KEY, SCRIPTS_VERSION, checkScripts, { scripts });
+  }
+
+  /**
+   * The Visualiser's set-ups and view (ADR 0018). The check comes from the light core, which only
+   * the Visualiser and a workspace import or export load, so this module does not carry it.
+   */
+  loadVisualiser<T>(check: (x: unknown) => Result<T>, defaults: T): Promise<Loaded<T>> {
+    return this.load(VISUALISER_KEY, 'visualiser set-ups', VISUALISER_VERSION, [], check, defaults);
+  }
+
+  saveVisualiser<T>(check: (x: unknown) => Result<T>, data: T): Promise<void> {
+    return this.save(VISUALISER_KEY, VISUALISER_VERSION, check, data);
   }
 
   async setAside(): Promise<string[]> {

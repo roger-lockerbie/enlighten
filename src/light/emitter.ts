@@ -229,3 +229,9 @@ export function emitted(drive: Drive | undefined, tapeId: TapeId, diffuserId: Di
   const xyz = channels.reduce<Vec3>((a, c) => [a[0] + c[0], a[1] + c[1], a[2] + c[2]], [0, 0, 0]);
   return { channels, xyz };
 }
+
+/** The tape's channels that no terminal of the driver feeds, in the tape's order. */
+export function undriven(drive: Drive, tapeId: TapeId): ChannelId[] {
+  const fed = new Set(drive.labels.map((l) => channelFor(l)));
+  return TAPES[tapeId].channels.map((c) => c.id).filter((id) => !fed.has(id));
+}

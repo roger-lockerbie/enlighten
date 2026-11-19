@@ -1,6 +1,7 @@
 <!--
   The inspector (docs/UI.md section 2): detail for what is selected. On the Playground, the selected
-  device's stored values as read back, and its safety profile. It can be collapsed.
+  device's stored values as read back, and its safety profile. On the Visualiser, the selected
+  mount's editor, which that page supplies. It can be collapsed.
 -->
 <script lang="ts">
   import type { Page } from '../../store/schema.ts';
@@ -39,9 +40,11 @@
     >
   </header>
   {#if page === 'visualiser'}
-    <p class="muted">
-      The hallway and its mounts are fixed in this version. Their editors come with the next stage.
-    </p>
+    {#if app.inspector !== undefined}
+      {@render app.inspector()}
+    {:else}
+      <p class="muted">Select a mount on the Visualiser to change it here.</p>
+    {/if}
   {:else if page !== 'playground'}
     <p class="muted">Select a device on the Playground to see its stored values here.</p>
   {:else if device === undefined}
