@@ -9,7 +9,7 @@ import { mapToGamut } from './colour/gamut.ts';
 import type { Display, Vec3, Xy } from './colour/xyz.ts';
 import { displayMatrix, encodeSrgb, mul } from './colour/xyz.ts';
 import { DIFFUSERS, ripple } from './diffuser.ts';
-import type { Drive } from './emitter.ts';
+import type { Drive, Emitted } from './emitter.ts';
 import { TAPES, emitted } from './emitter.ts';
 import type { Scene } from './scene.ts';
 
@@ -36,22 +36,47 @@ export interface Frame {
 export interface FrameSettings {
   readonly display: Display;
   readonly balance: WhiteBalance;
+  /**
+   * Light from a set-up shown beside this one. The A/B view balances both pictures to one white
+   * (ADR 0008), so "adapted to the scene" adapts to the light of both together.
+   */
+  readonly alongside?: Vec3;
 }
 
-/** The frame for a scene and what each bound unit's driver is putting out. */
-export function buildFrame(
-  scene: Scene,
-  drives: ReadonlyMap<string, Drive>,
-  settings: FrameSettings,
-): Frame {
-  const raw = scene.mounts.map((m) => emitted(drives.get(m.unit), m.tape, m.diffuser));
-  // The room's light as a whole, for "adapted to the scene": each mount by its length.
-  let total: Vec3 = [0, 0, 0];
+/** What each mount gives out per metre, from the driver at its address. */
+function emissions(scene: Scene, drives: ReadonlyMap<number, Drive>): Emitted[] {
+  return scene.mounts.map((m) => emitted(drives.get(m.address), m.tape, m.diffuser));
+}
+
+/** The light of a scene as a whole, XYZ with Y in lumens: each mount by its length. */
+export function roomLight(scene: Scene, drives: ReadonlyMap<number, Drive>): Vec3 {
+  return total(scene, emissions(scene, drives));
+}
+
+function total(scene: Scene, raw: readonly Emitted[]): Vec3 {
+  let sum: Vec3 = [0, 0, 0];
   scene.mounts.forEach((m, i) => {
     const e = raw[i]?.xyz ?? [0, 0, 0];
-    total = [total[0] + e[0] * m.length, total[1] + e[1] * m.length, total[2] + e[2] * m.length];
+    sum = [sum[0] + e[0] * m.length, sum[1] + e[1] * m.length, sum[2] + e[2] * m.length];
   });
-  const white = adaptedWhite(settings.balance, total);
+  return sum;
+}
+
+/** The frame for a scene and what the driver at each mount's address is putting out. */
+export function buildFrame(
+  scene: Scene,
+  drives: ReadonlyMap<number, Drive>,
+  settings: FrameSettings,
+): Frame {
+  const raw = emissions(scene, drives);
+  // The room's light as a whole, for "adapted to the scene".
+  const own = total(scene, raw);
+  const other = settings.alongside ?? [0, 0, 0];
+  const white = adaptedWhite(settings.balance, [
+    own[0] + other[0],
+    own[1] + other[1],
+    own[2] + other[2],
+  ]);
   const adapt = adaptation(white);
   const mounts = raw.map((e): MountLight => {
     let desaturated = false;

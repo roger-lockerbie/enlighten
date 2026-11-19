@@ -212,8 +212,8 @@
     const lit = buildFrame(
       six,
       new Map([
-        ['A', full],
-        ['B', full],
+        [0, full],
+        [1, full],
       ]),
       { display, balance },
     );
@@ -389,7 +389,7 @@
             : m.kind === 'channel'
               ? 'flush channel'
               : 'reveal'}
-          on the {m.side} wall, following driver {m.unit}:
+          on the {m.side} wall, following address {m.address}:
           <span data-testid={`mount-${String(i)}-flux`}>{out[1].toFixed(2)}</span> lm/m now{#if sum > 0},
             x <span data-testid={`mount-${String(i)}-x`}>{(out[0] / sum).toFixed(5)}</span>
             y <span data-testid={`mount-${String(i)}-y`}>{(out[1] / sum).toFixed(5)}</span>{/if}.

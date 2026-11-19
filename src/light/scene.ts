@@ -40,8 +40,11 @@ export interface Mount {
   readonly diffuser: DiffuserId;
   /** LED to cover, for the dots. */
   readonly depth: number;
-  /** The simulated unit this mount follows: A or B on the bench. */
-  readonly unit: string;
+  /**
+   * The DALI short address whose driver this mount follows (SPEC R14.2). An address with no driver
+   * leaves the mount unlit.
+   */
+  readonly address: number;
 }
 
 export interface Scene {
@@ -148,7 +151,7 @@ export function mount(
     tape: 'A',
     diffuser: 'opal-linear-lux',
     depth: DEFAULT_DEPTH[kind],
-    unit: 'A',
+    address: 0,
     ...over,
   };
 }
@@ -166,8 +169,8 @@ export function defaultScene(): Scene {
     endWalls: 'closed',
     reflectance: { ceiling: 0.9, walls: 0.8, floor: 0.5 },
     mounts: [
-      mount('m1', 'skirting', 'left', length, { tape: 'A', unit: 'A' }),
-      mount('m2', 'channel', 'right', length, { tape: 'B', unit: 'B' }),
+      mount('m1', 'skirting', 'left', length, { tape: 'A', address: 0 }),
+      mount('m2', 'channel', 'right', length, { tape: 'B', address: 1 }),
     ],
   };
 }
@@ -182,12 +185,12 @@ export function sixMountScene(): Scene {
   return {
     ...base,
     mounts: [
-      mount('l1', 'skirting', 'left', l, { tape: 'A', unit: 'A' }),
-      mount('l2', 'channel', 'left', l, { tape: 'B', unit: 'B' }),
-      mount('l3', 'reveal', 'left', l, { tape: 'A', unit: 'A', facing: 'up' }),
-      mount('r1', 'skirting', 'right', l, { tape: 'B', unit: 'B' }),
-      mount('r2', 'channel', 'right', l, { tape: 'A', unit: 'A' }),
-      mount('r3', 'reveal', 'right', l, { tape: 'B', unit: 'B', facing: 'down' }),
+      mount('l1', 'skirting', 'left', l, { tape: 'A', address: 0 }),
+      mount('l2', 'channel', 'left', l, { tape: 'B', address: 1 }),
+      mount('l3', 'reveal', 'left', l, { tape: 'A', address: 0, facing: 'up' }),
+      mount('r1', 'skirting', 'right', l, { tape: 'B', address: 1 }),
+      mount('r2', 'channel', 'right', l, { tape: 'A', address: 0 }),
+      mount('r3', 'reveal', 'right', l, { tape: 'B', address: 1, facing: 'down' }),
     ],
   };
 }
@@ -245,16 +248,18 @@ const MOUNT_KEYS = [
   'tape',
   'diffuser',
   'depth',
-  'unit',
+  'address',
 ] as const;
 
 function parseMount(v: unknown, hall: { length: number; height: number }): Mount | string {
   const o = record(v);
   if (o === undefined || !onlyKeys(o, MOUNT_KEYS)) return 'a mount has the wrong keys';
   const id = o['id'];
-  const unit = o['unit'];
+  const address = o['address'];
   if (typeof id !== 'string' || !/^[a-z0-9-]{1,16}$/.test(id)) return 'a mount has a bad id';
-  if (typeof unit !== 'string' || !/^[A-Za-z0-9]{1,8}$/.test(unit)) return 'a mount has a bad unit';
+  if (typeof address !== 'number' || !Number.isInteger(address) || address < 0 || address > 63) {
+    return 'a mount has a bad address';
+  }
   const kind = oneOf(o['kind'], KINDS);
   const side = oneOf(o['side'], SIDES);
   const facing = oneOf(o['facing'], FACINGS);
@@ -317,7 +322,7 @@ function parseMount(v: unknown, hall: { length: number; height: number }): Mount
     tape,
     diffuser,
     depth,
-    unit,
+    address,
   };
 }
 
@@ -409,7 +414,7 @@ export function parseScene(v: unknown): SceneResult {
 }
 
 /**
- * The parts of a scene that change the light's paths, as stable text. Tape type, diffuser and unit
+ * The parts of a scene that change the light's paths, as stable text. Tape type, diffuser and address
  * are left out: they change only how much light leaves a mount, which is a weight on its response.
  */
 export function geometryText(s: Scene): string {

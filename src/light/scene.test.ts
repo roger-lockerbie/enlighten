@@ -27,9 +27,9 @@ describe('the scene', () => {
     const s = defaultScene();
     const r = parseScene(copy(s));
     expect(r).toEqual({ ok: true, value: s });
-    expect(s.mounts.map((m) => [m.kind, m.side, m.tape, m.unit])).toEqual([
-      ['skirting', 'left', 'A', 'A'],
-      ['channel', 'right', 'B', 'B'],
+    expect(s.mounts.map((m) => [m.kind, m.side, m.tape, m.address])).toEqual([
+      ['skirting', 'left', 'A', 0],
+      ['channel', 'right', 'B', 1],
     ]);
   });
 
@@ -72,7 +72,10 @@ describe('the scene', () => {
   it('refuses a mount with wrong keys, a bad name or a value out of range', () => {
     expect(parseScene(withMount({ colour: 'red' })).ok).toBe(false);
     expect(parseScene(withMount({ id: 'Not OK' })).ok).toBe(false);
-    expect(parseScene(withMount({ unit: 'a b' })).ok).toBe(false);
+    for (const address of [-1, 64, 1.5, '0', Number.NaN]) {
+      expect(parseScene(withMount({ address })).ok).toBe(false);
+    }
+    expect(parseScene(withMount({ address: 63 })).ok).toBe(true);
     expect(parseScene(withMount({ kind: 'cove' })).ok).toBe(false);
     expect(parseScene(withMount({ aperture: 0.5 })).ok).toBe(false);
     expect(parseScene(withMount({ gradient: Number.NaN })).ok).toBe(false);
@@ -131,7 +134,7 @@ describe('the scene', () => {
     const same: Scene = {
       ...s,
       mounts: [
-        { ...first, tape: 'COB', diffuser: 'none', depth: 0.005, unit: 'B', id: 'zz' },
+        { ...first, tape: 'COB', diffuser: 'none', depth: 0.005, address: 7, id: 'zz' },
         ...rest,
       ],
     };
