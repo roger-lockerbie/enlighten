@@ -6,7 +6,7 @@
  */
 import type { View } from './camera.ts';
 import { downHall, parseView } from './camera.ts';
-import type { Setup } from './setup.ts';
+import type { Setup, SetupResult } from './setup.ts';
 import { defaultSetup, parseSetup } from './setup.ts';
 
 export type Side = 'a' | 'b';
@@ -99,9 +99,6 @@ export function fromWorkspace(w: unknown): SetupResult {
   return parseSetup({ scene: { ...hall, mounts: o['mounts'] }, links: o['links'] });
 }
 
-type SetupResult =
-  { readonly ok: true; readonly value: Setup } | { readonly ok: false; readonly error: string };
-
 /** One line for each way an imported set-up differs from the present one, for the confirmation. */
 export function setupChanges(label: string, before: Setup, after: Setup): string[] {
   const out: string[] = [];
@@ -127,4 +124,65 @@ export function setupChanges(label: string, before: Setup, after: Setup): string
     );
   }
   return out;
+}
+
+/** The workspace file's keys for the Visualiser: set-up A, and set-up B only when it differs. */
+export interface WorkspaceSetups extends WorkspaceSetup {
+  readonly compare?: WorkspaceSetup;
+}
+
+export function exportSetups(s: Saved): WorkspaceSetups {
+  const a = toWorkspace(s.a);
+  const same = JSON.stringify(s.a) === JSON.stringify(s.b);
+  return same ? a : { ...a, compare: toWorkspace(s.b) };
+}
+
+/** The Visualiser's keys as a checked workspace file holds them, each still untrusted. */
+export interface FileSetups {
+  readonly hallway?: unknown;
+  readonly mounts?: unknown;
+  readonly links?: unknown;
+  readonly compare?: unknown;
+}
+
+export type ImportResult =
+  | {
+      readonly ok: true;
+      /** Undefined when the file holds no set-up. */
+      readonly value: { readonly saved: Saved; readonly changes: readonly string[] } | undefined;
+    }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * Check a workspace file's set-ups in full and say what they would change. A file with set-up A and
+ * no `compare` makes B a copy of A, as an export writes it. A file with only `compare` is refused,
+ * since B is always given beside A. The A/B setting and the set-up being edited are kept. A close-up
+ * of a mount the file does not have goes back to the view down the hall.
+ */
+export function importSetups(present: Saved, file: FileSetups): ImportResult {
+  const hasA = file.hallway !== undefined || file.mounts !== undefined || file.links !== undefined;
+  if (!hasA) {
+    if (file.compare !== undefined)
+      return { ok: false, error: 'Set-up B is given without set-up A.' };
+    return { ok: true, value: undefined };
+  }
+  const a = fromWorkspace({ hallway: file.hallway, mounts: file.mounts, links: file.links });
+  if (!a.ok) return { ok: false, error: `Set-up A: ${a.error}` };
+  let b: Setup = a.value;
+  if (file.compare !== undefined) {
+    const r = fromWorkspace(file.compare);
+    if (!r.ok) return { ok: false, error: `Set-up B: ${r.error}` };
+    b = r.value;
+  }
+  const changes = [
+    ...setupChanges('Set-up A', present.a, a.value),
+    ...setupChanges('Set-up B', present.b, b),
+  ];
+  let view = present.view;
+  if (view.mode === 'close') {
+    const id = view.mount;
+    const shown = present.compare && present.editing === 'b' ? b : a.value;
+    if (!shown.scene.mounts.some((m) => m.id === id)) view = downHall(shown.scene);
+  }
+  return { ok: true, value: { saved: { ...present, a: a.value, b, view }, changes } };
 }

@@ -15,6 +15,7 @@
   import Segmented from '../components/Segmented.svelte';
   import Toggle from '../components/Toggle.svelte';
   import type { AppState } from '../state.svelte.ts';
+  import type { Saved, WorkspaceSetups } from '../../light/saved.ts';
 
   let { app }: { app: AppState } = $props();
 
@@ -22,6 +23,30 @@
   let plan = $state<ImportPlan | undefined>(undefined);
   let importDone = $state('');
   let setAside = $state<string[]>([]);
+  /** The Visualiser's set-ups as the file writes them, once loaded. */
+  let setups = $state<WorkspaceSetups | undefined>(undefined);
+  /** The set-ups an import would store, checked in full. */
+  let incoming: Saved | undefined;
+
+  // The scene's code loads only here and on the Visualiser, not with the first page (ADR 0018).
+  const savedCode = () => import('../../light/saved.ts');
+
+  $effect(() => {
+    let gone = false;
+    void savedCode()
+      .then(async (m) => {
+        const r = await app.store.loadVisualiser(m.parseSaved, m.defaultSaved());
+        if (gone) return;
+        if (r.problem !== undefined) app.storeProblem = r.problem;
+        setups = m.exportSetups(r.value);
+      })
+      .catch(() => {
+        if (!gone) app.storeProblem = 'The visualiser set-ups could not be read for export.';
+      });
+    return () => {
+      gone = true;
+    };
+  });
 
   /** The bench's units sit at addresses 0 and 1 (SPEC R14.1). */
   const UNIT_AT: Readonly<Record<number, BenchUnit>> = { 0: 'A', 1: 'B' };
@@ -60,9 +85,15 @@
         historyLength: app.prefs.historyLength,
         historyIgnoreSpace: app.prefs.historyIgnoreSpace,
         verifyMode: app.prefs.verifyMode,
+        exposure: app.prefs.exposure,
+        exposureEv: app.prefs.exposureEv,
+        whiteBalance: app.prefs.whiteBalance,
+        whiteBalanceKelvin: app.prefs.whiteBalanceKelvin,
+        falseColour: app.prefs.falseColour,
       },
       devices: devices.sort((x, y) => x.address - y.address),
       ...(app.scripts.length === 0 ? {} : { scripts: app.scripts }),
+      ...(setups ?? {}),
     });
   });
   const exportHref = $derived(
@@ -73,6 +104,7 @@
     importError = '';
     importDone = '';
     plan = undefined;
+    incoming = undefined;
     const file = input.files?.[0];
     input.value = '';
     if (file === undefined) return;
@@ -96,7 +128,32 @@
       importError = r.error;
       return;
     }
-    plan = r.value;
+    const w = r.value.workspace;
+    let changes = r.value.changes;
+    if (
+      w.hallway !== undefined ||
+      w.mounts !== undefined ||
+      w.links !== undefined ||
+      w.compare !== undefined
+    ) {
+      let lines: readonly string[];
+      try {
+        const m = await savedCode();
+        const present = await app.store.loadVisualiser(m.parseSaved, m.defaultSaved());
+        const s = m.importSetups(present.value, w);
+        if (!s.ok) {
+          importError = s.error;
+          return;
+        }
+        incoming = s.value?.saved;
+        lines = s.value?.changes ?? [];
+      } catch {
+        importError = 'The visualiser set-ups could not be checked.';
+        return;
+      }
+      changes = [...changes, ...lines];
+    }
+    plan = { ...r.value, changes };
   }
 
   async function apply(p: ImportPlan): Promise<void> {
@@ -114,6 +171,23 @@
       setHistory({ historyIgnoreSpace: prefs.historyIgnoreSpace });
     // An import can turn verify mode on, never off (SPEC section 8).
     if (prefs?.verifyMode === true) app.update({ verifyMode: true });
+    if (prefs?.exposure !== undefined) app.update({ exposure: prefs.exposure });
+    if (prefs?.exposureEv !== undefined) app.update({ exposureEv: prefs.exposureEv });
+    if (prefs?.whiteBalance !== undefined) app.update({ whiteBalance: prefs.whiteBalance });
+    if (prefs?.whiteBalanceKelvin !== undefined)
+      app.update({ whiteBalanceKelvin: prefs.whiteBalanceKelvin });
+    if (prefs?.falseColour !== undefined) app.update({ falseColour: prefs.falseColour });
+    const next = incoming;
+    incoming = undefined;
+    if (next !== undefined) {
+      try {
+        const m = await savedCode();
+        await app.store.saveVisualiser(m.parseSaved, next);
+        setups = m.exportSetups(next);
+      } catch {
+        notes.push('The visualiser set-ups were not imported: they could not be saved.');
+      }
+    }
     if (w.scripts !== undefined) {
       const next = [...app.scripts];
       for (const s of w.scripts) {

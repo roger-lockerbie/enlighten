@@ -307,6 +307,18 @@ export function readWorkspace(
     );
   if (p?.verifyMode === false)
     changes.push('Verify mode: the file turns it off. An import cannot, so it stays on.');
+  if (p?.exposure !== undefined)
+    changes.push(
+      `Visualiser exposure: ${p.exposure}${p.exposure === 'manual' && p.exposureEv !== undefined ? ` at ${String(p.exposureEv)} EV` : ''}.`,
+    );
+  if (p?.whiteBalance !== undefined) {
+    const k = p.whiteBalanceKelvin;
+    const named = { scene: 'adapted to the scene', daylight: 'daylight', kelvin: 'a chosen white' };
+    const what =
+      p.whiteBalance === 'kelvin' && k !== undefined ? `${String(k)} K` : named[p.whiteBalance];
+    changes.push(`Visualiser white balance: ${what}.`);
+  }
+  if (p?.falseColour !== undefined) changes.push(`Visualiser false colour: ${p.falseColour}.`);
   for (const d of w.devices ?? []) {
     const parts: string[] = [];
     if (d.alias !== undefined) parts.push(`name "${d.alias}"`);

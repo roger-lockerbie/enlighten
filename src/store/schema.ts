@@ -2,7 +2,8 @@
  * What is stored and what a workspace file holds (ADR 0009, SPEC section 8). Version 1 of the
  * workspace carries the ceiling, preferences and devices. Version 2 adds scripts and the console's
  * history settings (ADR 0014). Preferences version 3 adds the visualiser's exposure, white balance
- * and false-colour view (ADR 0017). Later stages add their keys with a new version and a migration.
+ * and false-colour view (ADR 0017). Workspace version 3 adds those, and the Visualiser's set-ups
+ * (ADR 0018). Later stages add their keys with a new version and a migration.
  */
 import { DEFAULT_HISTORY, MAX_LINE } from '../console/history.ts';
 import { ADAPT_MAX_K, ADAPT_MIN_K } from '../light/colour/adapt.ts';
@@ -165,7 +166,7 @@ export function checkScripts(x: unknown): Result<StoredScripts> {
 // The workspace file
 
 export const WORKSPACE_FORMAT = 'enlighten-workspace';
-export const WORKSPACE_VERSION = 2;
+export const WORKSPACE_VERSION = 3;
 
 const workspaceDevice = object({
   address: req(int(0, 63)),
@@ -180,9 +181,24 @@ const workspaceDevice = object({
   ),
 });
 
-const workspaceV2 = object({
+/**
+ * A part of the Visualiser's set-up. Here only its shape is checked: the light core checks it in
+ * full before an import is offered (`src/light/saved.ts`, ADR 0018), so the first page's bundle does
+ * not carry the scene's code.
+ */
+const setupObject: Schema<object> = (x, path) =>
+  typeof x === 'object' && x !== null && !Array.isArray(x)
+    ? { ok: true, value: x }
+    : { ok: false, error: `${path}: an object.` };
+
+const setupList: Schema<readonly unknown[]> = (x, path) =>
+  Array.isArray(x) && x.length <= 6
+    ? { ok: true, value: x as unknown[] }
+    : { ok: false, error: `${path}: a list of at most 6.` };
+
+const workspaceV3 = object({
   format: req(oneOf(WORKSPACE_FORMAT)),
-  version: req(oneOf(2)),
+  version: req(oneOf(3)),
   ceiling: opt(int(1, 254)),
   preferences: opt(
     object({
@@ -192,14 +208,25 @@ const workspaceV2 = object({
       historyIgnoreSpace: opt(bool),
       /** Read, but an import can only turn it on (SPEC section 8). */
       verifyMode: opt(bool),
+      exposure: opt(oneOf(...EXPOSURES)),
+      exposureEv: opt(num(EV_MIN, EV_MAX)),
+      whiteBalance: opt(oneOf(...BALANCES)),
+      whiteBalanceKelvin: opt(int(ADAPT_MIN_K, ADAPT_MAX_K)),
+      falseColour: opt(oneOf(...FALSE_VIEWS)),
     }),
   ),
   devices: opt(uniqueBy(arrayOf(workspaceDevice, 64), (d) => d.address, 'address')),
   scripts: opt(scriptList),
+  /** Set-up A of the Visualiser: the hallway, its mounts, and the links between them. */
+  hallway: opt(setupObject),
+  mounts: opt(setupList),
+  links: opt(setupList),
+  /** Set-up B, as `{ hallway, mounts, links }`. */
+  compare: opt(setupObject),
 });
 
-export type Workspace = Extract<ReturnType<typeof workspaceV2>, { ok: true }>['value'];
+export type Workspace = Extract<ReturnType<typeof workspaceV3>, { ok: true }>['value'];
 
 export function checkWorkspace(x: unknown): Result<Workspace> {
-  return workspaceV2(x, '');
+  return workspaceV3(x, '');
 }
