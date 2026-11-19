@@ -8,7 +8,11 @@ import { readPng } from './png.ts';
 
 const READY = 'Bounced light ready';
 
+// Both pictures are drawn in software GL, which is slow on CI's 2-core runner.
+const SLOW = 240_000;
+
 test('shows A and B side by side, edits B alone, and both follow one command', async ({ page }) => {
+  test.setTimeout(SLOW);
   const w = await openApp(page);
   await goTo(page, 'Visualiser');
   await expect(page.getByTestId('solve-status')).toContainText(READY, { timeout: 60_000 });
@@ -55,8 +59,32 @@ test('shows A and B side by side, edits B alone, and both follow one command', a
   await page.getByTestId('ab-toggle').locator('input').uncheck();
   await expect(page.getByTestId('hallway-b')).toHaveCount(0);
   await expect(page.getByTestId('solve-status')).not.toContainText('A:');
+  await noProblems(w);
+});
 
-  // Turning B on and off releases its GL context each time, so picture A keeps its own (S8-L3).
+// Turning B on and off releases its GL context each time, so picture A keeps its own (S8-L3).
+test('turning B on and off 20 times leaves picture A drawing', async ({ page }) => {
+  test.setTimeout(SLOW);
+  const w = await openApp(page);
+  await goTo(page, 'Visualiser');
+  await expect(page.getByTestId('solve-status')).toContainText(READY, { timeout: 60_000 });
+  await openConsole(page);
+  await typeLine(page, 'tc 0 3000K 30%');
+  await page.keyboard.press('Control+Backquote');
+  await expect(page.getByTestId('mount-0-flux')).not.toHaveText('0.00', { timeout: 15_000 });
+  const lit = async (): Promise<number> => {
+    const shot = readPng(await page.getByTestId('hallway-canvas').screenshot());
+    return Math.max(...shot.at(Math.round(shot.width / 2), Math.round(shot.height * 0.8)));
+  };
+  await expect.poll(lit, { timeout: 15_000 }).toBeGreaterThan(20);
+  // Chromium keeps 16 WebGL contexts and loses the oldest, which is A's, past that. Holding 14 more
+  // leaves room for B's and no more, so one of B's that outlived its picture would cost A its own.
+  // Without this, Chromium frees B's old contexts itself and the test could not fail.
+  await page.evaluate(() => {
+    const held: unknown[] = [];
+    for (let i = 0; i < 14; i++) held.push(document.createElement('canvas').getContext('webgl2'));
+    (globalThis as { heldContexts?: unknown[] }).heldContexts = held;
+  });
   const toggle = page.getByTestId('ab-toggle').locator('input');
   for (let i = 0; i < 20; i++) {
     await toggle.check();
@@ -66,8 +94,6 @@ test('shows A and B side by side, edits B alone, and both follow one command', a
     await toggle.uncheck();
     await expect(page.getByTestId('hallway-b')).toHaveCount(0);
   }
-  const shot = readPng(await page.getByTestId('hallway-canvas').screenshot());
-  const middle = shot.at(Math.round(shot.width / 2), Math.round(shot.height * 0.8));
-  expect(Math.max(...middle)).toBeGreaterThan(20);
+  expect(await lit()).toBeGreaterThan(20);
   await noProblems(w);
 });
