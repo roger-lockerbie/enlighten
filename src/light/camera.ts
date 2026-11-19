@@ -120,7 +120,7 @@ export function atWall(scene: Scene, side: Side): WalkView {
 }
 
 export function defaultOrbit(): OrbitView {
-  return { mode: 'orbit', yaw: -30, pitch: -20, distance: 3 };
+  return { mode: 'orbit', yaw: -30, pitch: -30, distance: 2.5 };
 }
 
 /** The point an orbit turns about: the middle of the hallway. */
@@ -173,15 +173,28 @@ export function litCentre(scene: Scene, m: Mount): { readonly point: V3; readonl
 }
 
 /**
- * About 150 mm from the lit surface, out from the wall and off to the side the light faces, with
- * a narrow field of view. A tape in a slot is seen at a slant, as a person would see it.
+ * Close to the lit surface with a narrow field of view. A flush channel is seen from 150 mm in
+ * front. A tape in a slot or reveal is seen at a slant from 300 mm out and 200 mm to the side its
+ * light goes, as a person would see it. A skirting slot's light goes to the floor, where no eye
+ * can be, so it is seen from above instead, with its lip in the way, as it would be.
  */
 function closeOn(scene: Scene, m: Mount): Camera {
   const { point, normal } = litCentre(scene, m);
   const into: V3 = [0, 0, m.side === 'left' ? 1 : -1];
-  const out = add(mulS(into, 0.15), mulS(normal, m.kind === 'channel' ? 0 : 0.06));
-  const position = keepInside(scene, add(add(point, out), [-0.05, 0, 0]), CLOSE_MARGIN);
-  return { position, target: point, fovY: 30, near: 0.005 };
+  let position: V3;
+  if (m.kind === 'channel') {
+    position = add(point, add(mulS(into, 0.15), [-0.05, 0, 0]));
+  } else {
+    const side = point[1] + normal[1] * 0.2;
+    const lift = side > MARGIN && side < scene.height - MARGIN ? 0.2 : -0.2;
+    position = add(point, add(mulS(into, 0.3), add(mulS(normal, lift), [-0.05, 0, 0])));
+  }
+  return {
+    position: keepInside(scene, position, CLOSE_MARGIN),
+    target: point,
+    fovY: 30,
+    near: 0.005,
+  };
 }
 
 // Moving a view

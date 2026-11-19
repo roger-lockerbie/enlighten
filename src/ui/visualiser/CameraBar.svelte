@@ -38,7 +38,7 @@
   );
 
   function choose(mode: Mode): void {
-    if (mode === view.mode) return;
+    if (mode === view.mode && mode !== 'close') return;
     if (mode === 'walk') onview(downHall(scene));
     else if (mode === 'orbit') onview(defaultOrbit());
     else onview({ mode: 'close', mount: selected ?? scene.mounts[0]?.id ?? 'm1' });

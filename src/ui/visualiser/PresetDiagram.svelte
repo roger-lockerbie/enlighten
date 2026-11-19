@@ -21,8 +21,11 @@
       // The light: into the room for a channel, up or down for a slot or reveal.
       const tip =
         m.kind === 'channel'
-          ? { x: x + into * 12, y }
-          : { x: x + into * 6, y: y + (m.facing === 'up' ? -10 : 10) };
+          ? { x: x + into * 16, y }
+          : {
+              x: x + into * 10,
+              y: Math.min(Y1, Math.max(Y0, y + (m.facing === 'up' ? -14 : 14))),
+            };
       return { x, y, into, tip, kind: m.kind };
     }),
   );
@@ -32,12 +35,12 @@
   <rect class="room" x={X0} y={Y0} width={X1 - X0} height={Y1 - Y0} />
   {#each marks as m, i (i)}
     {#if m.kind === 'channel'}
-      <line class="mount" x1={m.x} y1={m.y - 2.5} x2={m.x} y2={m.y + 2.5} />
+      <line class="mount" x1={m.x} y1={m.y - 4} x2={m.x} y2={m.y + 4} />
     {:else}
-      <rect class="slot" x={m.into === 1 ? m.x - 3 : m.x} y={m.y - 1.5} width="3" height="3" />
+      <rect class="slot" x={m.into === 1 ? m.x - 5 : m.x} y={m.y - 2.5} width="5" height="5" />
     {/if}
     <line class="ray" x1={m.x} y1={m.y} x2={m.tip.x} y2={m.tip.y} />
-    <circle class="tip" cx={m.tip.x} cy={m.tip.y} r="1.4" />
+    <circle class="tip" cx={m.tip.x} cy={m.tip.y} r="2.5" />
   {/each}
 </svg>
 
@@ -48,19 +51,18 @@
   .room {
     fill: none;
     stroke: var(--text-muted);
-    stroke-width: 1;
+    stroke-width: 1.5;
   }
   .mount {
     stroke: var(--accent);
-    stroke-width: 3;
+    stroke-width: 4;
   }
   .slot {
     fill: var(--accent);
   }
   .ray {
     stroke: var(--accent);
-    stroke-width: 1;
-    stroke-dasharray: 2 1.5;
+    stroke-width: 2;
   }
   .tip {
     fill: var(--accent);

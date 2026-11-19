@@ -178,6 +178,21 @@ describe('views', () => {
     }
   });
 
+  it('sees a skirting slot from above, and a reveal from the side its light goes', () => {
+    const s: Scene = {
+      ...scene,
+      mounts: [
+        mount('a', 'skirting', 'left', 5),
+        mount('b', 'reveal', 'right', 5, { facing: 'down', height: 2 }),
+      ],
+    };
+    const [a, b] = ['a', 'b'].map((id) => cameraFor(s, { mode: 'close', mount: id }));
+    expect(a?.position[1]).toBeGreaterThan(0.2);
+    expect(a?.position[2]).toBeCloseTo(0.3, 9);
+    expect(b?.position[1]).toBeLessThan(2);
+    expect(b?.position[2]).toBeLessThan(1);
+  });
+
   it('checks a stored view', () => {
     for (const v of [downHall(scene), defaultOrbit(), { mode: 'close', mount: 'm1' }]) {
       expect(parseView(JSON.parse(JSON.stringify(v)))).toEqual(v);

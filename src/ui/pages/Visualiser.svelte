@@ -10,7 +10,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { View } from '../../light/camera.ts';
-  import { cameraFor, defaultCamera, turnBy, walkBy, zoomBy } from '../../light/camera.ts';
+  import {
+    cameraFor,
+    defaultCamera,
+    downHall,
+    turnBy,
+    walkBy,
+    zoomBy,
+  } from '../../light/camera.ts';
   import { PRESET_EV, clampEv, whiteLuminance } from '../../light/colour/exposure.ts';
   import type { FalseScale } from '../../light/colour/falsecolour.ts';
   import { paletteAt, ticks } from '../../light/colour/falsecolour.ts';
@@ -176,10 +183,19 @@
     const ids = new Set(before.scene.mounts.map((m) => m.id));
     const added = r.setup.scene.mounts.find((m) => !ids.has(m.id));
     if (added !== undefined && r.setup.scene.mounts.length > before.scene.mounts.length) {
-      selected = added.id;
+      select(added.id);
     } else if (!r.setup.scene.mounts.some((m) => m.id === selected)) {
-      selected = r.setup.scene.mounts[0]?.id;
+      select(r.setup.scene.mounts[0]?.id);
     }
+  }
+
+  /** Select a mount. The close-up follows the selection, so it is never of a mount that has gone. */
+  function select(id: string | undefined): void {
+    selected = id;
+    const s = saved;
+    if (s?.view.mode !== 'close') return;
+    if (id !== undefined) keep({ ...s, view: { mode: 'close', mount: id } });
+    else keep({ ...s, view: downHall(s[s.compare ? s.editing : 'a'].scene) });
   }
 
   function setView(v: View): void {
@@ -203,12 +219,12 @@
   function setCompare(on: boolean): void {
     if (saved === undefined) return;
     keep({ ...saved, compare: on, editing: on ? saved.editing : 'a' });
-    selected = (on ? saved[saved.editing] : saved.a).scene.mounts[0]?.id;
+    select((on ? saved[saved.editing] : saved.a).scene.mounts[0]?.id);
   }
   function setEditing(side: 'a' | 'b'): void {
     if (saved === undefined) return;
     keep({ ...saved, editing: side });
-    selected = saved[side].scene.mounts[0]?.id;
+    select(saved[side].scene.mounts[0]?.id);
     message = '';
   }
   function copyAtoB(): void {
@@ -432,8 +448,7 @@
     <section class="card" aria-labelledby="probe-h">
       <h2 id="probe-h">Probe</h2>
       <p data-testid="probe" aria-live="polite">
-        {#if compare}A:
-        {/if}{@render readingText(readingA, '')}
+        {compare ? 'A: ' : ''}{@render readingText(readingA, '')}
       </p>
       {#if compare}
         <p data-testid="probe-b" aria-live="polite">B: {@render readingText(readingB, '-b')}</p>
@@ -563,7 +578,7 @@
                 class="mount-row"
                 aria-pressed={m.id === selected}
                 onclick={() => {
-                  selected = m.id;
+                  select(m.id);
                   message = '';
                   if (!app.prefs.inspectorOpen) app.update({ inspectorOpen: true });
                 }}
