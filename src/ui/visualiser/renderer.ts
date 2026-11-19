@@ -239,7 +239,7 @@ interface Stage {
 
 function aim(camera: PerspectiveCamera, view: Camera): void {
   camera.fov = view.fovY;
-  camera.near = 0.02;
+  camera.near = view.near;
   camera.far = 60;
   camera.position.set(view.position[0], view.position[1], view.position[2]);
   camera.up.set(0, 1, 0);
