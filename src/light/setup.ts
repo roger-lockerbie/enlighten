@@ -653,6 +653,9 @@ export function section(scene: Scene): SectionMark[] {
 
 // Checking an untrusted set-up
 
+/** A mount's id, as `parseScene` accepts it. */
+const MOUNT_ID = /^[a-z0-9-]{1,16}$/;
+
 export type SetupResult =
   { readonly ok: true; readonly value: Setup } | { readonly ok: false; readonly error: string };
 
@@ -693,6 +696,8 @@ export function parseSetup(v: unknown): SetupResult {
     if ((kind !== 'mirror' && kind !== 'both') || typeof a !== 'string' || typeof b !== 'string') {
       return { ok: false, error: 'A link has the wrong keys.' };
     }
+    // Checked before either id is put in a message, so a file cannot write the app's words.
+    if (!MOUNT_ID.test(a) || !MOUNT_ID.test(b)) return { ok: false, error: 'A link has a bad id.' };
     const link: Link = { kind, a, b };
     if (!linkHolds(scene.value, link)) {
       return { ok: false, error: `The ${kind} link between ${a} and ${b} does not hold.` };

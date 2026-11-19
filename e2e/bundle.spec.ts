@@ -1,7 +1,8 @@
 /**
  * The built page's chunks (ADR 0002): the entry chunk stays within a size budget and free of
  * three.js, which loads in a chunk of its own when the Visualiser is first opened, with the page
- * and the light core beside it. Each worker is one file.
+ * and the light core beside it. The set-up's checks are a chunk of their own too, shared by the
+ * Visualiser and Settings' workspace export and import (ADR 0018). Each worker is one file.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -30,7 +31,9 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   const visualiser = named(/^Visualiser-[\w-]+\.js$/);
   expect(renderer).toHaveLength(1);
   expect(visualiser).toHaveLength(1);
-  expect(chunks).toHaveLength(5);
+  const saved = named(/^saved-[\w-]+\.js$/);
+  expect(saved).toHaveLength(1);
+  expect(chunks).toHaveLength(6);
   // three.js is in the renderer's chunk and nowhere else.
   const marker = 'WebGLRenderer';
   expect(read(renderer[0] ?? '')).toContain(marker);
@@ -40,6 +43,10 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   // The entry reaches the Visualiser only by a dynamic import, and never names the renderer.
   expect(js).toContain(visualiser[0] ?? 'missing');
   expect(js).not.toContain(renderer[0] ?? 'missing');
+  // The set-up's checks are not in the entry: it reaches them by a dynamic import.
+  expect(js).toContain(saved[0] ?? 'missing');
+  expect(read(saved[0] ?? '')).toContain('A link has a bad id.');
+  expect(js).not.toContain('A link has a bad id.');
   // No chunk asks for anything from another origin.
   for (const c of chunks)
     expect(read(c)).not.toMatch(

@@ -329,7 +329,7 @@ function parseMount(v: unknown, hall: { length: number; height: number }): Mount
     tape,
     diffuser,
     depth,
-    address,
+    address: address + 0,
   };
 }
 

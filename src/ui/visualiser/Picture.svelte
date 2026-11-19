@@ -2,8 +2,10 @@
   One picture of a hallway (SPEC R10, ADR 0017, ADR 0018): its canvas, renderer and light solver,
   and the probe over it. The Visualiser shows one, or two side by side in the A/B view.
 
-  A geometry or material change rebuilds the surfaces at once, so direct light shows in the next
-  frame, and solves the bounced light again shortly after the last change. The camera moves only
+  A geometry or material change is solved again shortly after the last change, and the old picture
+  stays until the new bounced light is ready. The new picture then replaces it in one step, at most
+  once a second, so editing cannot make the picture dim and brighten fast (SPEC S6.1). The first
+  picture shows direct light at once. The camera moves only
   when a person moves it, by dragging, the wheel, or W, A, S and D. The arrow keys move the probe.
   The picture has no motion of its own (SPEC S6.3).
 -->
@@ -35,7 +37,7 @@
     store,
     scene,
     camera,
-    frame,
+    frameFor,
     ev,
     falseScale,
     name,
@@ -51,7 +53,8 @@
     store: Store;
     scene: Scene;
     camera: Camera;
-    frame: Frame;
+    /** The frame for a scene: the picture may show the scene before an edit for a moment. */
+    frameFor: (s: Scene) => Frame;
     ev: number;
     falseScale: FalseScale | undefined;
     /** What the picture is called for a screen reader: "The hallway", or "Set-up B". */
@@ -68,8 +71,20 @@
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   let problem = $state<string | undefined>(undefined);
-  let geometry = $state.raw<Geometry | undefined>(undefined);
-  let atlas = $state.raw<Atlas | undefined>(undefined);
+
+  /** The surfaces the picture shows, and the scene they were built from. */
+  interface Shown {
+    readonly key: string;
+    readonly scene: Scene;
+    readonly geometry: Geometry;
+    readonly atlas: Atlas;
+  }
+  let shown = $state.raw<Shown | undefined>(undefined);
+  let response = $state.raw<Response | undefined>(undefined);
+  /** How many times the picture has changed to new surfaces, for the e2e tests. */
+  let swaps = $state(0);
+  let lastSwap = Number.NEGATIVE_INFINITY;
+  let swapTimer: ReturnType<typeof setTimeout> | undefined;
   /** The probe's place in the picture, 0 to 1 from the top left. */
   let at = $state({ x: 0.5, y: 0.75 });
 
@@ -78,11 +93,33 @@
   let gone = false;
 
   const geometryKey = $derived(geometryText(scene));
-  const response = $derived<Response | undefined>(
-    solve?.state === 'ready' ? solve.response : undefined,
+  /** The scene drawn: the new one, unless its geometry is still waiting for its light. */
+  const shownScene = $derived(
+    shown === undefined ? undefined : shown.key === geometryKey ? scene : shown.scene,
   );
+  const frame = $derived(shownScene === undefined ? undefined : frameFor(shownScene));
 
-  /** A new geometry: new surfaces, and a solve shortly after the last change. */
+  /** Show new surfaces with their light, no sooner than a second after the last change. */
+  function show(next: Shown, light: Response | undefined, st: SolveState): void {
+    clearTimeout(swapTimer);
+    // Surfaces built from the same geometry as those shown are no change to see.
+    const same = shown?.key === next.key;
+    const apply = (): void => {
+      if (gone) return;
+      if (!same) {
+        swaps += 1;
+        lastSwap = performance.now();
+      }
+      shown = next;
+      response = light;
+      solve = st;
+    };
+    const wait = lastSwap + 1000 - performance.now();
+    if (same || wait <= 0) apply();
+    else swapTimer = setTimeout(apply, wait);
+  }
+
+  /** A new geometry: new surfaces, solved shortly after the last change. */
   $effect(() => {
     // Read so the effect runs again when, and only when, the geometry's text changes.
     if (geometryKey === '') return;
@@ -93,14 +130,21 @@
     const first = solver === undefined;
     solver?.dispose();
     solver = next;
-    geometry = g;
-    atlas = a;
+    const candidate: Shown = { key: geometryKey, scene: s, geometry: g, atlas: a };
+    // The first picture shows its direct light at once. Later ones wait for their light.
+    if (first) {
+      shown = candidate;
+      response = undefined;
+    }
+    clearTimeout(swapTimer);
     solve = { state: 'solving', done: 0, total: s.mounts.length };
     clearTimeout(timer);
     timer = setTimeout(
       () => {
         void next.solve(s, (st) => {
-          if (solver === next && !gone) solve = st;
+          if (solver !== next || gone) return;
+          if (st.state === 'solving') solve = st;
+          else show(candidate, st.state === 'ready' ? st.response : undefined, st);
         });
       },
       first ? 0 : 250,
@@ -111,18 +155,18 @@
   // the solve: it only weights each mount's response.
   $effect(() => {
     const r = renderer;
-    const g = geometry;
-    const a = atlas;
-    if (r === undefined || g === undefined || a === undefined) return;
+    const sh = shown;
+    const sc = shownScene;
+    if (r === undefined || sh === undefined || sc === undefined) return;
     r.setScene(
-      g,
-      a,
-      rippleTables(scene),
+      sh.geometry,
+      sh.atlas,
+      rippleTables(sc),
       untrack(() => camera),
     );
     untrack(() => {
       r.setResponse(response);
-      r.setFrame(frame);
+      if (frame !== undefined) r.setFrame(frame);
       r.setExposure(ev);
       r.setFalseColour(falseScale);
     });
@@ -134,7 +178,7 @@
     renderer?.setResponse(response);
   });
   $effect(() => {
-    renderer?.setFrame(frame);
+    if (frame !== undefined) renderer?.setFrame(frame);
   });
   $effect(() => {
     renderer?.setExposure(ev);
@@ -145,9 +189,15 @@
 
   $effect(() => {
     const r = renderer;
-    const g = geometry;
+    const g = shown?.geometry;
     const resp = response;
-    if (r === undefined || g === undefined || resp?.layers.length !== frame.mounts.length) {
+    const f = frame;
+    if (
+      r === undefined ||
+      g === undefined ||
+      f === undefined ||
+      resp?.layers.length !== f.mounts.length
+    ) {
       reading = undefined;
       return;
     }
@@ -159,7 +209,7 @@
         : probe(
             g,
             resp,
-            frame.mounts.map((m) => m.raw),
+            f.mounts.map((m) => m.raw),
             hit.face,
             hit.s,
             hit.t,
@@ -197,6 +247,7 @@
   onDestroy(() => {
     gone = true;
     clearTimeout(timer);
+    clearTimeout(swapTimer);
     solver?.dispose();
   });
 
@@ -231,18 +282,38 @@
     if (!drag.moved && Math.hypot(dx, dy) < 3) return;
     if (!el.hasPointerCapture(e.pointerId)) el.setPointerCapture(e.pointerId);
     drag = { ...drag, x: e.clientX, y: e.clientY, moved: true };
-    // A drag the picture's height turns the view by its field of view.
-    const perPx = camera.fovY / el.getBoundingClientRect().height;
-    onturn(dx * perPx, -dy * perPx);
+    // A drag the picture's height turns the view by its field of view. A picture with no height
+    // (a layout change mid-drag) turns nothing, so no turn is ever not a number (S8-L5).
+    const height = el.getBoundingClientRect().height;
+    if (!(height > 0)) return;
+    const perPx = camera.fovY / height;
+    if (Number.isFinite(dx * perPx) && Number.isFinite(dy * perPx)) onturn(dx * perPx, -dy * perPx);
   }
 
   function up(e: PointerEvent): void {
     if (drag?.id === e.pointerId) drag = undefined;
   }
 
+  /**
+   * The wheel moves one step for each 100 px of scroll, so a trackpad's stream of small events, and
+   * the momentum after it, move the view in proportion, not one step an event. A sideways scroll
+   * moves nothing (S8-L2).
+   */
+  let wheelSum = 0;
   function wheel(e: WheelEvent): void {
     e.preventDefault();
-    onzoom(e.deltaY < 0 ? 1 : -1);
+    if (e.deltaY === 0 || !Number.isFinite(e.deltaY)) return;
+    const px =
+      e.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? e.deltaY * 16
+        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? e.deltaY * 400
+          : e.deltaY;
+    wheelSum += px;
+    if (Math.abs(wheelSum) < 100) return;
+    const steps = wheelSum < 0 ? 1 : -1;
+    wheelSum = 0;
+    onzoom(steps);
   }
 
   /** WASD walk 250 mm a press, with Shift 1 m. The arrow keys move the probe. */
@@ -290,6 +361,7 @@
     onwheel={wheel}
     onkeydown={key}
     data-testid={testid}
+    data-swaps={swaps}
   >
     <canvas bind:this={canvas} data-testid={`${testid}-canvas`}></canvas>
     <span class="cross" style:left={`${String(at.x * 100)}%`} style:top={`${String(at.y * 100)}%`}

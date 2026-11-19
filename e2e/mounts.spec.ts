@@ -196,3 +196,50 @@ test('moves the camera by preset, keys, wheel and fields, and the probe still ma
   await expect(field(page, 'camera-x')).toHaveValue('0.35');
   await noProblems(w);
 });
+
+test('edits change the picture at most once a second (S6.1)', async ({ page }) => {
+  const w = await openApp(page);
+  await openVisualiser(page);
+  await openConsole(page);
+  await typeLine(page, 'tc 0 3000K 30%');
+  await page.keyboard.press('Control+Backquote');
+  await settled(page, 0);
+  // Solve both places once, so each later edit's light comes back from the cache at once.
+  await page.getByTestId('mount-row-m1').click();
+  const wall = page.getByTestId('mount-side');
+  await wall.getByRole('button', { name: 'Right' }).click();
+  await expect(page.getByTestId('solve-status')).toContainText(READY, { timeout: 60_000 });
+  await wall.getByRole('button', { name: 'Left' }).click();
+  await expect(page.getByTestId('solve-status')).toContainText(READY, { timeout: 60_000 });
+
+  // Note the time of every change of surfaces while the wall is clicked back and forth fast.
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="hallway"]');
+    const log: number[] = [];
+    (globalThis as unknown as { swaps: number[] }).swaps = log;
+    if (el !== null) {
+      new MutationObserver(() => log.push(performance.now())).observe(el, {
+        attributes: true,
+        attributeFilter: ['data-swaps'],
+      });
+    }
+  });
+  const start = await page.evaluate(() => performance.now());
+  for (let i = 0; i < 6; i++) {
+    await wall.getByRole('button', { name: i % 2 === 0 ? 'Right' : 'Left' }).click();
+    await page.waitForTimeout(330);
+  }
+  const end = await page.evaluate(() => performance.now());
+  await expect(page.getByTestId('solve-status')).toContainText(READY, { timeout: 60_000 });
+  await page.waitForTimeout(1200);
+  const times = await page.evaluate(() => (globalThis as unknown as { swaps: number[] }).swaps);
+  // Clicks take a while in software GL, so the count is held to the time they took.
+  expect(times.length).toBeGreaterThan(0);
+  expect(times.length).toBeLessThanOrEqual(Math.floor((end - start) / 1000) + 2);
+  for (let i = 1; i < times.length; i++) {
+    expect((times[i] ?? 0) - (times[i - 1] ?? 0)).toBeGreaterThanOrEqual(990);
+  }
+  // It ends on the last edit: the slot is on the left wall.
+  await expect(page.getByTestId('mount-row-m1')).toContainText('Left: skirting slot');
+  await noProblems(w);
+});

@@ -4,6 +4,8 @@
  * hasseb or the server goes away, commissioning, the hardware check, and panic reaching the bus.
  */
 import { expect, test } from '@playwright/test';
+import { defaultSaved, exportSetups } from '../../src/light/saved.ts';
+import { applyPreset, defaultSetup } from '../../src/light/setup.ts';
 import { openConsole, typeLine } from '../app.ts';
 import { watch } from '../harness.ts';
 import { connect, goTo } from './connect.ts';
@@ -203,6 +205,30 @@ for (const target of ['Hardware', 'Both'] as const) {
     await address.press('Enter');
     await expect(page.getByTestId('mount-1')).toContainText('No driver at address 9.');
     await expect(page.getByTestId('mount-1-flux')).toHaveText('0.00');
+
+    // Editing a mount and importing set-ups send nothing to the bus. Queries the app makes of its
+    // own are left out.
+    const before = server.lines.length;
+    await address.fill('0');
+    await address.press('Enter');
+    await page.getByTestId('preset-mirrored').click();
+    await goTo(page, 'Settings');
+    const r = applyPreset(defaultSetup(), 'channel');
+    const file = {
+      format: 'enlighten-workspace',
+      version: 3,
+      ...exportSetups({ ...defaultSaved(), a: r.ok ? r.setup : defaultSetup() }),
+    };
+    await page.getByTestId('import').setInputFiles({
+      name: 'workspace.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(file), 'utf8'),
+    });
+    await expect(page.getByTestId('import-changes')).toContainText('Set-up A: 1 mount');
+    await page.getByTestId('import-dialog').getByRole('button', { name: 'Import' }).click();
+    await expect(page.getByTestId('import-done')).toContainText('Imported.');
+    await page.waitForTimeout(1000);
+    expect(server.bus(before).filter((c) => !c.includes('.Query'))).toEqual([]);
     expect(await w.problems()).toEqual([]);
   });
 }

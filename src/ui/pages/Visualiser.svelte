@@ -14,6 +14,7 @@
     cameraFor,
     defaultCamera,
     downHall,
+    parseView,
     turnBy,
     walkBy,
     zoomBy,
@@ -32,7 +33,7 @@
   import type { Reading } from '../../light/probe.ts';
   import type { Saved } from '../../light/saved.ts';
   import { defaultSaved, parseSaved } from '../../light/saved.ts';
-  import type { Mount, MountKind, Side } from '../../light/scene.ts';
+  import type { Mount, MountKind, Scene, Side } from '../../light/scene.ts';
   import { MAX_MOUNTS, sixMountScene } from '../../light/scene.ts';
   import type { Edit, Setup } from '../../light/setup.ts';
   import {
@@ -100,25 +101,25 @@
   );
   const drives = $derived(drivesFor(app.snap?.light ?? []));
   // One white for both pictures in the A/B view (ADR 0008): each is balanced to the light of both.
+  // Each picture builds its frame for the scene it shows, which for a moment after an edit may be
+  // the scene before it. Everything the frame depends on is read here, so a new builder is made
+  // when any of it changes.
+  function frameBuilder(other: Setup | undefined): (s: Scene) => Frame {
+    const d = drives;
+    const settings = {
+      display,
+      balance,
+      ...(other === undefined ? {} : { alongside: roomLight(other.scene, d) }),
+    };
+    return (s: Scene) => buildFrame(s, d, settings);
+  }
+  const frameForA = $derived(frameBuilder(compare ? setupB : undefined));
+  const frameForB = $derived(frameBuilder(setupA));
   const frameA = $derived<Frame | undefined>(
-    setupA === undefined
-      ? undefined
-      : buildFrame(setupA.scene, drives, {
-          display,
-          balance,
-          ...(compare && setupB !== undefined
-            ? { alongside: roomLight(setupB.scene, drives) }
-            : {}),
-        }),
+    setupA === undefined ? undefined : frameForA(setupA.scene),
   );
   const frameB = $derived<Frame | undefined>(
-    setupB === undefined || !compare
-      ? undefined
-      : buildFrame(setupB.scene, drives, {
-          display,
-          balance,
-          ...(setupA === undefined ? {} : { alongside: roomLight(setupA.scene, drives) }),
-        }),
+    setupB === undefined || !compare ? undefined : frameForB(setupB.scene),
   );
   const desaturated = $derived(
     [...(frameA?.mounts ?? []), ...(frameB?.mounts ?? [])].some((m) => m.desaturated),
@@ -198,8 +199,10 @@
     else keep({ ...s, view: downHall(s[s.compare ? s.editing : 'a'].scene) });
   }
 
+  /** A view is checked before it is kept, so a bad one is never drawn or stored (S8-L5). */
   function setView(v: View): void {
-    if (saved !== undefined) keep({ ...saved, view: v });
+    const checked = parseView(v);
+    if (saved !== undefined && checked !== undefined) keep({ ...saved, view: checked });
   }
   const sceneForView = $derived(current?.scene);
   function onturn(yaw: number, pitch: number): void {
@@ -411,7 +414,7 @@
           store={app.store}
           scene={setupA.scene}
           camera={cameraFor(setupA.scene, view)}
-          frame={frameA}
+          frameFor={frameForA}
           {ev}
           {falseScale}
           name={compare ? 'Set-up A' : 'The hallway'}
@@ -431,7 +434,7 @@
             store={app.store}
             scene={setupB.scene}
             camera={cameraFor(setupB.scene, view)}
-            frame={frameB}
+            frameFor={frameForB}
             {ev}
             {falseScale}
             name="Set-up B"

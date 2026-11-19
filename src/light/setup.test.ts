@@ -355,6 +355,15 @@ describe('parseSetup', () => {
     const second = drift.scene.mounts[1];
     if (second !== undefined) second['height'] = 1;
     expect(parseSetup(drift)).toMatchObject({ ok: false, error: /does not hold/ });
+    // An id that is not a mount's is refused before it can reach a message (S8-L4).
+    const long = 'x'.repeat(100_000);
+    expect(parseSetup({ ...raw, links: [{ kind: 'mirror', a: long, b: 'm2' }] })).toEqual({
+      ok: false,
+      error: 'A link has a bad id.',
+    });
+    expect(
+      parseSetup({ ...raw, links: [{ kind: 'mirror', a: 'm1', b: 'm2. The ceiling was raised' }] }),
+    ).toEqual({ ok: false, error: 'A link has a bad id.' });
     // A Map or class instance is not a plain object.
     expect(parseSetup(new Map()).ok).toBe(false);
     expect(parseScene(copy(s.scene)).ok).toBe(true);

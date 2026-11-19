@@ -543,5 +543,9 @@ export class HallwayRenderer {
     this.pending = 0;
     this.disposeScene();
     this.renderer.dispose();
+    // dispose() leaves the GL context alive until garbage collection. A page that is opened again
+    // and again, or an A/B view turned on and off, would reach Chrome's limit and lose a live
+    // picture's context (S8-L3).
+    this.renderer.forceContextLoss();
   }
 }

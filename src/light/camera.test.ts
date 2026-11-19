@@ -188,7 +188,11 @@ describe('views', () => {
     };
     const [a, b] = ['a', 'b'].map((id) => cameraFor(s, { mode: 'close', mount: id }));
     expect(a?.position[1]).toBeGreaterThan(0.2);
-    expect(a?.position[2]).toBeCloseTo(0.3, 9);
+    // 0.3 m out from the lit centre, which sits back in the slot.
+    const slot = s.mounts[0];
+    if (slot === undefined) throw new Error('no slot');
+    const lit = litCentre(s, slot).point;
+    expect((a?.position[2] ?? 0) - lit[2]).toBeCloseTo(0.3, 9);
     expect(b?.position[1]).toBeLessThan(2);
     expect(b?.position[2]).toBeLessThan(1);
   });

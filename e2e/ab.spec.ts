@@ -4,6 +4,7 @@
  */
 import { expect, test } from '@playwright/test';
 import { goTo, noProblems, openApp, openConsole, typeLine } from './app.ts';
+import { readPng } from './png.ts';
 
 const READY = 'Bounced light ready';
 
@@ -54,5 +55,19 @@ test('shows A and B side by side, edits B alone, and both follow one command', a
   await page.getByTestId('ab-toggle').locator('input').uncheck();
   await expect(page.getByTestId('hallway-b')).toHaveCount(0);
   await expect(page.getByTestId('solve-status')).not.toContainText('A:');
+
+  // Turning B on and off releases its GL context each time, so picture A keeps its own (S8-L3).
+  const toggle = page.getByTestId('ab-toggle').locator('input');
+  for (let i = 0; i < 20; i++) {
+    await toggle.check();
+    await expect(page.getByTestId('solve-status-b')).toContainText(`B: ${READY}`, {
+      timeout: 60_000,
+    });
+    await toggle.uncheck();
+    await expect(page.getByTestId('hallway-b')).toHaveCount(0);
+  }
+  const shot = readPng(await page.getByTestId('hallway-canvas').screenshot());
+  const middle = shot.at(Math.round(shot.width / 2), Math.round(shot.height * 0.8));
+  expect(Math.max(...middle)).toBeGreaterThan(20);
   await noProblems(w);
 });
