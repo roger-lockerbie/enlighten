@@ -24,7 +24,9 @@ import {
 } from '../../src/safety/rate/legs.ts';
 import { ROOM } from '../../src/safety/rate/trace.ts';
 import { rateProblems, TraceRecorder } from '../harness/checker.ts';
+import { agrees, agreesAddress, trace } from '../harness/diff.ts';
 import { play, type Step } from '../harness/gen.ts';
+import s5p1 from './s5-p1.counterexample.json' with { type: 'json' };
 
 describe('hard steps inside a run (ADR 0015)', () => {
   it('an unlocked RESET after a rise is held: the rise, the RESET and its OFF were a flash', async () => {
@@ -522,4 +524,98 @@ describe('gear the guard does not know, moving with other gear (ADR 0016)', () =
     const sent = b.sink.log.slice(start).map((l) => decode(l.frame.frame));
     expect(sent.some((c) => c?.id === 'DAPC' && c.value === 140)).toBe(false);
   });
+});
+
+/**
+ * Stage 8b: the cases still open when the rate guard got a stage of its own. Each is marked as
+ * failing until ADR 0019 is built, and becomes a plain test then.
+ */
+describe('one hard step dated differently by where the samples fall (Stage 8b)', () => {
+  const seg = (flat: number, fade: number, ratio: number, up: boolean, off = false) => ({
+    flat,
+    fade,
+    ratio,
+    up,
+    off,
+  });
+
+  it.fails(
+    'a slow lead-in, a fast creep, then a fast fade: a drop 1 s later in the room (S6-D18-1)',
+    () => {
+      agrees(
+        trace(0.02, [
+          seg(50, 700, 1.2, true),
+          seg(0, 250, 1.15, true),
+          seg(0, 300, 3, true),
+          seg(500, 0, 3, false),
+        ]),
+      );
+    },
+  );
+
+  it.fails('the same family at one address, with the drop 2 s later (S6-D18-1)', () => {
+    agrees(
+      trace(0.05, [
+        seg(50, 700, 1.6, true),
+        seg(0, 550, 1.5, true),
+        seg(0, 300, 3, true),
+        seg(1269, 0, 3, false),
+      ]),
+    );
+  });
+
+  it.fails('a fast rise from off, a fast fade, then a step to off 1,975 ms on (S6-P14)', () => {
+    agrees(
+      trace(0, [
+        seg(910, 393, 1.002, false, true),
+        seg(95, 583, 1.7961029733595697, true),
+        seg(969, 0, 2.1, false, true),
+      ]),
+    );
+  });
+
+  it.fails('the same shape with the checker’s samples 3 ms out of step with the guard’s', () => {
+    agreesAddress(
+      [
+        trace(0, [
+          seg(910, 393, 1.002, false, true),
+          seg(95, 583, 1.8, true),
+          seg(0, 60, 1.3, true),
+          seg(909, 0, 2.1, false, true),
+        ]),
+      ],
+      3,
+    );
+  });
+});
+
+describe('a level and a colour fading together on gear whose colour the shadow lost (S5-P1)', () => {
+  it.fails(
+    'a temporary colour loaded before a rescan does not make three legs in a second',
+    async () => {
+      const [cfg, stream] = s5p1 as unknown as [
+        { units: number[]; light: ('C1' | 'C2' | 'C5')[]; level: number[]; fade: number[] },
+        Step[],
+      ];
+      const real = Simulator.of(
+        cfg.units.map((n, i) => ({
+          id: `R${String(n)}`,
+          profile: da5l(cfg.light[i] ?? 'C2', 'tc', { physicalMinimum: 1 }),
+          opts: { shortAddress: n },
+        })),
+      );
+      const r = new Rig(real, 0);
+      cfg.units.forEach((n, i) => {
+        r.set('SET_SCENE', n, 0, 0);
+        r.set('SET_SCENE', n, 0, 3);
+        r.set('SET_MIN_LEVEL', n, 1);
+        r.set('SET_FADE_TIME', n, cfg.fade[i] ?? 0);
+        r.to('DAPC', n, cfg.level[i] ?? 0);
+      });
+      const b = makeBench({ sim: real, target: 'hardware', start: r.t + 100 });
+      await b.ready();
+      const { rec } = await play(b, stream);
+      expect(rateProblems(rec, 1)).toEqual([]);
+    },
+  );
 });

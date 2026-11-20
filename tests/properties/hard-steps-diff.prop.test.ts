@@ -8,31 +8,14 @@
  */
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { scopeViolations } from '../../src/safety/rate/guard.ts';
-import {
-  directedEvents,
-  events,
-  mergeDirected,
-  SAME_LEG_MS,
-  TIME_MARGIN_MS,
-  type TraceEvents,
-} from '../../src/safety/rate/legs.ts';
-import { ROOM, slowTest } from '../../src/safety/rate/trace.ts';
+import { slowTest } from '../../src/safety/rate/trace.ts';
 import { Rig } from '../../src/sim/rig.ts';
 import { Simulator } from '../../src/sim/simulator.ts';
-import { rateProblems, TraceRecorder } from '../harness/checker.ts';
+import { TraceRecorder } from '../harness/checker.ts';
+import { agrees, trace, type Seg } from '../harness/diff.ts';
 import { timeout } from '../harness/gen.ts';
 
 const RUNS = Number(process.env['PROP_RUNS'] ?? 25);
-const EMPTY: TraceEvents = { legs: [], hard: [], reversals: [] };
-
-interface Seg {
-  readonly flat: number;
-  readonly fade: number;
-  readonly ratio: number;
-  readonly up: boolean;
-  readonly off: boolean;
-}
 
 const seg: fc.Arbitrary<Seg> = fc.record({
   flat: fc.oneof(fc.integer({ min: 0, max: 200 }), fc.integer({ min: 900, max: 1100 })),
@@ -57,97 +40,6 @@ const seg: fc.Arbitrary<Seg> = fc.record({
     { weight: 3, arbitrary: fc.constant(true) },
   ),
 });
-
-/** Breakpoints of a piecewise-linear trace: [time, value]. */
-function trace(v0: number, segs: readonly Seg[]): [number, number][] {
-  const pts: [number, number][] = [[0, v0]];
-  let t = 0;
-  let v = v0;
-  for (const s of segs) {
-    t += s.flat;
-    pts.push([t, v]);
-    let next = v <= 0 ? 0.01 * s.ratio : s.up ? v * s.ratio : v / s.ratio;
-    if (s.off) next = v > 0 ? 0 : 0.03 * s.ratio;
-    next = Math.min(1, Math.max(0, next));
-    t += s.fade === 0 ? 0.001 : s.fade;
-    pts.push([t, next]);
-    v = next;
-  }
-  pts.push([t + 3000, v]);
-  return pts;
-}
-
-function at(pts: readonly [number, number][], t: number): number {
-  for (let i = 1; i < pts.length; i++) {
-    const [t1, v1] = pts[i] ?? [0, 0];
-    const [t0, v0] = pts[i - 1] ?? [0, 0];
-    if (t <= t1) return t1 === t0 ? v1 : v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
-  }
-  return pts[pts.length - 1]?.[1] ?? 0;
-}
-
-/** Sample times: every breakpoint, just before each, and a grid of `step` ms. */
-function times(pts: readonly [number, number][], step: number): number[] {
-  const end = pts[pts.length - 1]?.[0] ?? 0;
-  const s = new Set<number>();
-  for (const [t] of pts) {
-    s.add(t);
-    if (t > 0.001) s.add(t - 0.001);
-  }
-  for (let t = 0; t < end; t += step) s.add(t);
-  return [...s].sort((a, b) => a - b);
-}
-
-/**
- * The slow test for a made-up trace: a change is slow when it lies inside a fade of 0.7 s or longer.
- * Breakpoints come in pairs, a fade's start and end, after the first.
- */
-function slowOf(pts: readonly [number, number][]): (x: number, y: number) => boolean {
-  const slow: [number, number][] = [];
-  for (let i = 2; i < pts.length; i += 2) {
-    const a = pts[i - 1]?.[0] ?? 0;
-    const b = pts[i]?.[0] ?? 0;
-    if (b - a >= 700) slow.push([a, b]);
-  }
-  return (x, y) => slow.some(([a, b]) => a <= x && y <= b);
-}
-
-/** The checker's breaches of a rule on trace X imply the guard's own, at the address and the room. */
-function agrees(pts: readonly [number, number][]): void {
-  const rec = new TraceRecorder(Simulator.of([]), 0);
-  rec.points.set(
-    'X',
-    times(pts, 25).map((t) => ({ t, d: [at(pts, t)] })),
-  );
-  rec.labels.set('X', ['mono']);
-  const slow = slowOf(pts);
-  rec.slow.set('X', slow);
-  const problems = rateProblems(rec, 3);
-  const ts = times(pts, 10);
-  const samples = ts.map((t, k) => ({ t, v: at(pts, t), slow: k > 0 && slow(ts[k - 1] ?? t, t) }));
-  const e = events(samples);
-  // An address's events go through the merge of its traces, as `predictEvents` does (S6-D17-1).
-  const de = directedEvents(samples);
-  const address: TraceEvents = {
-    legs: mergeDirected([de.legs], SAME_LEG_MS - TIME_MARGIN_MS),
-    hard: mergeDirected([de.hard], SAME_LEG_MS - TIME_MARGIN_MS),
-    reversals: de.reversals,
-  };
-  const guard = (scope: string, rule: string) =>
-    scopeViolations(scope, scope === ROOM ? e : address, EMPTY, 3).some((v) =>
-      v.rule.includes(rule),
-    );
-  for (const [rule, guardRule] of [
-    ['hard steps', 'hard step'],
-    ['reversals', 'reversals'],
-  ] as const) {
-    const checker = problems.filter((p) => p.rule === rule);
-    if (checker.some((p) => p.scope === 'X'))
-      expect(guard('a0', guardRule), `${rule} at X`).toBe(true);
-    if (checker.some((p) => p.scope === 'room'))
-      expect(guard(ROOM, guardRule), `${rule} in the room`).toBe(true);
-  }
-}
 
 const level = fc.oneof(fc.constant(0), fc.double({ min: 0.005, max: 1, noNaN: true }));
 
