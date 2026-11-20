@@ -29,6 +29,7 @@ Fable goes where depth of reasoning pays most: the research, the light and colou
 | 6     | Console and scripts                                     | Sonnet                         | yes       |
 | 7     | Visualiser engine: light and colour                     | Fable                          | yes       |
 | 8     | Hallway, mounts and tapes                               | Opus                           | yes       |
+| 8b    | Rate guard                                              | Fable (Opus if Fable is short) | yes       |
 | 9     | Scenes, sequences and effects                           | Opus                           | yes       |
 | 10    | Switchgear                                              | Sonnet                         | yes       |
 | 11    | Hardening, independent review, going public             | Opus                           | yes       |
@@ -188,6 +189,21 @@ Done when: the engine meets the frame-time budget in the test plan and the stage
 6. Visual regression tests for each preset.
 
 Done when: the stage-close checklist passes.
+
+---
+
+## Stage 8b: Rate guard
+
+The owner chose on 2026-11-18 to stop patching the rate guard and give it a stage of its own. Each round in Stage 6 found new cases where the guard and the trace checker date one hard step differently, by where the samples fall. This stage changes how a hard step is dated, not the rule's limits: one swing a second by default, never more than three, and Panic is never delayed.
+
+1. A design in a new ADR, approved before code: each hard step is dated as the range of times the rule could give it and counted once, the same way in the guard (`src/safety/rate`) and in the trace checker the property tests use. ADR 0016's Consequences suggest this.
+2. Close S5-P1 (High): two swings in a second on DT8 hardware the governor has never seen.
+3. Close S6-P13, S6-D18-1, S6-D18-3, S6-D18-4, S6-D18-5 and S6-P14 to S6-P16. Each counterexample becomes a fixed example in its property.
+4. End the refusals that ADR 0016 lists under Consequences where the new dating allows it, and record any that stay.
+5. Unit tests for the branches in `legs.ts` and `trace.ts` that only the property tests reach, so `src/safety` keeps a margin over its 95% branch target.
+6. `pnpm mutate` on `src/safety/rate`: kill or explain each survivor, including the 57 Stage 5 mutants that only the old checker killed.
+
+Done when: the stage-close checklist passes, `dali-reviewer` and `security-reviewer` sign off, and two `PROP_RUNS=1000` passes with fresh seeds find nothing.
 
 ---
 
