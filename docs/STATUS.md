@@ -245,6 +245,15 @@ Known gaps:
 - The floor's finishes are placeholders, and surfaces are neutral and matte.
 - The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove Chromium only.
 
+## Stage 8b (rate guard), in progress
+
+Branch `stage-8b-rate-guard`, on Fable as planned. Where it stands on 2026-11-20:
+
+- Step 1, reproduce, is done except for two seeded runs. S6-D18-1, S6-P14 and S5-P1 reproduce and are fixed cases in `tests/properties/hard-steps.test.ts`, marked `it.fails` until the fix. S6-D18-3 and S6-D18-4 did not reproduce in sweeps, and S6-D18-5 has no repro. The seeded 1,000-run passes for S6-P15 (seed -1926744302, `rate-console.prop.test.ts`, unlocked) and S6-P16 (seed -1526685486, `rate.prop.test.ts`, never-seen hardware) had not finished.
+- `tests/harness/diff.ts` holds the differential test's trace helpers, now with several channels and a shifted checker grid.
+- **ADR 0019 is proposed and waits for the owner.** No code in `src/safety` has changed. It differs from the approved plan in one way: the guard and the checker read the light on one shared grid, and the range comes from the guard's cautious readings. It also sets the S5-P1 rule, which the owner should read: on hardware, a DT8 driver whose colour is unknown takes OFF or a colour before it takes a level.
+- After approval, the build order is in the plan: the checker, the guard, S5-P1, the properties, coverage, mutation, docs, then the stage close.
+
 ## Next
 
 Review and merge the Stage 8 PR. Then, in either order:
