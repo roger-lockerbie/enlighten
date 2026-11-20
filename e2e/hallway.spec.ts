@@ -1,6 +1,7 @@
 /**
- * V-hallway, the Stage 7 part (TEST_PLAN section 8): pictures of the default hallway in a few
- * states, against saved ones, with a small tolerance. Headless Chromium draws in software, so the
+ * V-hallway (TEST_PLAN section 8): pictures of the default hallway in a few states (Stage 7), of
+ * each mount preset, and of each cover close up (Stage 8), against saved ones, with a small
+ * tolerance. Headless Chromium draws in software, so the
  * same baselines serve a laptop and CI. The numbers carry the accuracy (`e2e/visualiser.spec.ts`
  * and the unit tests): these catch a change in the shader or the layout that the numbers miss.
  *
@@ -68,5 +69,40 @@ test('the hallway looks as it did', async ({ page }) => {
   await settled(page, 0);
   await page.getByTestId('exposure').getByRole('button', { name: 'Night-adapted' }).click();
   await expect(canvas).toHaveScreenshot('both-night.png', shot);
+  await noProblems(w);
+});
+
+test('each mount preset and each cover looks as it did', async ({ page }) => {
+  test.setTimeout(180_000);
+  const w = await openApp(page);
+  await goTo(page, 'Visualiser');
+  const status = page.getByTestId('solve-status');
+  await expect(status).toContainText('Bounced light ready', { timeout: 60_000 });
+  const canvas = page.getByTestId('hallway-canvas');
+  const shot = { maxDiffPixelRatio: 0.01, threshold: 0.06 };
+  // Every preset puts tape A on address 0.
+  await openConsole(page);
+  await run(page, 'tc 0 3000K 30%', 'level 210 (30.1%)');
+  await page.keyboard.press('Control+Backquote');
+  await settled(page, 0);
+
+  for (const preset of ['skirting', 'channel', 'reveal-up', 'reveal-down', 'mirrored']) {
+    await page.getByTestId(`preset-${preset}`).click();
+    await expect(status).toContainText('Bounced light ready', { timeout: 60_000 });
+    await settled(page, 0);
+    await expect(canvas).toHaveScreenshot(`preset-${preset}.png`, shot);
+  }
+
+  // Close on the channel, where the dots show or are hidden by the cover.
+  await page.getByTestId('preset-channel').click();
+  await expect(status).toContainText('Bounced light ready', { timeout: 60_000 });
+  await page.getByTestId('mount-row-m1').click();
+  await page.getByTestId('camera-mode').getByRole('button', { name: 'Close up' }).click();
+  for (const cover of ['none', 'clear', 'frosted', 'opal-market', 'opal-linear-lux']) {
+    await page.getByTestId('mount-diffuser').selectOption(cover);
+    await expect(page.getByTestId('mount-0')).toContainText('cover:');
+    await settled(page, 0);
+    await expect(canvas).toHaveScreenshot(`cover-${cover}.png`, shot);
+  }
   await noProblems(w);
 });

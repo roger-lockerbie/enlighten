@@ -40,8 +40,11 @@ export interface Mount {
   readonly diffuser: DiffuserId;
   /** LED to cover, for the dots. */
   readonly depth: number;
-  /** The simulated unit this mount follows: A or B on the bench. */
-  readonly unit: string;
+  /**
+   * The DALI short address whose driver this mount follows (SPEC R14.2). An address with no driver
+   * leaves the mount unlit.
+   */
+  readonly address: number;
 }
 
 export interface Scene {
@@ -70,7 +73,9 @@ export interface Sourced {
 export const MOUNT_DEFAULTS: Readonly<
   Record<
     MountKind,
-    Readonly<Record<'height' | 'slotHeight' | 'slotDepth' | 'setback' | 'aperture', Sourced>>
+    Readonly<
+      Record<'height' | 'slotHeight' | 'slotDepth' | 'setback' | 'aperture' | 'depth', Sourced>
+    >
   >
 > = {
   skirting: {
@@ -83,6 +88,7 @@ export const MOUNT_DEFAULTS: Readonly<
       basis: 'Linear Lux 1963, 14.3 mm channel less its walls',
       sourced: false,
     },
+    depth: { value: 0.013, basis: 'Linear Lux 1963, scaled from its drawing', sourced: true },
   },
   reveal: {
     height: { value: 2.4, basis: 'A high reveal, 300 mm below a 2.7 m ceiling', sourced: false },
@@ -102,6 +108,11 @@ export const MOUNT_DEFAULTS: Readonly<
       sourced: false,
     },
     aperture: { value: 0.012, basis: 'Linear Lux 1715, 12.3 mm channel', sourced: true },
+    depth: {
+      value: 0.011,
+      basis: 'As the flush channel. No reveal profile is dimensioned',
+      sourced: false,
+    },
   },
   channel: {
     height: { value: 0.6, basis: 'The brief', sourced: true },
@@ -113,14 +124,12 @@ export const MOUNT_DEFAULTS: Readonly<
       basis: 'Linear Lux 5410 and 1715, 12 mm lit aperture',
       sourced: true,
     },
+    depth: {
+      value: 0.011,
+      basis: 'Linear Lux 5410 and 1715, LED to cover 10 to 12 mm',
+      sourced: true,
+    },
   },
-};
-
-/** LED to cover, by kind: 13 mm in the 1963 skirting profile, 11 mm in the others (optics.md). */
-const DEFAULT_DEPTH: Readonly<Record<MountKind, number>> = {
-  skirting: 0.013,
-  reveal: 0.011,
-  channel: 0.011,
 };
 
 /** A mount of a kind with its defaults, running the length of the hallway. */
@@ -147,8 +156,8 @@ export function mount(
     gradient: 0,
     tape: 'A',
     diffuser: 'opal-linear-lux',
-    depth: DEFAULT_DEPTH[kind],
-    unit: 'A',
+    depth: d.depth.value,
+    address: 0,
     ...over,
   };
 }
@@ -166,8 +175,8 @@ export function defaultScene(): Scene {
     endWalls: 'closed',
     reflectance: { ceiling: 0.9, walls: 0.8, floor: 0.5 },
     mounts: [
-      mount('m1', 'skirting', 'left', length, { tape: 'A', unit: 'A' }),
-      mount('m2', 'channel', 'right', length, { tape: 'B', unit: 'B' }),
+      mount('m1', 'skirting', 'left', length, { tape: 'A', address: 0 }),
+      mount('m2', 'channel', 'right', length, { tape: 'B', address: 1 }),
     ],
   };
 }
@@ -182,12 +191,12 @@ export function sixMountScene(): Scene {
   return {
     ...base,
     mounts: [
-      mount('l1', 'skirting', 'left', l, { tape: 'A', unit: 'A' }),
-      mount('l2', 'channel', 'left', l, { tape: 'B', unit: 'B' }),
-      mount('l3', 'reveal', 'left', l, { tape: 'A', unit: 'A', facing: 'up' }),
-      mount('r1', 'skirting', 'right', l, { tape: 'B', unit: 'B' }),
-      mount('r2', 'channel', 'right', l, { tape: 'A', unit: 'A' }),
-      mount('r3', 'reveal', 'right', l, { tape: 'B', unit: 'B', facing: 'down' }),
+      mount('l1', 'skirting', 'left', l, { tape: 'A', address: 0 }),
+      mount('l2', 'channel', 'left', l, { tape: 'B', address: 1 }),
+      mount('l3', 'reveal', 'left', l, { tape: 'A', address: 0, facing: 'up' }),
+      mount('r1', 'skirting', 'right', l, { tape: 'B', address: 1 }),
+      mount('r2', 'channel', 'right', l, { tape: 'A', address: 0 }),
+      mount('r3', 'reveal', 'right', l, { tape: 'B', address: 1, facing: 'down' }),
     ],
   };
 }
@@ -221,8 +230,9 @@ function onlyKeys(o: Record<string, unknown>, keys: readonly string[]): boolean 
   return names.length === keys.length && keys.every((k) => Object.hasOwn(o, k));
 }
 
+/** A number in range. Minus zero comes back as zero, so a scene survives JSON unchanged. */
 function num(v: unknown, min: number, max: number): number | undefined {
-  return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : undefined;
+  return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v + 0 : undefined;
 }
 
 function oneOf<T extends string>(v: unknown, set: readonly T[]): T | undefined {
@@ -245,16 +255,18 @@ const MOUNT_KEYS = [
   'tape',
   'diffuser',
   'depth',
-  'unit',
+  'address',
 ] as const;
 
 function parseMount(v: unknown, hall: { length: number; height: number }): Mount | string {
   const o = record(v);
   if (o === undefined || !onlyKeys(o, MOUNT_KEYS)) return 'a mount has the wrong keys';
   const id = o['id'];
-  const unit = o['unit'];
+  const address = o['address'];
   if (typeof id !== 'string' || !/^[a-z0-9-]{1,16}$/.test(id)) return 'a mount has a bad id';
-  if (typeof unit !== 'string' || !/^[A-Za-z0-9]{1,8}$/.test(unit)) return 'a mount has a bad unit';
+  if (typeof address !== 'number' || !Number.isInteger(address) || address < 0 || address > 63) {
+    return 'a mount has a bad address';
+  }
   const kind = oneOf(o['kind'], KINDS);
   const side = oneOf(o['side'], SIDES);
   const facing = oneOf(o['facing'], FACINGS);
@@ -317,7 +329,7 @@ function parseMount(v: unknown, hall: { length: number; height: number }): Mount
     tape,
     diffuser,
     depth,
-    unit,
+    address: address + 0,
   };
 }
 
@@ -409,7 +421,7 @@ export function parseScene(v: unknown): SceneResult {
 }
 
 /**
- * The parts of a scene that change the light's paths, as stable text. Tape type, diffuser and unit
+ * The parts of a scene that change the light's paths, as stable text. Tape type, diffuser and address
  * are left out: they change only how much light leaves a mount, which is a weight on its response.
  */
 export function geometryText(s: Scene): string {

@@ -1,56 +1,87 @@
 <!--
-  The Visualiser (SPEC R10, ADR 0008 and ADR 0017): the hallway as the light engine predicts it.
-  Stage 7 shows one fixed hallway from one fixed camera, with the engine's controls: exposure, white
-  balance, false colour and the probe. Stage 8 adds the hallway and mount editors and the cameras.
+  The Visualiser (SPEC R10 to R12, R14.2, R15; ADR 0008, ADR 0017 and ADR 0018): the hallway as the
+  light engine predicts it. The hallway and its mounts are edited here and in the inspector, with
+  presets. The camera walks, orbits or comes close to a mount. The A/B view shows two set-ups side
+  by side, driven by the same devices, with one exposure and one white balance.
 
-  The picture follows the simulator's output, which the rate guard already limits, and draws only
-  when that changes. It has no motion of its own (SPEC S6.3).
+  The picture follows the active connection's output, which the rate guard already limits, and
+  draws only when that, the set-up or the view changes. It has no motion of its own (SPEC S6.3).
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { defaultCamera, ray } from '../../light/camera.ts';
+  import type { View } from '../../light/camera.ts';
+  import {
+    cameraFor,
+    defaultCamera,
+    downHall,
+    parseView,
+    turnBy,
+    walkBy,
+    zoomBy,
+  } from '../../light/camera.ts';
   import { PRESET_EV, clampEv, whiteLuminance } from '../../light/colour/exposure.ts';
   import type { FalseScale } from '../../light/colour/falsecolour.ts';
   import { paletteAt, ticks } from '../../light/colour/falsecolour.ts';
   import { cct } from '../../light/colour/locus.ts';
   import type { Display } from '../../light/colour/xyz.ts';
   import { DIFFUSERS } from '../../light/diffuser.ts';
-  import { TAPES } from '../../light/emitter.ts';
-  import { buildFrame, rippleTables } from '../../light/frame.ts';
-  import { buildGeometry, pick } from '../../light/geometry.ts';
+  import { TAPES, undriven } from '../../light/emitter.ts';
+  import type { Frame } from '../../light/frame.ts';
+  import { buildFrame, rippleTables, roomLight } from '../../light/frame.ts';
+  import { buildGeometry } from '../../light/geometry.ts';
   import { layout } from '../../light/atlas.ts';
   import type { Reading } from '../../light/probe.ts';
-  import { probe } from '../../light/probe.ts';
-  import { defaultScene, sixMountScene } from '../../light/scene.ts';
-  import { LightStore } from '../../store/light.ts';
+  import type { Saved } from '../../light/saved.ts';
+  import { defaultSaved, parseSaved } from '../../light/saved.ts';
+  import type { Mount, MountKind, Scene, Side } from '../../light/scene.ts';
+  import { MAX_MOUNTS, sixMountScene } from '../../light/scene.ts';
+  import type { Edit, Setup } from '../../light/setup.ts';
+  import {
+    KIND_NAMES,
+    PRESETS,
+    TAPE_CHOICES,
+    addMount,
+    applyPreset,
+    facingOf,
+    linked,
+  } from '../../light/setup.ts';
   import { BALANCES, EXPOSURES, FALSE_VIEWS, type Preferences } from '../../store/schema.ts';
-  import { startLightWorker } from '../../workers/policy.ts';
   import NumberField from '../components/NumberField.svelte';
   import Segmented from '../components/Segmented.svelte';
   import StatusChip from '../components/StatusChip.svelte';
+  import Toggle from '../components/Toggle.svelte';
   import type { AppState } from '../state.svelte.ts';
+  import CameraBar from '../visualiser/CameraBar.svelte';
   import { drivesFor } from '../visualiser/drives.ts';
+  import HallwayCard from '../visualiser/HallwayCard.svelte';
+  import MountEditor from '../visualiser/MountEditor.svelte';
+  import Picture from '../visualiser/Picture.svelte';
+  import PresetDiagram from '../visualiser/PresetDiagram.svelte';
   import type { HallwayRenderer, Measured } from '../visualiser/renderer.ts';
   import type { SolveState } from '../visualiser/solver.ts';
-  import { LightSolver } from '../visualiser/solver.ts';
 
   let { app }: { app: AppState } = $props();
 
-  // One fixed hallway and view in Stage 7.
-  const scene = defaultScene();
-  const geometry = buildGeometry(scene);
-  const atlas = layout(geometry);
-  const camera = defaultCamera(scene);
-  const tables = rippleTables(scene);
+  /** The set-ups and view, from the store. Nothing is drawn until they are read. */
+  let saved = $state.raw<Saved | undefined>(undefined);
+  let selected = $state<string | undefined>(undefined);
+  let message = $state('');
 
-  let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   let renderer = $state<HallwayRenderer | undefined>(undefined);
   let display = $state<Display>('srgb');
-  let problem = $state<string | undefined>(undefined);
-  let solve = $state<SolveState>({ state: 'solving', done: 0, total: scene.mounts.length });
+  let solveA = $state<SolveState>({ state: 'solving', done: 0, total: 0 });
+  let solveB = $state<SolveState>({ state: 'solving', done: 0, total: 0 });
+  let readingA = $state<Reading | undefined>(undefined);
+  let readingB = $state<Reading | undefined>(undefined);
   let measured = $state<Measured | undefined>(undefined);
-  /** The probe's place in the picture, 0 to 1 from the top left. */
-  let at = $state({ x: 0.5, y: 0.75 });
+
+  const setupA = $derived(saved?.a);
+  const setupB = $derived(saved?.b);
+  const compare = $derived(saved?.compare ?? false);
+  const editing = $derived<'a' | 'b'>(compare ? (saved?.editing ?? 'a') : 'a');
+  const current = $derived(editing === 'a' ? setupA : setupB);
+  const view = $derived<View | undefined>(saved?.view);
+  const selectedMount = $derived(current?.scene.mounts.find((m) => m.id === selected));
 
   const prediction = $derived(app.snap !== undefined && app.snap.target !== 'simulator');
   const ev = $derived(
@@ -69,107 +100,175 @@
         : { quantity: 'luminance', min: 0.01, decades: 4 },
   );
   const drives = $derived(drivesFor(app.snap?.light ?? []));
-  const frame = $derived(buildFrame(scene, drives, { display, balance }));
-  const response = $derived(solve.state === 'ready' ? solve.response : undefined);
-  const desaturated = $derived(frame.mounts.some((m) => m.desaturated));
-  const whiteKelvin = $derived(Math.round(cct(frame.white).kelvin / 10) * 10);
-
-  const reading = $derived.by((): Reading | undefined => {
-    if (response === undefined || renderer === undefined) return undefined;
-    const r = ray(camera, renderer.aspect, at.x * 2 - 1, 1 - at.y * 2);
-    const hit = pick(geometry, r.origin, r.direction);
-    if (hit === undefined) return undefined;
-    return probe(
-      geometry,
-      response,
-      frame.mounts.map((m) => m.raw),
-      hit.face,
-      hit.s,
-      hit.t,
-    );
-  });
+  // One white for both pictures in the A/B view (ADR 0008): each is balanced to the light of both.
+  // Each picture builds its frame for the scene it shows, which for a moment after an edit may be
+  // the scene before it. Everything the frame depends on is read here, so a new builder is made
+  // when any of it changes.
+  function frameBuilder(other: Setup | undefined): (s: Scene) => Frame {
+    const d = drives;
+    const settings = {
+      display,
+      balance,
+      ...(other === undefined ? {} : { alongside: roomLight(other.scene, d) }),
+    };
+    return (s: Scene) => buildFrame(s, d, settings);
+  }
+  const frameForA = $derived(frameBuilder(compare ? setupB : undefined));
+  const frameForB = $derived(frameBuilder(setupA));
+  const frameA = $derived<Frame | undefined>(
+    setupA === undefined ? undefined : frameForA(setupA.scene),
+  );
+  const frameB = $derived<Frame | undefined>(
+    setupB === undefined || !compare ? undefined : frameForB(setupB.scene),
+  );
+  const desaturated = $derived(
+    [...(frameA?.mounts ?? []), ...(frameB?.mounts ?? [])].some((m) => m.desaturated),
+  );
+  const whiteKelvin = $derived(
+    frameA === undefined ? 0 : Math.round(cct(frameA.white).kelvin / 10) * 10,
+  );
 
   onMount(() => {
-    const solver = new LightSolver(
-      new LightStore(app.store.lightBackend()),
-      startLightWorker,
-      atlas,
-    );
-    let live: HallwayRenderer | undefined;
     let gone = false;
-    let observer: ResizeObserver | undefined;
-    void solver.solve(scene, (s) => {
-      solve = s;
-    });
-    // three.js loads only when this page is opened (ADR 0002).
-    import('../visualiser/renderer.ts')
-      .then(({ HallwayRenderer }) => {
-        if (gone || canvas === undefined) return;
-        const made = new HallwayRenderer(canvas);
-        live = made;
-        made.setScene(geometry, atlas, tables, camera);
-        const el = canvas;
-        const fit = (): void => {
-          made.resize(el.clientWidth, el.clientHeight);
-        };
-        fit();
-        observer = new ResizeObserver(fit);
-        observer.observe(el);
-        display = made.display;
-        renderer = made;
+    app.store
+      .loadVisualiser(parseSaved, defaultSaved())
+      .then((r) => {
+        if (gone) return;
+        if (r.problem !== undefined) app.storeProblem = r.problem;
+        saved = r.value;
+        selected = r.value[r.value.compare ? r.value.editing : 'a'].scene.mounts[0]?.id;
       })
       .catch(() => {
-        problem = 'The hallway could not be drawn. It needs WebGL 2.';
+        if (!gone) saved = defaultSaved();
       });
+    app.inspector = inspector;
     return () => {
       gone = true;
-      observer?.disconnect();
-      solver.dispose();
-      live?.dispose();
+      clearTimeout(saveTimer);
+      if (pending !== undefined) void store(pending);
+      if (app.inspector === inspector) app.inspector = undefined;
     };
   });
 
-  $effect(() => {
-    renderer?.setResponse(response);
-  });
-  $effect(() => {
-    renderer?.setFrame(frame);
-  });
-  $effect(() => {
-    renderer?.setExposure(ev);
-  });
-  $effect(() => {
-    renderer?.setFalseColour(falseScale);
-  });
-
-  function point(e: PointerEvent): void {
-    const el = e.currentTarget as HTMLElement;
-    const box = el.getBoundingClientRect();
-    at = {
-      x: Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)),
-      y: Math.min(1, Math.max(0, (e.clientY - box.top) / box.height)),
-    };
+  // Saved shortly after the last change.
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let pending: Saved | undefined;
+  function store(s: Saved): Promise<void> {
+    pending = undefined;
+    return app.store.saveVisualiser(parseSaved, s).catch(() => {
+      app.storeProblem = 'The visualiser set-ups could not be saved.';
+    });
+  }
+  function keep(next: Saved): void {
+    saved = next;
+    pending = next;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (pending !== undefined) void store(pending);
+    }, 400);
   }
 
-  function nudge(e: KeyboardEvent): void {
-    const step = e.shiftKey ? 0.1 : 0.02;
-    const move: Record<string, readonly [number, number]> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
-    const d = move[e.key];
-    if (d === undefined) return;
-    e.preventDefault();
-    at = {
-      x: Math.min(1, Math.max(0, at.x + d[0])),
-      y: Math.min(1, Math.max(0, at.y + d[1])),
-    };
+  /** Make an edit to the set-up being edited, or say why it is refused. */
+  function edit(change: (s: Setup) => Edit): void {
+    const s = saved;
+    if (s === undefined) return;
+    const side = s.compare ? s.editing : 'a';
+    const before = s[side];
+    const r = change(before);
+    if (!r.ok) {
+      message = r.reason;
+      return;
+    }
+    message = '';
+    keep({ ...s, [side]: r.setup });
+    const ids = new Set(before.scene.mounts.map((m) => m.id));
+    const added = r.setup.scene.mounts.find((m) => !ids.has(m.id));
+    if (added !== undefined && r.setup.scene.mounts.length > before.scene.mounts.length) {
+      select(added.id);
+    } else if (!r.setup.scene.mounts.some((m) => m.id === selected)) {
+      select(r.setup.scene.mounts[0]?.id);
+    }
   }
+
+  /** Select a mount. The close-up follows the selection, so it is never of a mount that has gone. */
+  function select(id: string | undefined): void {
+    selected = id;
+    const s = saved;
+    if (s?.view.mode !== 'close') return;
+    if (id !== undefined) keep({ ...s, view: { mode: 'close', mount: id } });
+    else keep({ ...s, view: downHall(s[s.compare ? s.editing : 'a'].scene) });
+  }
+
+  /** A view is checked before it is kept, so a bad one is never drawn or stored (S8-L5). */
+  function setView(v: View): void {
+    const checked = parseView(v);
+    if (saved !== undefined && checked !== undefined) keep({ ...saved, view: checked });
+  }
+  const sceneForView = $derived(current?.scene);
+  function onturn(yaw: number, pitch: number): void {
+    if (view !== undefined) setView(turnBy(view, yaw, pitch));
+  }
+  function onwalk(forward: number, right: number): void {
+    if (view?.mode === 'walk' && sceneForView !== undefined) {
+      setView(walkBy(sceneForView, view, forward, right));
+    }
+  }
+  function onzoom(steps: number): void {
+    if (view !== undefined && sceneForView !== undefined) {
+      setView(zoomBy(sceneForView, view, steps));
+    }
+  }
+
+  function setCompare(on: boolean): void {
+    if (saved === undefined) return;
+    keep({ ...saved, compare: on, editing: on ? saved.editing : 'a' });
+    select((on ? saved[saved.editing] : saved.a).scene.mounts[0]?.id);
+  }
+  function setEditing(side: 'a' | 'b'): void {
+    if (saved === undefined) return;
+    keep({ ...saved, editing: side });
+    select(saved[side].scene.mounts[0]?.id);
+    message = '';
+  }
+  function copyAtoB(): void {
+    if (saved !== undefined) keep({ ...saved, b: saved.a });
+  }
+
+  // Adding a mount
+  let addKind = $state<MountKind>('channel');
+  let addSide = $state<Side>('left');
 
   const fixed = (v: number): string =>
     v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v >= 0.1 ? v.toFixed(2) : v.toPrecision(2);
+  const sideName = (s: Side): string => (s === 'left' ? 'Left' : 'Right');
+  const tapeName = (t: Mount['tape']): string => TAPE_CHOICES.find((c) => c.id === t)?.label ?? t;
+
+  function summary(s: Setup, m: Mount): string {
+    const f = facingOf(s, m.id);
+    const way =
+      m.kind === 'channel'
+        ? 'facing in'
+        : m.kind === 'skirting'
+          ? 'facing down'
+          : `facing ${f === 'both' ? 'up and down' : (f ?? m.facing)}`;
+    const at = m.kind === 'skirting' ? '' : ` at ${String(Math.round(m.height * 1000))} mm`;
+    const cover = m.diffuser === 'none' ? 'no cover' : `${DIFFUSERS[m.diffuser].name} cover`;
+    return `${sideName(m.side)}: ${KIND_NAMES[m.kind].toLowerCase()}${at}, ${way}. ${tapeName(m.tape)}, address ${String(m.address)}, ${cover}.`;
+  }
+
+  /** Why a mount may be dark or partly dark whatever is sent. */
+  function driverNote(m: Mount): string | undefined {
+    const d = drives.get(m.address);
+    if (d === undefined) return `No driver at address ${String(m.address)}.`;
+    const missing = undriven(d, m.tape);
+    if (missing.length === 0) return undefined;
+    return `Its driver does not feed the tape's ${missing.join(', ')}.`;
+  }
+
+  function linkNote(s: Setup, m: Mount): string | undefined {
+    const twin = linked(s, m.id, 'mirror');
+    return twin === undefined ? undefined : `Mirrored with ${twin}.`;
+  }
 
   const SURFACE: Record<string, string> = {
     floor: 'Floor',
@@ -212,8 +311,8 @@
     const lit = buildFrame(
       six,
       new Map([
-        ['A', full],
-        ['B', full],
+        [0, full],
+        [1, full],
       ]),
       { display, balance },
     );
@@ -223,231 +322,407 @@
       measuring = false;
     }
   }
+
+  function solveText(s: SolveState): string {
+    if (s.state === 'solving') {
+      return `Working out the bounced light: ${String(s.done)} of ${String(s.total)} mounts.`;
+    }
+    if (s.state === 'failed') return `The bounced light could not be worked out: ${s.reason}`;
+    return `Bounced light ready (${s.cached ? 'kept from before' : 'just solved'}, ${String(s.response.patches)} patches).`;
+  }
 </script>
+
+{#snippet inspector()}
+  {#if current !== undefined && selectedMount !== undefined}
+    <MountEditor
+      setup={current}
+      mount={selectedMount}
+      label={compare ? `${editing === 'a' ? 'A' : 'B'}: ` : ''}
+      {edit}
+      {message}
+    />
+  {:else}
+    <p class="muted">Select a mount on the Visualiser to change it here.</p>
+  {/if}
+{/snippet}
+
+{#snippet readingText(r: Reading | undefined, suffix: string)}
+  {#if r === undefined}
+    {(suffix === '' ? solveA : solveB).state === 'ready'
+      ? 'Nothing under the probe.'
+      : 'Waiting for the bounced light.'}
+  {:else}
+    <strong>{surfaceName(r.surface)}</strong>:
+    <span data-testid={`probe${suffix}-lux`}>{fixed(r.lux)}</span> lux ({fixed(r.directLux)}
+    straight from a tape),
+    <span data-testid={`probe${suffix}-luminance`}>{fixed(r.luminance)}</span>
+    cd/m²{#if r.colour !== undefined},
+      {Math.round(r.colour.kelvin / 10) * 10} K, Duv {r.colour.duv.toFixed(4)}, x
+      {r.colour.xy.x.toFixed(3)} y {r.colour.xy.y.toFixed(3)}{/if}.
+  {/if}
+{/snippet}
+
+{#snippet mountLines(s: Setup, f: Frame | undefined, prefix: string)}
+  <ul class="small mounts" data-testid={`mounts${prefix}`}>
+    {#each s.scene.mounts as m, i (m.id)}
+      {@const out = f?.mounts[i]?.raw ?? [0, 0, 0]}
+      {@const sum = out[0] + out[1] + out[2]}
+      {@const note = driverNote(m)}
+      <li data-testid={`mount${prefix}-${String(i)}`}>
+        {TAPES[m.tape].name}, cover: {DIFFUSERS[m.diffuser].name}, in a
+        {KIND_NAMES[m.kind].toLowerCase()} on the {m.side} wall, following address {m.address}:
+        <span data-testid={`mount${prefix}-${String(i)}-flux`}>{out[1].toFixed(2)}</span> lm/m now{#if sum > 0},
+          x <span data-testid={`mount${prefix}-${String(i)}-x`}>{(out[0] / sum).toFixed(5)}</span>
+          y
+          <span data-testid={`mount${prefix}-${String(i)}-y`}>{(out[1] / sum).toFixed(5)}</span
+          >{/if}.{#if note !== undefined}
+          <span class="warn-text">{note}</span>{/if}
+      </li>
+    {/each}
+  </ul>
+{/snippet}
 
 <div class="page stack">
   <header class="row top">
     <h1>Visualiser</h1>
     <StatusChip kind={prediction ? 'prediction' : 'estimated'} />
     <span class="muted small" data-testid="solve-status" role="status">
-      {#if solve.state === 'solving'}
-        Working out the bounced light: {solve.done} of {solve.total} mounts.
-      {:else if solve.state === 'failed'}
-        The bounced light could not be worked out: {solve.reason}
-      {:else}
-        Bounced light ready ({solve.cached ? 'kept from before' : 'just solved'},
-        {solve.response.patches} patches).
-      {/if}
+      {compare ? 'A: ' : ''}{solveText(solveA)}
     </span>
+    {#if compare}
+      <span class="muted small" data-testid="solve-status-b" role="status">
+        B: {solveText(solveB)}
+      </span>
+    {/if}
   </header>
 
-  <div class="view">
-    <button
-      type="button"
-      class="frame"
-      aria-label="The hallway. Move the pointer, or use the arrow keys, to place the probe."
-      onpointermove={point}
-      onpointerdown={point}
-      onkeydown={nudge}
-      data-testid="hallway"
-    >
-      <canvas bind:this={canvas} data-testid="hallway-canvas"></canvas>
-      <span class="cross" style:left={`${String(at.x * 100)}%`} style:top={`${String(at.y * 100)}%`}
-      ></span>
-    </button>
-    {#if problem !== undefined}<p class="warn" role="alert">{problem}</p>{/if}
-  </div>
+  {#if saved === undefined || setupA === undefined || view === undefined || frameA === undefined}
+    <p class="muted" role="status">Reading the set-up.</p>
+  {:else}
+    <section class="card" aria-labelledby="camera-h">
+      <h2 id="camera-h" class="sr-only">Camera</h2>
+      <div class="row spread">
+        <CameraBar scene={(current ?? setupA).scene} {view} {selected} onview={setView} />
+        <Toggle label="A/B view" checked={compare} onchange={setCompare} testid="ab-toggle" />
+      </div>
+    </section>
 
-  <section class="card" aria-labelledby="probe-h">
-    <h2 id="probe-h">Probe</h2>
-    <p data-testid="probe" aria-live="polite">
-      {#if reading === undefined}
-        {response === undefined ? 'Waiting for the bounced light.' : 'Nothing under the probe.'}
-      {:else}
-        <strong>{surfaceName(reading.surface)}</strong>:
-        <span data-testid="probe-lux">{fixed(reading.lux)}</span> lux ({fixed(reading.directLux)}
-        straight from a tape),
-        <span data-testid="probe-luminance">{fixed(reading.luminance)}</span>
-        cd/m²{#if reading.colour !== undefined},
-          {Math.round(reading.colour.kelvin / 10) * 10} K, Duv {reading.colour.duv.toFixed(4)}, x
-          {reading.colour.xy.x.toFixed(3)} y {reading.colour.xy.y.toFixed(3)}{/if}.
-      {/if}
-    </p>
-    <p class="muted small">
-      Lux and colour are the light as a meter would read it, before white balance. Move the pointer
-      over the picture, or focus it and use the arrow keys.
-    </p>
-  </section>
-
-  <section class="card controls" aria-labelledby="view-h">
-    <h2 id="view-h">View</h2>
-    <div class="row">
-      <Segmented
-        label="Exposure"
-        options={EXPOSURES.map((e) => ({
-          value: e,
-          label: { night: 'Night-adapted', evening: 'Evening', day: 'Day', manual: 'Manual' }[e],
-        }))}
-        value={app.prefs.exposure}
-        onchange={(exposure: Preferences['exposure']) => {
-          app.update({ exposure });
-        }}
-        testid="exposure"
-      />
-      <NumberField
-        label="EV"
-        value={ev}
-        min={-4}
-        max={12}
-        step={0.5}
-        decimals={1}
-        disabled={app.prefs.exposure !== 'manual'}
-        onchange={(exposureEv: number) => {
-          app.update({ exposureEv });
-        }}
-        testid="exposure-ev"
-      />
-      <span class="muted small" data-testid="exposure-white">
-        White is {fixed(whiteLuminance(ev))} cd/m². Exposure never adjusts by itself.
-      </span>
-    </div>
-    <div class="row">
-      <Segmented
-        label="White balance"
-        options={BALANCES.map((b) => ({
-          value: b,
-          label: { scene: 'Adapted to the scene', daylight: 'Daylight', kelvin: 'Chosen' }[b],
-        }))}
-        value={app.prefs.whiteBalance}
-        onchange={(whiteBalance: Preferences['whiteBalance']) => {
-          app.update({ whiteBalance });
-        }}
-        testid="balance"
-      />
-      <NumberField
-        label="Colour temperature"
-        value={app.prefs.whiteBalanceKelvin}
-        min={2000}
-        max={10000}
-        step={100}
-        unit="K"
-        disabled={app.prefs.whiteBalance !== 'kelvin'}
-        onchange={(whiteBalanceKelvin: number) => {
-          app.update({ whiteBalanceKelvin: Math.round(whiteBalanceKelvin) });
-        }}
-        testid="balance-kelvin"
-      />
-      <span class="muted small" data-testid="balance-white">
-        {app.prefs.whiteBalance === 'daylight'
-          ? 'Balanced to daylight (D65).'
-          : `Balanced to ${String(whiteKelvin)} K.`}
-      </span>
-    </div>
-    <div class="row">
-      <Segmented
-        label="Show"
-        options={FALSE_VIEWS.map((v) => ({
-          value: v,
-          label: { off: 'Picture', illuminance: 'Lux', luminance: 'cd/m²' }[v],
-        }))}
-        value={app.prefs.falseColour}
-        onchange={(falseColour: Preferences['falseColour']) => {
-          app.update({ falseColour });
-        }}
-        testid="false-colour"
-      />
-      {#if falseScale !== undefined}
-        <ol class="legend" aria-label="False colour scale" data-testid="legend">
-          {#each legend as l (l.label)}
-            <li><span class="swatch" style:--c={l.colour}></span>{l.label}</li>
-          {/each}
-          <li class="muted">{falseScale.quantity === 'illuminance' ? 'lux' : 'cd/m²'}</li>
-        </ol>
+    <div class="pictures" class:two={compare}>
+      <figure>
+        {#if compare}<figcaption>A</figcaption>{/if}
+        <Picture
+          store={app.store}
+          scene={setupA.scene}
+          camera={cameraFor(setupA.scene, view)}
+          frameFor={frameForA}
+          {ev}
+          {falseScale}
+          name={compare ? 'Set-up A' : 'The hallway'}
+          bind:reading={readingA}
+          bind:solve={solveA}
+          bind:display
+          bind:renderer
+          {onturn}
+          {onwalk}
+          {onzoom}
+        />
+      </figure>
+      {#if compare && setupB !== undefined && frameB !== undefined}
+        <figure>
+          <figcaption>B</figcaption>
+          <Picture
+            store={app.store}
+            scene={setupB.scene}
+            camera={cameraFor(setupB.scene, view)}
+            frameFor={frameForB}
+            {ev}
+            {falseScale}
+            name="Set-up B"
+            testid="hallway-b"
+            bind:reading={readingB}
+            bind:solve={solveB}
+            {onturn}
+            {onwalk}
+            {onzoom}
+          />
+        </figure>
       {/if}
     </div>
-  </section>
 
-  <section class="card" aria-labelledby="about-h">
-    <h2 id="about-h">What this shows</h2>
-    <p class="small">
-      A best-effort estimate of how the light might look, not a measurement. Tape output and colour
-      are placeholders until the tapes are measured, and surfaces are taken as neutral and matte.
-      {#if desaturated}
-        A screen cannot show LED colours at full saturation, so the saturated colours here are paler
-        than the real tape.
+    <section class="card" aria-labelledby="probe-h">
+      <h2 id="probe-h">Probe</h2>
+      <p data-testid="probe" aria-live="polite">
+        {compare ? 'A: ' : ''}{@render readingText(readingA, '')}
+      </p>
+      {#if compare}
+        <p data-testid="probe-b" aria-live="polite">B: {@render readingText(readingB, '-b')}</p>
       {/if}
-      {display === 'p3' ? 'This screen shows Display P3.' : 'This screen shows sRGB.'}
-    </p>
-    <ul class="small mounts" data-testid="mounts">
-      {#each scene.mounts as m, i (m.id)}
-        {@const out = frame.mounts[i]?.raw ?? [0, 0, 0]}
-        {@const sum = out[0] + out[1] + out[2]}
-        <li data-testid={`mount-${String(i)}`}>
-          {TAPES[m.tape].name}, cover: {DIFFUSERS[m.diffuser].name}, in a
-          {m.kind === 'skirting'
-            ? 'skirting slot'
-            : m.kind === 'channel'
-              ? 'flush channel'
-              : 'reveal'}
-          on the {m.side} wall, following driver {m.unit}:
-          <span data-testid={`mount-${String(i)}-flux`}>{out[1].toFixed(2)}</span> lm/m now{#if sum > 0},
-            x <span data-testid={`mount-${String(i)}-x`}>{(out[0] / sum).toFixed(5)}</span>
-            y <span data-testid={`mount-${String(i)}-y`}>{(out[1] / sum).toFixed(5)}</span>{/if}.
-        </li>
-      {/each}
-    </ul>
-    <div class="row">
-      <button
-        type="button"
-        onclick={() => void measure()}
-        disabled={renderer === undefined || measuring}
-        data-testid="measure">Measure frame time</button
-      >
-      {#if measured !== undefined}
-        <span class="small" data-testid="measured">
-          {#if measured.frames === 0}
-            Too slow to measure on {measured.gpu}.
-          {:else}
-            {measured.ms.toFixed(2)} ms a frame with six mounts at 1440 by 900, over
-            {measured.frames} frames{measured.stopped ? ', stopped early' : ''}, on {measured.gpu}.
-          {/if}
+      <p class="muted small">
+        Lux and colour are the light as a meter would read it, before white balance. Move the
+        pointer over the picture, or focus it and use the arrow keys.
+      </p>
+    </section>
+
+    <section class="card controls" aria-labelledby="view-h">
+      <h2 id="view-h">View</h2>
+      <div class="row">
+        <Segmented
+          label="Exposure"
+          options={EXPOSURES.map((e) => ({
+            value: e,
+            label: { night: 'Night-adapted', evening: 'Evening', day: 'Day', manual: 'Manual' }[e],
+          }))}
+          value={app.prefs.exposure}
+          onchange={(exposure: Preferences['exposure']) => {
+            app.update({ exposure });
+          }}
+          testid="exposure"
+        />
+        <NumberField
+          label="EV"
+          value={ev}
+          min={-4}
+          max={12}
+          step={0.5}
+          decimals={1}
+          disabled={app.prefs.exposure !== 'manual'}
+          onchange={(exposureEv: number) => {
+            app.update({ exposureEv });
+          }}
+          testid="exposure-ev"
+        />
+        <span class="muted small" data-testid="exposure-white">
+          White is {fixed(whiteLuminance(ev))} cd/m². Exposure never adjusts by itself.
         </span>
+      </div>
+      <div class="row">
+        <Segmented
+          label="White balance"
+          options={BALANCES.map((b) => ({
+            value: b,
+            label: { scene: 'Adapted to the scene', daylight: 'Daylight', kelvin: 'Chosen' }[b],
+          }))}
+          value={app.prefs.whiteBalance}
+          onchange={(whiteBalance: Preferences['whiteBalance']) => {
+            app.update({ whiteBalance });
+          }}
+          testid="balance"
+        />
+        <NumberField
+          label="Colour temperature"
+          value={app.prefs.whiteBalanceKelvin}
+          min={2000}
+          max={10000}
+          step={100}
+          unit="K"
+          disabled={app.prefs.whiteBalance !== 'kelvin'}
+          onchange={(whiteBalanceKelvin: number) => {
+            app.update({ whiteBalanceKelvin: Math.round(whiteBalanceKelvin) });
+          }}
+          testid="balance-kelvin"
+        />
+        <span class="muted small" data-testid="balance-white">
+          {app.prefs.whiteBalance === 'daylight'
+            ? 'Balanced to daylight (D65).'
+            : `Balanced to ${String(whiteKelvin)} K${compare ? ', for both set-ups' : ''}.`}
+        </span>
+      </div>
+      <div class="row">
+        <Segmented
+          label="Show"
+          options={FALSE_VIEWS.map((v) => ({
+            value: v,
+            label: { off: 'Picture', illuminance: 'Lux', luminance: 'cd/m²' }[v],
+          }))}
+          value={app.prefs.falseColour}
+          onchange={(falseColour: Preferences['falseColour']) => {
+            app.update({ falseColour });
+          }}
+          testid="false-colour"
+        />
+        {#if falseScale !== undefined}
+          <ol class="legend" aria-label="False colour scale" data-testid="legend">
+            {#each legend as l (l.label)}
+              <li><span class="swatch" style:--c={l.colour}></span>{l.label}</li>
+            {/each}
+            <li class="muted">{falseScale.quantity === 'illuminance' ? 'lux' : 'cd/m²'}</li>
+          </ol>
+        {/if}
+      </div>
+    </section>
+
+    {#if current !== undefined}
+      <section class="card stack" aria-labelledby="mounts-h">
+        <div class="row spread">
+          <h2 id="mounts-h">Mounts</h2>
+          {#if compare}
+            <div class="row">
+              <Segmented
+                label="Editing"
+                options={[
+                  { value: 'a', label: 'Set-up A' },
+                  { value: 'b', label: 'Set-up B' },
+                ]}
+                value={editing}
+                onchange={setEditing}
+                testid="editing"
+              />
+              <button type="button" onclick={copyAtoB} data-testid="copy-a-to-b">Copy A to B</button
+              >
+            </div>
+          {/if}
+        </div>
+        <ul class="mount-list" data-testid="mount-list">
+          {#each current.scene.mounts as m (m.id)}
+            {@const note = driverNote(m)}
+            {@const link = linkNote(current, m)}
+            <li>
+              <button
+                type="button"
+                class="mount-row"
+                aria-pressed={m.id === selected}
+                onclick={() => {
+                  select(m.id);
+                  message = '';
+                  if (!app.prefs.inspectorOpen) app.update({ inspectorOpen: true });
+                }}
+                data-testid={`mount-row-${m.id}`}
+              >
+                <span>{summary(current, m)}</span>
+                {#if link !== undefined}<span class="muted small">{link}</span>{/if}
+                {#if note !== undefined}<span class="small warn-text">{note}</span>{/if}
+              </button>
+            </li>
+          {:else}
+            <li class="muted">No mounts. Add one, or choose a preset.</li>
+          {/each}
+        </ul>
+        <div class="row add">
+          <label class="field">
+            <span>Kind</span>
+            <select bind:value={addKind} data-testid="add-kind">
+              <option value="skirting">{KIND_NAMES.skirting}</option>
+              <option value="reveal">{KIND_NAMES.reveal}</option>
+              <option value="channel">{KIND_NAMES.channel}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Wall</span>
+            <select bind:value={addSide} data-testid="add-side">
+              <option value="left">Left</option>
+              <option value="right">Right</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={current.scene.mounts.length >= MAX_MOUNTS}
+            onclick={() => {
+              edit((s) => addMount(s, addKind, addSide));
+            }}
+            data-testid="add-mount">Add a mount</button
+          >
+          <span class="muted small">
+            {current.scene.mounts.length} of {MAX_MOUNTS} mounts. Select one to change it in the inspector.
+          </span>
+        </div>
+        <p class="small" role="status" data-testid="setup-message">{message}</p>
+
+        <h3>Presets</h3>
+        <ul class="presets">
+          {#each PRESETS as p (p.id)}
+            <li>
+              <button
+                type="button"
+                class="preset"
+                aria-describedby={`preset-${p.id}`}
+                onclick={() => {
+                  edit((s) => applyPreset(s, p.id));
+                }}
+                data-testid={`preset-${p.id}`}
+              >
+                <PresetDiagram scene={p.build(current.scene).scene} />
+                <span>{p.name}</span>
+              </button>
+              <p class="muted small" id={`preset-${p.id}`}>{p.description}</p>
+            </li>
+          {/each}
+        </ul>
+        <p class="muted small">A preset replaces the mounts and keeps the hallway.</p>
+      </section>
+
+      <section class="card" aria-labelledby="hall-h">
+        <h2 id="hall-h">Hallway{compare ? ` (${editing === 'a' ? 'A' : 'B'})` : ''}</h2>
+        <HallwayCard setup={current} {edit} />
+      </section>
+    {/if}
+
+    <section class="card" aria-labelledby="about-h">
+      <h2 id="about-h">What this shows</h2>
+      <p class="small">
+        A best-effort estimate of how the light might look, not a measurement. Tape output and
+        colour are placeholders until the tapes are measured, and surfaces are taken as neutral and
+        matte. Each mount follows the driver at its address, as the active connection reports it.
+        {#if desaturated}
+          A screen cannot show LED colours at full saturation, so the saturated colours here are
+          paler than the real tape.
+        {/if}
+        {display === 'p3' ? 'This screen shows Display P3.' : 'This screen shows sRGB.'}
+      </p>
+      {#if compare}<h3>Set-up A</h3>{/if}
+      {@render mountLines(setupA, frameA, '')}
+      {#if compare && setupB !== undefined}
+        <h3>Set-up B</h3>
+        {@render mountLines(setupB, frameB, '-b')}
       {/if}
-    </div>
-  </section>
+      <div class="row">
+        <button
+          type="button"
+          onclick={() => void measure()}
+          disabled={renderer === undefined || measuring}
+          data-testid="measure">Measure frame time</button
+        >
+        {#if measured !== undefined}
+          <span class="small" data-testid="measured">
+            {#if measured.frames === 0}
+              Too slow to measure on {measured.gpu}.
+            {:else}
+              {measured.ms.toFixed(2)} ms a frame with six mounts at 1440 by 900, over
+              {measured.frames} frames{measured.stopped ? ', stopped early' : ''}, on {measured.gpu}.
+            {/if}
+          </span>
+        {/if}
+      </div>
+    </section>
+  {/if}
 </div>
 
 <style>
   .top {
     gap: var(--space-4);
+    flex-wrap: wrap;
   }
-  .frame {
-    display: block;
-    padding: 0;
-    position: relative;
-    background: var(--viewport);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    aspect-ratio: 16 / 9;
-    max-height: 62vh;
-    width: 100%;
-    overflow: hidden;
-    cursor: crosshair;
+  .spread {
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-4);
+    flex-wrap: wrap;
   }
-  canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
+  .pictures {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
   }
-  .cross {
-    position: absolute;
-    width: 13px;
-    height: 13px;
-    margin: -7px 0 0 -7px;
-    border: 1px solid #fff;
-    border-radius: 50%;
-    box-shadow: 0 0 0 1px #000;
-    pointer-events: none;
+  .pictures.two {
+    grid-template-columns: 1fr 1fr;
+  }
+  figure {
+    margin: 0;
+    min-width: 0;
+  }
+  figcaption {
+    font-size: var(--size-1);
+    color: var(--text-muted);
+    margin-bottom: var(--space-1);
   }
   .controls {
     display: flex;
@@ -479,7 +754,49 @@
     margin: var(--space-2) 0 var(--space-3);
     padding-left: var(--space-4);
   }
-  .warn {
-    color: var(--warning, #e0b050);
+  .mount-list,
+  .presets {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .mount-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .mount-row {
+    width: 100%;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .mount-row[aria-pressed='true'] {
+    border-color: var(--accent);
+  }
+  .add {
+    gap: var(--space-3);
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .presets {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    gap: var(--space-3);
+  }
+  .preset {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+  }
+  .warn-text {
+    color: var(--warn);
   }
 </style>

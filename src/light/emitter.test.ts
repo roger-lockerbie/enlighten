@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { cct, locusXy, xyzToXy } from './colour/index.ts';
 import { DIFFUSERS, RIPPLE_SAMPLES, contrast, ripple } from './diffuser.ts';
-import { TAPES, channelDrives, channelFor, emitted } from './emitter.ts';
+import { TAPES, channelDrives, channelFor, emitted, undriven } from './emitter.ts';
 import type { Drive } from './emitter.ts';
-import { buildFrame, rippleTables, shade } from './frame.ts';
+import { buildFrame, rippleTables, roomLight, shade } from './frame.ts';
 import { buildGeometry } from './geometry.ts';
 import { probe } from './probe.ts';
 import { solveScene } from './response.ts';
@@ -47,6 +47,13 @@ describe('tape profiles', () => {
     expect(channelFor('W')).toBe('WW');
     expect(channelFor('mono')).toBe('WW');
     expect(channelFor('unused')).toBeUndefined();
+  });
+
+  it('names the channels of a tape that a driver does not feed', () => {
+    expect(undriven(tcDrive(0, 0), 'A')).toEqual([]);
+    expect(undriven(tcDrive(0, 0), 'B')).toEqual(['R', 'G', 'B']);
+    expect(undriven(rgbDrive(0, 0, 0, 0, 0), 'A')).toEqual([]);
+    expect(undriven({ terminals: [0], labels: ['unused'] }, 'COB')).toEqual(['WW', 'CW']);
   });
 
   it('reads the drive on each channel, averaging terminals that carry the same colour', () => {
@@ -146,9 +153,9 @@ describe('covers and dots', () => {
 
 describe('the frame', () => {
   const scene = defaultScene();
-  const drives = new Map<string, Drive>([
-    ['A', tcDrive(0.4, 0)],
-    ['B', rgbDrive(0, 0, 1)],
+  const drives = new Map<number, Drive>([
+    [0, tcDrive(0.4, 0)],
+    [1, rgbDrive(0, 0, 1)],
   ]);
 
   it('keeps the measured light and the shown light at the same luminance', () => {
@@ -168,7 +175,7 @@ describe('the frame', () => {
   });
 
   it('balances to the scene along the locus, so a warm room reads as white', () => {
-    const warm = new Map<string, Drive>([['A', tcDrive(1, 0)]]);
+    const warm = new Map<number, Drive>([[0, tcDrive(1, 0)]]);
     const adapted = buildFrame(scene, warm, { display: 'srgb', balance: { mode: 'scene' } });
     const fixed = buildFrame(scene, warm, { display: 'srgb', balance: { mode: 'daylight' } });
     expect(adapted.white.x).toBeCloseTo(locusXy(2700).x, 3);
@@ -177,6 +184,43 @@ describe('the frame', () => {
     expect(xyzToXy(fixed.mounts[0]?.shown ?? [0, 0, 0]).x).toBeGreaterThan(0.44);
     // The measured light is the same either way.
     expect(adapted.mounts[0]?.raw).toEqual(fixed.mounts[0]?.raw);
+  });
+
+  it('balances two set-ups side by side to one white, from the light of both', () => {
+    const warm = new Map<number, Drive>([[0, tcDrive(1, 0)]]);
+    const cool = new Map<number, Drive>([[0, tcDrive(1, 1)]]);
+    const coolScene: Scene = {
+      ...scene,
+      mounts: [mount('c1', 'channel', 'left', 5, { address: 0 })],
+    };
+    const a = buildFrame(scene, warm, {
+      display: 'srgb',
+      balance: { mode: 'scene' },
+      alongside: roomLight(coolScene, cool),
+    });
+    const b = buildFrame(coolScene, cool, {
+      display: 'srgb',
+      balance: { mode: 'scene' },
+      alongside: roomLight(scene, warm),
+    });
+    expect(a.white.x).toBeCloseTo(b.white.x, 9);
+    expect(a.white.y).toBeCloseTo(b.white.y, 9);
+    // Warmer than the cool set-up alone, cooler than the warm one alone.
+    const alone = buildFrame(scene, warm, { display: 'srgb', balance: { mode: 'scene' } });
+    expect(a.white.x).toBeLessThan(alone.white.x);
+    // A fixed balance ignores what is alongside.
+    const fixed = { display: 'srgb', balance: { mode: 'daylight' } } as const;
+    expect(buildFrame(scene, warm, { ...fixed, alongside: [5, 5, 5] }).white).toEqual(
+      buildFrame(scene, warm, fixed).white,
+    );
+  });
+
+  it('weighs the room light by each mount length, and leaves unbound mounts dark', () => {
+    const one = new Map<number, Drive>([[0, tcDrive(1, 0)]]);
+    const y = roomLight(scene, one)[1];
+    expect(y).toBeCloseTo(900 * 0.35 * 5, 6);
+    const elsewhere = new Map<number, Drive>([[9, tcDrive(1, 0)]]);
+    expect(roomLight(scene, elsewhere)).toEqual([0, 0, 0]);
   });
 
   it('is dark, and balanced to daylight, with nothing lit or nothing bound', () => {
@@ -223,7 +267,7 @@ describe('the probe', () => {
   const scene = defaultScene();
   const g = buildGeometry(scene);
   const response = solveScene(scene, { maxPatches: 1500 });
-  const drives = new Map<string, Drive>([['A', tcDrive(1, 0)]]);
+  const drives = new Map<number, Drive>([[0, tcDrive(1, 0)]]);
   const frame = buildFrame(scene, drives, { display: 'srgb', balance: { mode: 'scene' } });
   const light = frame.mounts.map((m) => m.raw);
 

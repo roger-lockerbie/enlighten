@@ -61,6 +61,8 @@ const LIGHT_KEY = /^light:[0-9a-f]{16}$|^light-index$/;
 export const PREFERENCES_KEY = 'preferences';
 export const HISTORY_KEY = 'history';
 export const SCRIPTS_KEY = 'scripts';
+export const VISUALISER_KEY = 'visualiser';
+export const VISUALISER_VERSION = 1;
 export const SET_ASIDE_PREFIX = 'set-aside:';
 
 export interface Loaded<T> {
@@ -197,6 +199,18 @@ export class Store {
     return this.save(SCRIPTS_KEY, SCRIPTS_VERSION, checkScripts, { scripts });
   }
 
+  /**
+   * The Visualiser's set-ups and view (ADR 0018). The check comes from the light core, which only
+   * the Visualiser and a workspace import or export load, so this module does not carry it.
+   */
+  loadVisualiser<T>(check: (x: unknown) => Result<T>, defaults: T): Promise<Loaded<T>> {
+    return this.load(VISUALISER_KEY, 'visualiser set-ups', VISUALISER_VERSION, [], check, defaults);
+  }
+
+  saveVisualiser<T>(check: (x: unknown) => Result<T>, data: T): Promise<void> {
+    return this.save(VISUALISER_KEY, VISUALISER_VERSION, check, data);
+  }
+
   async setAside(): Promise<string[]> {
     return (await this.backend.keys()).filter((k) => k.startsWith(SET_ASIDE_PREFIX)).sort();
   }
@@ -293,6 +307,18 @@ export function readWorkspace(
     );
   if (p?.verifyMode === false)
     changes.push('Verify mode: the file turns it off. An import cannot, so it stays on.');
+  if (p?.exposure !== undefined)
+    changes.push(
+      `Visualiser exposure: ${p.exposure}${p.exposure === 'manual' && p.exposureEv !== undefined ? ` at ${String(p.exposureEv)} EV` : ''}.`,
+    );
+  if (p?.whiteBalance !== undefined) {
+    const k = p.whiteBalanceKelvin;
+    const named = { scene: 'adapted to the scene', daylight: 'daylight', kelvin: 'a chosen white' };
+    const what =
+      p.whiteBalance === 'kelvin' && k !== undefined ? `${String(k)} K` : named[p.whiteBalance];
+    changes.push(`Visualiser white balance: ${what}.`);
+  }
+  if (p?.falseColour !== undefined) changes.push(`Visualiser false colour: ${p.falseColour}.`);
   for (const d of w.devices ?? []) {
     const parts: string[] = [];
     if (d.alias !== undefined) parts.push(`name "${d.alias}"`);

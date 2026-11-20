@@ -218,7 +218,7 @@ describe('workspace files (SPEC section 8)', () => {
     const r = readWorkspace(text, { ceilingArc: 220 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.workspace).toEqual({ format: 'enlighten-workspace', version: 2, ...content });
+    expect(r.value.workspace).toEqual({ format: 'enlighten-workspace', version: 3, ...content });
     expect(r.value.lowerCeiling).toBe(180);
     expect(r.value.changes).toEqual([
       'Ceiling: lowered from 39.5% (arc 220) to 13.3% (arc 180).',
@@ -248,7 +248,7 @@ describe('workspace files (SPEC section 8)', () => {
       ok: false,
       error: 'This is not an Enlighten workspace file.',
     });
-    expect(readWorkspace('{"format":"enlighten-workspace","version":3}', at).ok).toBe(false);
+    expect(readWorkspace('{"format":"enlighten-workspace","version":4}', at).ok).toBe(false);
     expect(readWorkspace('{"format":"enlighten-workspace","version":1,"looks":[]}', at)).toEqual({
       ok: false,
       error: 'The file: unknown key "looks".',
@@ -433,7 +433,7 @@ describe('Stage 6 records (ADR 0014)', () => {
       '{"format":"enlighten-workspace","version":1,"ceiling":100,"preferences":{"playgroundMode":"live"}}',
       { ceilingArc: 220 },
     );
-    expect(r.ok && r.value.workspace.version).toBe(2);
+    expect(r.ok && r.value.workspace.version).toBe(3);
   });
 
   it('carries scripts and the history settings, and an import cannot turn verify mode off', () => {
@@ -459,5 +459,67 @@ describe('Stage 6 records (ADR 0014)', () => {
         { ceilingArc: 220 },
       ).ok,
     ).toBe(false);
+  });
+});
+
+describe('Stage 8 records (ADR 0018)', () => {
+  const check = (x: unknown) =>
+    typeof x === 'object' && x !== null && 'n' in x && typeof x.n === 'number'
+      ? { ok: true as const, value: { n: x.n } }
+      : { ok: false as const, error: 'Not a set-up.' };
+
+  it('stores the visualiser record with the check it is given, and sets aside one that fails', async () => {
+    const b = new MemoryBackend();
+    const s = new Store(b, stamp);
+    expect((await s.loadVisualiser(check, { n: 0 })).value).toEqual({ n: 0 });
+    await s.saveVisualiser(check, { n: 2 });
+    expect(await b.get('visualiser')).toEqual({ version: 1, data: { n: 2 } });
+    expect((await s.loadVisualiser(check, { n: 0 })).value).toEqual({ n: 2 });
+    await b.put('visualiser', { version: 1, data: { n: 'x' } });
+    const r = await s.loadVisualiser(check, { n: 0 });
+    expect(r.value).toEqual({ n: 0 });
+    expect(r.problem).toMatch(/visualiser set-ups/);
+    expect(await s.setAside()).toEqual(['set-aside:visualiser:2026-11-16T09-00-00']);
+  });
+
+  it('reads a version 2 workspace file as version 3', () => {
+    const r = readWorkspace('{"format":"enlighten-workspace","version":2,"scripts":[]}', {
+      ceilingArc: 220,
+    });
+    expect(r.ok && r.value.workspace.version).toBe(3);
+  });
+
+  it('carries the view settings, and lists them', () => {
+    const text = exportWorkspace({
+      preferences: {
+        exposure: 'manual',
+        exposureEv: 2,
+        whiteBalance: 'kelvin',
+        whiteBalanceKelvin: 3000,
+        falseColour: 'illuminance',
+      },
+    });
+    const r = readWorkspace(text, { ceilingArc: 220 });
+    expect(r.ok && r.value.changes).toEqual([
+      'Visualiser exposure: manual at 2 EV.',
+      'Visualiser white balance: 3000 K.',
+      'Visualiser false colour: illuminance.',
+    ]);
+    const scene = readWorkspace(exportWorkspace({ preferences: { whiteBalance: 'scene' } }), {
+      ceilingArc: 220,
+    });
+    expect(scene.ok && scene.value.changes).toEqual([
+      'Visualiser white balance: adapted to the scene.',
+    ]);
+  });
+
+  it('checks only the shape of the set-up keys, and refuses more than six mounts', () => {
+    const at = { ceilingArc: 220 };
+    const head = '"format":"enlighten-workspace","version":3';
+    expect(readWorkspace(`{${head},"hallway":{},"mounts":[],"links":[]}`, at).ok).toBe(true);
+    expect(readWorkspace(`{${head},"hallway":[]}`, at).ok).toBe(false);
+    expect(readWorkspace(`{${head},"compare":3}`, at).ok).toBe(false);
+    expect(readWorkspace(`{${head},"mounts":[1,2,3,4,5,6,7]}`, at).ok).toBe(false);
+    expect(readWorkspace(`{${head},"links":{}}`, at).ok).toBe(false);
   });
 });

@@ -58,6 +58,12 @@ All notable changes to this project are recorded here. The format follows Keep a
 - A reference path tracer (`pnpm reference`) that writes fixtures for the light core's tests, and timing scripts: `pnpm perf:solve` and `pnpm perf:frame`.
 - U-light, U-colour, P-light, G-light, E-visualiser with a check of the shader's pixels against the pure core, four golden images of the hallway, and E-csp over every page and both workers.
 - ADR 0017: the visualiser engine as built.
+- Stage 8 on the Visualiser: the hallway's size, ends and finishes; up to six mounts added, edited, mirrored and removed, with a reason for every refused edit; five presets with drawings; cameras to walk, orbit and come close to a mount, with W, A, S and D, the wheel and number fields; and an A/B view of two set-ups with one camera, exposure and white balance.
+- A mount binds to a DALI short address, and says when no driver is there or its driver does not feed all its tape's channels.
+- The Visualiser's set-ups and view are kept between visits, in a checked `visualiser` record.
+- Workspace files version 3: set-ups A and B and the view settings, checked in full by the light core before an import is offered.
+- E-visualiser's editor and camera tests, E-ab, set-ups in E-import, the prediction label in E-modes, and V-hallway pictures for each preset and each cover close up.
+- ADR 0018: the hallway, mounts, cameras and A/B view as built.
 
 ### Changed
 
@@ -79,6 +85,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The bench preview on the Playground uses the visualiser's tape data and colour path, on one scale where tape A at full is white.
 - three.js 0.187.0 is installed as the app's one runtime dependency, with `@types/three` for development.
 - `e2e/bundle.spec.ts` allows the entry chunk its two lazy chunks and holds three.js to the renderer's.
+- CI runs `pnpm verify` in two jobs at once, `checks` and `e2e`. On the repo's 2-core runner Playwright uses one worker, and with Stage 8's tests the suite took 35 to 40 minutes in one job.
 
 ### Fixed
 

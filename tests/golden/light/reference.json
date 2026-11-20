@@ -30,7 +30,7 @@
       "tape": "A",
       "diffuser": "opal-linear-lux",
       "depth": 0.011,
-      "unit": "A"
+      "address": 0
      }
     ]
    },
@@ -577,7 +577,7 @@
       "tape": "A",
       "diffuser": "opal-linear-lux",
       "depth": 0.013,
-      "unit": "A"
+      "address": 0
      }
     ]
    },
@@ -1158,7 +1158,7 @@
       "tape": "A",
       "diffuser": "opal-linear-lux",
       "depth": 0.011,
-      "unit": "A"
+      "address": 0
      }
     ]
    },
@@ -1739,7 +1739,7 @@
       "tape": "A",
       "diffuser": "opal-linear-lux",
       "depth": 0.011,
-      "unit": "A"
+      "address": 0
      }
     ]
    },

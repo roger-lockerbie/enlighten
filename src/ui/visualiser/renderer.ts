@@ -239,7 +239,7 @@ interface Stage {
 
 function aim(camera: PerspectiveCamera, view: Camera): void {
   camera.fov = view.fovY;
-  camera.near = 0.02;
+  camera.near = view.near;
   camera.far = 60;
   camera.position.set(view.position[0], view.position[1], view.position[2]);
   camera.up.set(0, 1, 0);
@@ -361,6 +361,16 @@ export class HallwayRenderer {
     this.mounts = mounts;
     aim(this.camera, view);
     this.fit();
+    this.schedule();
+  }
+
+  /**
+   * Move the camera. Only a person moves it: the picture has no motion of its own (SPEC S6.3).
+   * The drawing buffer keeps its size, so nothing is cleared before the next draw.
+   */
+  setCamera(view: Camera): void {
+    aim(this.camera, view);
+    this.camera.updateProjectionMatrix();
     this.schedule();
   }
 
@@ -533,5 +543,9 @@ export class HallwayRenderer {
     this.pending = 0;
     this.disposeScene();
     this.renderer.dispose();
+    // dispose() leaves the GL context alive until garbage collection. A page that is opened again
+    // and again, or an A/B view turned on and off, would reach Chrome's limit and lose a live
+    // picture's context (S8-L3).
+    this.renderer.forceContextLoss();
   }
 }

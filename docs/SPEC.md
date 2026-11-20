@@ -178,9 +178,11 @@ Terms: **arc level** is DALI's 0 to 254 level. **Output** is light output as a f
 - R9.2 Scripts are stored locally and can be imported and exported as text.
 - R9.3 `first-light` is built in and reproduces `tools/first_light.py` within the ceiling.
 
-**R10, R11, R12, R15. Visualiser** (Stages 7 and 8). ADR 0008, and ADR 0017 for the engine as built.
+**R10, R11, R12, R15. Visualiser** (Stages 7 and 8). ADR 0008, ADR 0017 for the engine as built, and ADR 0018 for the editors, cameras and A/B view.
 
-Stage 7 builds the light and colour engine for every mount kind, and shows one fixed hallway from one fixed camera: the defaults of R10.1, with tape A in a skirting slot on the left wall and tape B in a flush channel at 600 mm on the right, each behind a Linear Lux opal cover. The controls of R10.3 are on the page. Editing the hallway and the mounts (R10.1, R11, R14.2), the cameras, the A/B view (R12.2) and the close-up camera of R15.1 come in Stage 8.
+Stage 7 builds the light and colour engine for every mount kind, and shows one fixed hallway from one fixed camera: the defaults of R10.1, with tape A in a skirting slot on the left wall and tape B in a flush channel at 600 mm on the right, each behind a Linear Lux opal cover. The controls of R10.3 are on the page. Stage 8 adds editing the hallway and the mounts (R10.1, R11, R14.2), the cameras (R15.2), the A/B view (R12.2) and the close-up camera of R15.1.
+
+Stage 8 note on R14.2: a mount binds to any address from 0 to 63, but the simulator has drivers only at the bench's two addresses until Stage 9. A mount bound to an address with no driver on the active connection draws unlit and says "No driver at address N", in every output mode (ADR 0018).
 
 - R10.1 A hallway 5 m long by default, with width 1.0 to 1.5 m (default 1.2) and height 2.4 to 3.0 m (default 2.7), end walls open or closed.
 - R10.2 The picture is labelled an estimate. In Hardware and Both it is labelled a prediction.
@@ -332,25 +334,27 @@ Not allowed in a script: `unlock`, `lock`, `target`, `run`, `history`, `clear`, 
 
 JSON, at most 2 MB, with these top-level keys and no others:
 
-| Key           | Content                                                                                                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format`      | `"enlighten-workspace"`                                                                                                                                                   |
-| `version`     | An integer. Files newer than the app are refused. Older files are migrated                                                                                                |
-| `ceiling`     | An arc level, 1 to 254. Applied only if lower than the present ceiling                                                                                                    |
-| `preferences` | History length, the leading-space rule, verify mode, reduced motion override. Exposure and white balance join the file with the visualiser's set-up in Stage 8 (ADR 0017) |
-| `devices`     | Up to 64: address, alias, light type, and the simulator profile settings                                                                                                  |
-| `looks`       | Up to 200: name, level, colour, fade                                                                                                                                      |
-| `slots`       | Per address, which look is in which of the 16 slots                                                                                                                       |
-| `sequences`   | Up to 100: name and up to 500 steps                                                                                                                                       |
-| `effects`     | Up to 100: type and parameters                                                                                                                                            |
-| `scripts`     | Up to 100: name and text, each within the script limits                                                                                                                   |
-| `hallway`     | Dimensions, end walls, materials                                                                                                                                          |
-| `mounts`      | Up to 6: side, kind, height, direction, tape type, density, diffuser, depth, length, address                                                                              |
-| `plates`      | Up to 16: provider preset, buttons, mapping, timers                                                                                                                       |
+| Key           | Content                                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `format`      | `"enlighten-workspace"`                                                                                                                          |
+| `version`     | An integer. Files newer than the app are refused. Older files are migrated                                                                       |
+| `ceiling`     | An arc level, 1 to 254. Applied only if lower than the present ceiling                                                                           |
+| `preferences` | History length, the leading-space rule, verify mode, reduced motion override, and the visualiser's exposure, white balance and false-colour view |
+| `devices`     | Up to 64: address, alias, light type, and the simulator profile settings                                                                         |
+| `looks`       | Up to 200: name, level, colour, fade                                                                                                             |
+| `slots`       | Per address, which look is in which of the 16 slots                                                                                              |
+| `sequences`   | Up to 100: name and up to 500 steps                                                                                                              |
+| `effects`     | Up to 100: type and parameters                                                                                                                   |
+| `scripts`     | Up to 100: name and text, each within the script limits                                                                                          |
+| `hallway`     | Dimensions, end walls, materials                                                                                                                 |
+| `mounts`      | Up to 6: side, kind, height, direction, tape type, density, diffuser, depth, length, address                                                     |
+| `links`       | Up to 6: mounts kept alike, as a mirrored pair or as the two halves of a reveal lit both ways                                                    |
+| `compare`     | Set-up B of the A/B view, as `hallway`, `mounts` and `links`. Written only when it differs from set-up A                                         |
+| `plates`      | Up to 16: provider preset, buttons, mapping, timers                                                                                              |
 
 Names are at most 60 characters. Numbers have ranges. Enumerations are closed. Validation follows ADR 0009. An import replaces the library and set-up after a confirmation that lists what will change. It sends nothing of its own. A lower ceiling in the file is applied as the ceiling control applies it (R6.2), which writes MAX LEVEL through the governor. Imported preferences cannot turn off verify mode or override reduced motion: those two apply only when they make the app more careful. Simulator profile settings in `devices` apply to the simulated bench only (R1.6).
 
-Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Version 2, from Stage 6, adds `scripts`, and `preferences` gains the history length, the leading-space rule and verify mode. A version 1 file migrates to version 2. Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013, ADR 0014).
+Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Version 2, from Stage 6, adds `scripts`, and `preferences` gains the history length, the leading-space rule and verify mode. A version 1 file migrates to version 2. Version 3, from Stage 8, adds `hallway`, `mounts`, `links` and `compare`, and `preferences` gains the visualiser's view settings. Older files migrate to version 3. The store checks only the shape of the set-up keys. The light core checks them in full before the confirmation is shown, and a set-up that fails is refused with its reason (ADR 0018). Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013, ADR 0014).
 
 ## 9. Server protocol
 
@@ -405,27 +409,27 @@ A mapping ties each event on each button to an action: toggle, recall a look or 
 
 Test IDs are defined in `docs/TEST_PLAN.md`.
 
-| Requirement | Spec items                  | Tests                                                                                |
-| ----------- | --------------------------- | ------------------------------------------------------------------------------------ |
-| R1          | R1.1 to R1.8, D1 to D3      | U-sim, U-bus, U-engine, P-sched, E-modes, E-server, H                                |
-| R2          | R2.1 to R2.4                | E-csp, U-headers, L-sinks, P-validator, E-import                                     |
-| R3          | R3.1, R3.2                  | E-csp, E-server, U-server                                                            |
-| R4          | R4.1 to R4.3, R13 items     | U-engine, P-rate, E-effects                                                          |
-| R5          | R5.1 to R5.6                | U-engine, P-plan, E-sequence                                                         |
-| R6          | R6.1 to R6.6, section 5     | U-safety, P-ceiling, M-safety, E-ceiling, H                                          |
-| R7          | R7.1 to R7.6, section 6     | U-console, P-history, E-console, E-keys                                              |
-| R8          | R8.1                        | U-store, E-shell                                                                     |
-| R9          | R9.1 to R9.3, section 7     | U-script, P-parser, E-script                                                         |
-| R10         | R10.1 to R10.5              | U-light, U-colour, P-light, G-light, E-visualiser, V-hallway, Perf-frame, Perf-solve |
-| R11         | R11.1 to R11.4              | U-light, V-hallway, E-visualiser                                                     |
-| R12         | R12.1, R12.2                | U-light, V-hallway, E-ab                                                             |
-| R13         | R13.1 to R13.7, section 4.1 | E-playground, U-engine                                                               |
-| R14         | R14.1, R14.2                | U-sim, E-playground, E-visualiser                                                    |
-| R15         | R15.1, R15.2                | V-hallway                                                                            |
-| R16         | R16.1 to R16.3, section 10  | U-switch, E-switch                                                                   |
-| S1          | S1.1 to S1.4                | U-safety, U-sim, E-modes, H                                                          |
-| S2          | S2.1 to S2.4, section 5     | L-boundary, U-safety, P-ceiling, P-dtr, G-frames, M-safety                           |
-| S3          | S3.1 to S3.10               | U-safety, P-rate, M-safety, E-playground                                             |
-| S4          | S4.1 to S4.6                | U-safety, P-panic, E-panic, U-server, H                                              |
-| S5          | S5.1 to S5.4                | U-engine, E-hidden                                                                   |
-| S6          | S6.1 to S6.3                | E-a11y, V-ui                                                                         |
+| Requirement | Spec items                  | Tests                                                                                         |
+| ----------- | --------------------------- | --------------------------------------------------------------------------------------------- |
+| R1          | R1.1 to R1.8, D1 to D3      | U-sim, U-bus, U-engine, P-sched, E-modes, E-server, H                                         |
+| R2          | R2.1 to R2.4                | E-csp, U-headers, L-sinks, P-validator, E-import                                              |
+| R3          | R3.1, R3.2                  | E-csp, E-server, U-server                                                                     |
+| R4          | R4.1 to R4.3, R13 items     | U-engine, P-rate, E-effects                                                                   |
+| R5          | R5.1 to R5.6                | U-engine, P-plan, E-sequence                                                                  |
+| R6          | R6.1 to R6.6, section 5     | U-safety, P-ceiling, M-safety, E-ceiling, H                                                   |
+| R7          | R7.1 to R7.6, section 6     | U-console, P-history, E-console, E-keys                                                       |
+| R8          | R8.1                        | U-store, E-shell                                                                              |
+| R9          | R9.1 to R9.3, section 7     | U-script, P-parser, E-script                                                                  |
+| R10         | R10.1 to R10.5              | U-light, U-colour, P-light, G-light, E-visualiser, E-modes, V-hallway, Perf-frame, Perf-solve |
+| R11         | R11.1 to R11.4              | U-light, P-light, V-hallway, E-visualiser                                                     |
+| R12         | R12.1, R12.2                | U-light, V-hallway, E-ab                                                                      |
+| R13         | R13.1 to R13.7, section 4.1 | E-playground, U-engine                                                                        |
+| R14         | R14.1, R14.2                | U-sim, U-light, E-playground, E-visualiser, E-modes                                           |
+| R15         | R15.1, R15.2                | U-light, P-light, V-hallway, E-visualiser                                                     |
+| R16         | R16.1 to R16.3, section 10  | U-switch, E-switch                                                                            |
+| S1          | S1.1 to S1.4                | U-safety, U-sim, E-modes, H                                                                   |
+| S2          | S2.1 to S2.4, section 5     | L-boundary, U-safety, P-ceiling, P-dtr, G-frames, M-safety                                    |
+| S3          | S3.1 to S3.10               | U-safety, P-rate, M-safety, E-playground                                                      |
+| S4          | S4.1 to S4.6                | U-safety, P-panic, E-panic, U-server, H                                                       |
+| S5          | S5.1 to S5.4                | U-engine, E-hidden                                                                            |
+| S6          | S6.1 to S6.3                | E-a11y, V-ui                                                                                  |

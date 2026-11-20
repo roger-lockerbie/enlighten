@@ -9,6 +9,7 @@ import type { CallResult } from '../engine/protocol.ts';
 import type { StoredLine } from '../console/history.ts';
 import { DEFAULT_PREFERENCES, type Preferences, type StoredScript } from '../store/schema.ts';
 import type { Store } from '../store/store.ts';
+import type { Snippet } from 'svelte';
 import type { BusClient } from './bus.ts';
 import { ConsoleState, platform } from './console.svelte.ts';
 
@@ -43,6 +44,11 @@ export class AppState {
   raiseTo = $state<number | undefined>(undefined);
   /** The last answer to a ceiling change, shown in its dialog. */
   ceilingMessage = $state('');
+  /**
+   * What a lazily loaded page shows in the inspector. The Visualiser puts its mount editor here, so
+   * the editor's code stays in the Visualiser's chunk, not the first page's (ADR 0018).
+   */
+  inspector = $state<Snippet | undefined>(undefined);
   /** Stored scripts, by name. The built-in ones are in `src/script/builtin.ts`. */
   scripts = $state<StoredScript[]>([]);
   readonly console: ConsoleState;
