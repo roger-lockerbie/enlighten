@@ -1,0 +1,6 @@
+[
+  [
+    { "kind": "script", "lines": ["rgb 1 118 0 0 w 15"] },
+    { "kind": "script", "lines": ["repeat 3", "level 1 26% fade 300ms", "query 0 level", "end"] }
+  ]
+]

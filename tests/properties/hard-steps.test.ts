@@ -27,6 +27,7 @@ import { rateProblems, TraceRecorder } from '../harness/checker.ts';
 import { agrees, agreesAddress, trace } from '../harness/diff.ts';
 import { play, type Step } from '../harness/gen.ts';
 import s5p1 from './s5-p1.counterexample.json' with { type: 'json' };
+import s6p16 from './s6-p16.counterexample.json' with { type: 'json' };
 
 describe('hard steps inside a run (ADR 0015)', () => {
   it('an unlocked RESET after a rise is held: the rise, the RESET and its OFF were a flash', async () => {
@@ -589,33 +590,72 @@ describe('one hard step dated differently by where the samples fall (Stage 8b)',
   });
 });
 
+interface RealBench {
+  units: number[];
+  light: ('C1' | 'C2' | 'C5')[];
+  groups: number[];
+  min: number[];
+  phys: number[];
+  level: number[];
+  fade: number[];
+}
+
+/** Play a saved counterexample of the never-seen hardware property, as that property sets it up. */
+async function playUnseen(saved: unknown): Promise<TraceRecorder> {
+  const [cfg, stream] = saved as [RealBench, Step[]];
+  const real = Simulator.of(
+    cfg.units.map((n, i) => ({
+      id: `R${String(n)}`,
+      profile: da5l(cfg.light[i] ?? 'C2', 'tc', { physicalMinimum: cfg.phys[i] ?? 85 }),
+      opts: { shortAddress: n },
+    })),
+  );
+  const r = new Rig(real, 0);
+  cfg.units.forEach((n, i) => {
+    for (let g = 0; g < 4; g++) if (((cfg.groups[i] ?? 0) >> g) & 1) r.to('ADD_TO_GROUP', n, g);
+    r.set('SET_SCENE', n, 0, 0);
+    r.set('SET_SCENE', n, 0, 3);
+    r.set('SET_MIN_LEVEL', n, (cfg.min[i] ?? 85) - 84 + (cfg.phys[i] ?? 85) - 1);
+    r.set('SET_FADE_TIME', n, cfg.fade[i] ?? 0);
+    r.to('DAPC', n, cfg.level[i] ?? 0);
+  });
+  const b = makeBench({ sim: real, target: 'hardware', start: r.t + 100 });
+  const extra: Step[] = [
+    {
+      kind: 'tx',
+      dt: 0,
+      source: 'script',
+      cmds: [{ id: 'GO_TO_SCENE', address: group(3), value: 3 }],
+    },
+    {
+      kind: 'tx',
+      dt: 50,
+      source: 'script',
+      cmds: [{ id: 'GO_TO_SCENE', address: broadcast, value: 0 }],
+    },
+    { kind: 'tx', dt: 50, source: 'script', cmds: [{ id: 'OFF', address: group(1) }] },
+  ];
+  await b.ready();
+  const { rec } = await play(b, [...extra, ...stream]);
+  return rec;
+}
+
 describe('a level and a colour fading together on gear whose colour the shadow lost (S5-P1)', () => {
   it.fails(
     'a temporary colour loaded before a rescan does not make three legs in a second',
     async () => {
-      const [cfg, stream] = s5p1 as unknown as [
-        { units: number[]; light: ('C1' | 'C2' | 'C5')[]; level: number[]; fade: number[] },
-        Step[],
-      ];
-      const real = Simulator.of(
-        cfg.units.map((n, i) => ({
-          id: `R${String(n)}`,
-          profile: da5l(cfg.light[i] ?? 'C2', 'tc', { physicalMinimum: 1 }),
-          opts: { shortAddress: n },
-        })),
-      );
-      const r = new Rig(real, 0);
-      cfg.units.forEach((n, i) => {
-        r.set('SET_SCENE', n, 0, 0);
-        r.set('SET_SCENE', n, 0, 3);
-        r.set('SET_MIN_LEVEL', n, 1);
-        r.set('SET_FADE_TIME', n, cfg.fade[i] ?? 0);
-        r.to('DAPC', n, cfg.level[i] ?? 0);
-      });
-      const b = makeBench({ sim: real, target: 'hardware', start: r.t + 100 });
-      await b.ready();
-      const { rec } = await play(b, stream);
-      expect(rateProblems(rec, 1)).toEqual([]);
+      expect(rateProblems(await playUnseen(s5p1), 1)).toEqual([]);
+    },
+  );
+});
+
+describe('gear seen fading in its scan, switched off at the end of a slow fade (S6-P16)', () => {
+  it.fails(
+    'the switch off at the fade’s end and a level sent 1.4 s later are not two hard steps',
+    async () => {
+      // The guard counted the fade to off as a hard step when it was sent. The light made it 2.8 s
+      // later, when the fade ended and the gear switched off.
+      expect(rateProblems(await playUnseen(s6p16), 1)).toEqual([]);
     },
   );
 });

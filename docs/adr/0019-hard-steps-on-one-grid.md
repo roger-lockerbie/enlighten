@@ -15,7 +15,8 @@ Stage 8b began by reproducing the open findings before changing anything. What t
 - **With both sides reading the same sample times, the same sweeps give 0 of 828,576 and 25 of 50,130.** Nothing else was changed for that run. The 25 that remain come from the guard's own border logic, which was tuned for samples it no longer has.
 - **S6-D18-3 and S6-D18-4** did not reproduce in sweeps aimed at them (38,880 two-channel traces and 4,320 traces of a short fade, a pause and a step). **S6-D18-5** was reasoning only. They have no fixed case. The new properties below cover their ground.
 - **S6-P13** is a false alarm in the checker from the same cause: one fade from off, dated 100 ms apart on two channels.
-- **S6-P15 and S6-P16**: the seeded 1,000-run passes were still running when this was written. Their counterexamples go in as fixed cases when they finish, and if either is not a dating fault it is reported before the build goes on.
+- **S6-P16** reproduces from its seed and is not a dating fault. A driver seen fading in its scan is gear in an unknown state. A group DAPC 0 started a 2.8 s fade to off, and the guard counted that as a hard step when it was sent. The light made the hard step 2.8 s later, when the fade ended and the gear switched off, and a level sent 1.4 s after that passed. It is decided below.
+- **S6-P15** reproduces from its seed on the simulator target: `rgb 1 118 0 0 w 15`, then `level 1 26% fade 300ms` three times, gives two hard steps on one channel. It is not diagnosed further. On the simulator target the guard predicts the same plans the checker records, so it is expected to be a dating fault, and that is checked when the grid is built. The counterexample is saved in `tests/properties/s6-p15.counterexample.json`.
 - **S5-P1** is a different fault, diagnosed below.
 
 The reproduced cases are in `tests/properties/hard-steps.test.ts`, marked as failing until this ADR is built.
@@ -51,10 +52,16 @@ Each reading gives each hard step a date and an extent: from its date to the las
 - A refusal's retry time is counted from the earlier step's latest date.
 - A hard step is new when the prediction without the transaction has no hard step whose range overlaps it. Each old one stands for one new one at most, as now.
 - Merging an address's channels takes the hull of ranges that go the same way and overlap or lie within 60 ms. A merge can no longer drop a date.
-- The RESET pair, the pending OFF and the extra events for gear in an unknown state work on ranges. An extra event is a range of one moment.
+- The RESET pair, the pending OFF and the extra events for gear in an unknown state work on ranges.
 - Legs and reversals keep single times, read on the same grid with the same readings united as `uniteTimes` does today.
 
 The checker has one reading, so each of its hard steps has one date and it tests the plain window. The question the plan left for this gate, whether the checker should also measure between nearest ends, no longer arises.
+
+### Gear in an unknown state: the hard step can come at any time in its fade (S6-P16)
+
+- On hardware, a light change the shadow cannot predict counts as a leg at the moment it is sent, as now. Its hard step is a range: from that moment until the gear may have stopped moving, which is ADR 0016's time (its longest fade, plus 100 ms).
+- The next change to that gear, and in the room, is then measured from the end of that range. Today it is measured from the command.
+- An OFF is a range of one moment, since it takes effect at once.
 
 ### What goes
 
@@ -84,6 +91,7 @@ Decision:
 - The guard reads four times at 25 ms where it read once at 10 ms, so about 1.6 times the samples. The radiosity and the UI are not on this path. `judge` is timed before and after.
 - On hardware, a DT8 driver whose colour is unknown takes OFF or a colour before it takes a level. That is every DT8 driver after a connect or a rescan. The playground's Apply sends the colour and ACTIVATE first in that state. If that needs a change in `src/engine`, it is made in this stage and tested.
 - Reading the colour and the pending temporary colour in the scan would make the colour known from the start. It depends on answers the DA5-L has not been seen to give, so it is a hardware-day item, not part of this stage.
+- On hardware, gear in an unknown state takes its next hard change 2 s after its last fade could have ended, not 2 s after the command. With a long fade time set, that is a long wait. A scan once the gear settles models it and ends the wait. OFF always goes.
 - S4-R9 (the shadow assumes automatic activation is on) is unchanged.
 - The shifted readings sample the timing differences. They do not prove cover for every one. The properties below are aimed at that.
 - New and changed tests:
