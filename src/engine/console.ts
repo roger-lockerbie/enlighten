@@ -127,6 +127,18 @@ export function nearestFade(
   return best;
 }
 
+/**
+ * The queries that read an address's fade settings back. On hardware the guard rests on them only as
+ * read back, so they follow every write (ADR 0019 amendment 2). A group or broadcast cannot be read.
+ */
+export function fadeReadBack(a: Address): Command[] {
+  if (a.kind !== 'short') return [];
+  return [
+    { id: 'QUERY_FADE_TIME_FADE_RATE', address: a },
+    { id: 'QUERY_EXTENDED_FADE_TIME', address: a },
+  ];
+}
+
 function fadeCommands(a: Address, s: FadeSetting): Command[] {
   if (s.kind === 'standard')
     return [
@@ -327,6 +339,11 @@ export class ConsoleExec {
     return false;
   }
 
+  /** On hardware, the read-back that follows a fade setting (ADR 0019 amendment 2). */
+  private readBack(a: Address): Command[] {
+    return this.host.target() === 'simulator' ? [] : fadeReadBack(a);
+  }
+
   private prefix(a: Address | undefined, many: boolean): string {
     return many && a !== undefined ? `${addressText(a)}: ` : '';
   }
@@ -390,6 +407,7 @@ export class ConsoleExec {
       return true;
     }
     const cmds = [
+      // A group or broadcast, whose fade settings cannot be read back.
       ...(fade === undefined ? [] : fadeCommands(a, fade.setting)),
       { id: 'DAPC', address: a, value: arc },
     ];
@@ -470,10 +488,7 @@ export class ConsoleExec {
     const p = this.prefix(a, many);
     if (rate !== undefined)
       return this.sendAll(
-        [
-          { id: 'DTR0', value: rate },
-          { id: 'SET_FADE_RATE', address: a },
-        ],
+        [{ id: 'DTR0', value: rate }, { id: 'SET_FADE_RATE', address: a }, ...this.readBack(a)],
         `${addressText(a)} fade rate ${String(rate)}`,
         many,
         a,
@@ -482,7 +497,7 @@ export class ConsoleExec {
       const facts = this.facts(a);
       const f = nearestFade(ms, facts?.extendedFade !== undefined, facts?.fastFade ?? 0);
       return this.sendAll(
-        fadeCommands(a, f.setting),
+        [...fadeCommands(a, f.setting), ...this.readBack(a)],
         `${addressText(a)} fade ${f.text}, ${msText(f.ms)}`,
         many,
         a,

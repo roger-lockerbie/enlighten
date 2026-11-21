@@ -56,7 +56,7 @@ import {
 } from './hwcheck.ts';
 import { parseLine, type ParseContext } from '../console/parse.ts';
 import { parseScript } from '../script/parse.ts';
-import { ConsoleExec, type ConsoleHost, type ConsoleLine } from './console.ts';
+import { ConsoleExec, fadeReadBack, type ConsoleHost, type ConsoleLine } from './console.ts';
 import { readFacts, type DriverFacts } from './inventory.ts';
 import { Router } from './router.ts';
 import { send, StepError, toSubmitted, txOf } from './submit.ts';
@@ -360,6 +360,12 @@ function answersOf(tx: Transaction, results: readonly SendResult[]): Answer[] {
   return out;
 }
 
+/**
+ * How long Apply waits for the governor to take the level, after a colour sent first to gear whose
+ * colour it did not know (ADR 0019).
+ */
+export const APPLY_PATIENCE_MS = 5000;
+
 function fromTx(r: TxResult): RequestResult {
   switch (r.kind) {
     case 'done':
@@ -393,6 +399,10 @@ export class Engine {
   private connectionReason: string | undefined;
   private connectAttempt = 0;
   private latched = false;
+  /** Counts every stop, so work that waits outside a job can tell one came (S8b-M3). */
+  private stops = 0;
+  /** Counts the level requests for each address, so a waiting level gives way to a newer one. */
+  private readonly levelAsked = new Map<number, number>();
   private askCanSee = false;
   private canSee: boolean | undefined;
   private connCount = 0;
@@ -695,6 +705,7 @@ export class Engine {
 
   /** Stop every runner: jobs end at their next frame, and waiting live values are dropped. */
   stopRunners(why: string): void {
+    this.stops++;
     if (this.jobs.size > 0 || this.coalescer.waiting() > 0) this.notice(`Stopped: ${why}`);
     for (const j of this.jobs) this.abort(j, why);
     this.coalescer.cancel();
@@ -731,6 +742,13 @@ export class Engine {
 
   // -----------------------------------------------------------------------------------------------
   // Jobs
+
+  /** Note a level request for an address, and return its number. */
+  private askLevel(address: number): number {
+    const n = (this.levelAsked.get(address) ?? 0) + 1;
+    this.levelAsked.set(address, n);
+    return n;
+  }
 
   private wait(ms: number): Promise<void> {
     return new Promise((resolve) => {
@@ -1047,6 +1065,7 @@ export class Engine {
           return { ok: false, reason: 'An address is 0 to 63.' };
         if (!Number.isInteger(intent.arc) || intent.arc < 0 || intent.arc > 254)
           return { ok: false, reason: 'A level is an arc level from 0 to 254.' };
+        this.askLevel(intent.address);
         this.coalescer.set(`level:${String(intent.address)}`, {
           kind: 'level',
           address: intent.address,
@@ -1084,7 +1103,42 @@ export class Engine {
         const cmds = this.compileApply(conn, intent);
         if (typeof cmds === 'string') return { ok: false, reason: cmds };
         if (cmds.length === 0) return { ok: false, reason: 'Nothing to apply.' };
-        return fromTx(await conn.scheduler.submit(txOf(cmds, source, 'apply')));
+        // On hardware, gear whose colour the governor does not know takes its colour before its
+        // level: both fading together cannot be counted (ADR 0019, S5-P1). The colour therefore goes first,
+        // with ACTIVATE, and the level follows once the governor lets it.
+        const colour = intent.mirek !== undefined || intent.channels !== undefined;
+        const unknown =
+          conn.governor.target === 'hardware' &&
+          conn.governor.addressInfo(intent.address)?.colourKnown === false;
+        if (!unknown || !colour || intent.arc === undefined) {
+          if (intent.arc !== undefined) this.askLevel(intent.address);
+          return fromTx(await conn.scheduler.submit(txOf(cmds, source, 'apply')));
+        }
+        const { arc, ...rest } = intent;
+        const first = this.compileApply(conn, rest);
+        if (typeof first === 'string') return { ok: false, reason: first };
+        const set = await conn.scheduler.submit(txOf(first, source, 'apply: colour'));
+        if (set.kind !== 'done') return fromTx(set);
+        const level = txOf(
+          [{ id: 'DAPC', address: short(intent.address), value: arc }],
+          source,
+          'apply: level',
+        );
+        const deadline = this.clock.now() + APPLY_PATIENCE_MS;
+        const stops = this.stops;
+        const asked = this.askLevel(intent.address);
+        for (;;) {
+          const r = await conn.scheduler.submit(level);
+          if (r.kind !== 'refused' || r.retryAt === undefined || r.retryAt > deadline)
+            return fromTx(r);
+          await this.wait(Math.max(1, r.retryAt - this.clock.now()));
+          // A stop, a panic or a newer level for this address while it waited ends it: the level is
+          // not sent later.
+          if (this.stops !== stops || this.latched || this.active() !== conn)
+            return { ok: false, kind: 'dropped', reason: 'Stopped.' };
+          if (this.levelAsked.get(intent.address) !== asked)
+            return { ok: false, kind: 'dropped', reason: 'A newer level replaced this one.' };
+        }
       }
       case 'raw': {
         const frame: Frame = { a: intent.a & 0xff, b: intent.b & 0xff };
@@ -1157,6 +1211,9 @@ export class Engine {
           { id: 'SET_EXTENDED_FADE_TIME', address: a },
         );
       }
+      // On hardware the guard rests on fade settings only as read back, so they are read back
+      // straight after they are written (ADR 0019 amendment 2).
+      if (conn.governor.target === 'hardware') cmds.push(...fadeReadBack(a));
     }
     if (i.mirek !== undefined && i.channels !== undefined)
       return 'Apply a colour temperature or channels, not both.';

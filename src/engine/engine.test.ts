@@ -385,17 +385,85 @@ describe('panic reaches the idle server connection (re-review R1)', () => {
     await settle();
     engine.answerCanSee(true, 'ui');
     await clock.advance(3000);
+    // On hardware the colour goes first: Apply sends it, then the level once the governor takes it
+    // (ADR 0019).
     const on = await drive(
-      engine.request(
-        { kind: 'commands', commands: [{ id: 'DAPC', address: short(0), value: 120 }] },
-        'ui',
-      ),
+      engine.request({ kind: 'apply', address: 0, mirek: 300, arc: 120 }, 'ui'),
     );
     expect(on.ok).toBe(true);
     expect(levelOf(hwSim, 0)).toBe(120);
     await drive(engine.setTarget('simulator', 'ui'));
     await drive(engine.panic());
     expect(levelOf(hwSim, 0)).toBe(0);
+    engine.dispose();
+  });
+});
+
+describe('Apply to gear whose colour the governor does not know (ADR 0019)', () => {
+  /** A hardware bench with A0 lit before the app connects, and an Apply of a colour and a low level. */
+  const waiting = async () => {
+    const hwSim = Simulator.bench({ at: 0 });
+    new Rig(hwSim, 0).to('DAPC', 0, 200);
+    const s = setup({ hwSim });
+    await s.settle();
+    await s.drive(s.engine.setTarget('hardware', 'ui'));
+    await s.settle();
+    s.engine.answerCanSee(true, 'ui');
+    await s.clock.advance(3000);
+    const before = levelOf(hwSim, 0);
+    const apply = s.engine.request({ kind: 'apply', address: 0, mirek: 300, arc: 100 }, 'ui');
+    // The colour has gone, and the level waits for the governor.
+    await s.clock.advance(800);
+    expect(levelOf(hwSim, 0)).toBe(before);
+    return { ...s, hwSim, apply, before };
+  };
+
+  it('sends the colour, then the level once the governor takes it', async () => {
+    const { engine, drive, apply, hwSim } = await waiting();
+    expect((await drive(apply)).ok).toBe(true);
+    expect(levelOf(hwSim, 0)).toBe(100);
+    engine.dispose();
+  });
+
+  it('does not send the level after a stop (S8b-M3)', async () => {
+    const { engine, drive, apply, hwSim, before, clock } = await waiting();
+    engine.stopRunners('test');
+    expect(await drive(apply)).toMatchObject({ ok: false, kind: 'dropped' });
+    await clock.advance(6000);
+    expect(levelOf(hwSim, 0)).toBe(before);
+    engine.dispose();
+  });
+
+  it('does not send the level after panic and resume', async () => {
+    const { engine, drive, apply, hwSim, clock } = await waiting();
+    await drive(engine.panic());
+    expect(engine.resume('ui').ok).toBe(true);
+    expect((await drive(apply)).ok).toBe(false);
+    await clock.advance(6000);
+    expect(levelOf(hwSim, 0)).toBe(0);
+    engine.dispose();
+  });
+
+  it('gives way to a newer level for the address', async () => {
+    const { engine, drive, apply } = await waiting();
+    await engine.request({ kind: 'level', address: 0, arc: 90 }, 'ui');
+    expect(await drive(apply)).toMatchObject({
+      ok: false,
+      reason: 'A newer level replaced this one.',
+    });
+    engine.dispose();
+  });
+
+  it('refuses a level with no colour, and says to set the colour first', async () => {
+    const { engine, drive, settle, clock } = setup();
+    await settle();
+    await drive(engine.setTarget('hardware', 'ui'));
+    await settle();
+    engine.answerCanSee(true, 'ui');
+    await clock.advance(3000);
+    const r = await drive(engine.request({ kind: 'apply', address: 0, arc: 120 }, 'ui'));
+    expect(r).toMatchObject({ ok: false });
+    expect(r.ok ? '' : r.reason).toMatch(/set its colour before its level/);
     engine.dispose();
   });
 });

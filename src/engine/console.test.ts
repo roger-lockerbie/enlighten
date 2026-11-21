@@ -548,6 +548,26 @@ function fakeHost(results: RequestResult[], devices: DeviceView[] = []) {
 }
 
 describe('ConsoleExec', () => {
+  it('reads fade settings back after writing them, on hardware only (ADR 0019 amendment 2)', async () => {
+    const ids = (f: ReturnType<typeof fakeHost>) =>
+      f.sent.flatMap((i) => (i.kind === 'commands' ? i.commands.map((c) => c.id) : []));
+    const readBack = ['QUERY_FADE_TIME_FADE_RATE', 'QUERY_EXTENDED_FADE_TIME'];
+    for (const target of ['hardware', 'both'] as const) {
+      const f = fakeHost([]);
+      f.host.target = () => target;
+      expect((await f.run('fade 0 rate 7')).ok).toBe(true);
+      expect(ids(f), target).toEqual(['DTR0', 'SET_FADE_RATE', ...readBack]);
+    }
+    // A group cannot be read back, and the simulator target needs none.
+    const g = fakeHost([]);
+    g.host.target = () => 'hardware';
+    expect((await g.run('fade g0 rate 7')).ok).toBe(true);
+    expect(ids(g)).toEqual(['DTR0', 'SET_FADE_RATE']);
+    const s = fakeHost([]);
+    expect((await s.run('fade 0 rate 7')).ok).toBe(true);
+    expect(ids(s)).toEqual(['DTR0', 'SET_FADE_RATE']);
+  });
+
   it('prints a fault as a fault, not as no reply', async () => {
     const f = fakeHost([{ ok: false, kind: 'fault', reason: 'The hasseb did not answer.' }]);
     expect(await f.run('query 0 level')).toEqual({
