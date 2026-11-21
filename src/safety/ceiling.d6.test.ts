@@ -1,14 +1,16 @@
 /**
  * S4-D6: lowering the ceiling brings lit gear under it before the slower profile writes (SPEC R6.2).
- * On hardware, while a DT8 driver's colour is unknown, each pull-down is a hard step, and the room
- * takes one hard step a second (S3.3), so the second driver lands one second after the first. Before
- * the fix it landed after the first driver's whole profile, 3 to 5 seconds later.
+ * On hardware, while a DT8 driver's colour is unknown, the governor takes no level for it (ADR 0019,
+ * S5-P1), so the pull-down is an OFF. Each OFF is a hard step, and the room takes one hard step a
+ * second (S3.3), so the second driver goes off one second after the first. Before S4-D6 was fixed it
+ * landed after the first driver's whole profile, 3 to 5 seconds later.
  */
 import { describe, expect, it } from 'vitest';
 import { short } from '../dali/address.ts';
 import { decode, type Frame } from '../dali/codec.ts';
 import { framesForAll } from '../dali/sequences.ts';
 import { benchA, benchB } from '../sim/profile.ts';
+import { Rig } from '../sim/rig.ts';
 import { Simulator } from '../sim/simulator.ts';
 import { asSubmit, makeBench, type Bench } from '../../tests/harness/bench.ts';
 import { lowerCeiling } from './ceiling.ts';
@@ -23,9 +25,14 @@ async function litBench(
     { id: 'A', profile: benchA({ maxLowerPullsDown: pulls }), opts: { shortAddress: 0 } },
     { id: 'B', profile: benchB({ maxLowerPullsDown: pulls }), opts: { shortAddress: 1 } },
   ]);
-  const b = makeBench({ target, sim });
+  // On hardware the governor lights no gear whose colour it does not know, so the gear is lit when
+  // the app connects.
+  const rig = new Rig(sim, 0);
+  if (target === 'hardware') for (const n of [0, 1]) rig.to('DAPC', n, 200);
+  const b = makeBench({ target, sim, start: rig.t + 1000 });
   await b.ready();
   await b.clock.advance(3000);
+  if (target === 'hardware') return b;
   if (fadeTime > 0)
     for (const n of [0, 1]) {
       const f = await b.run({
@@ -86,17 +93,21 @@ async function lowerAndTime(b: Bench) {
 
 describe('lowering the ceiling turns lit gear down before the MAX LEVEL writes (S4-D6)', () => {
   for (const pulls of [true, false]) {
-    it(`on hardware with colour unknown, one driver at once and the next a second later (pull-down ${String(pulls)})`, async () => {
+    it(`on hardware with colour unknown, one driver off at once and the next a second later (pull-down ${String(pulls)})`, async () => {
       const { under, labels } = await lowerAndTime(await litBench('hardware', pulls));
       expect(under[0]).toBeLessThan(250);
       expect(under[1]).toBeLessThan(1300);
-      // Both pull-downs are sent before the first MAX LEVEL write.
+      // No level goes to gear whose colour is not known, so every hold is refused, at once.
+      const holds = labels.filter((l) => l.startsWith('hold under the new ceiling'));
+      expect(holds.length).toBeGreaterThan(0);
+      for (const l of holds) expect(l.endsWith('refused')).toBe(true);
+      // Both drivers are switched off before the first MAX LEVEL write.
       const firstMax = labels.findIndex((l) => l.startsWith('lower MAX LEVEL'));
-      const holds = labels
+      const offs = labels
         .map((l, i) => [l, i] as const)
-        .filter(([l]) => l.startsWith('hold under the new ceiling') && l.endsWith('done'));
-      expect(holds).toHaveLength(2);
-      for (const [, i] of holds) expect(i).toBeLessThan(firstMax);
+        .filter(([l]) => l.startsWith('off: still above the new ceiling') && l.endsWith('done'));
+      expect(offs).toHaveLength(2);
+      for (const [, i] of offs) expect(i).toBeLessThan(firstMax);
     });
   }
 

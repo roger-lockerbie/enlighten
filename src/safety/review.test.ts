@@ -79,28 +79,35 @@ describe('H1: unknown colour is remembered, not only judged', () => {
     const b = makeBench({ target: 'hardware' });
     await b.ready();
     await b.clock.advance(3000);
-    expect((await b.run(tx([c('DAPC', short(1), 150)]))).kind).toBe('done');
+    // A level is refused while the colour is unknown (ADR 0019), so the changes here are OFFs.
+    expect((await b.run(tx([c('OFF', short(1))]))).kind).toBe('done');
     await b.clock.advance(300);
-    expect((await b.run(tx([c('DAPC', short(1), 160)]))).kind).toBe('refused');
+    expect((await b.run(tx([c('OFF', short(1))]))).kind).toBe('refused');
   });
-  it('once a whole colour has been set the shadow is trusted again', async () => {
+  it('a colour that has been set is still not known, so each change waits out the window', async () => {
     const b = makeBench({ target: 'hardware' });
     await b.ready();
-    await b.clock.advance(3000);
-    expect((await b.run(tx([...tcCommands(short(0), 300), c('DAPC', short(0), 150)]))).kind).toBe(
-      'done',
-    );
-    await b.clock.advance(2100);
-    // The room is trusted only once every driver's colour is known.
+    // The profile's writes at the connect were light changes too, so the first change waits them out.
+    await b.clock.advance(3500);
+    // A colour and a level in one transaction would fade together from a colour not known.
+    const both = await b.run(tx([...tcCommands(short(0), 300), c('DAPC', short(0), 150)]));
+    expect(both.kind === 'refused' ? both.reason : both.kind).toMatch(/may still be fading/);
+    expect((await b.run(tx(tcCommands(short(0), 300)))).kind).toBe('done');
+    // Each change may move the gear for 300 ms, and the next waits 2 s after that.
+    await b.clock.advance(2400);
+    expect((await b.run(tx([c('DAPC', short(0), 150)]))).kind).toBe('done');
+    await b.clock.advance(2400);
     expect((await b.run(tx(rgbwafCommands(short(1), [0, 0, 0, 254, 0, 0])))).kind).toBe('done');
-    expect(b.governor.addressInfo(0)?.colourKnown).toBe(true);
-    expect(b.governor.addressInfo(1)?.colourKnown).toBe(true);
-    await b.clock.advance(2100);
+    // A colour the session set is still not known on hardware (ADR 0019 amendment 1).
+    expect(b.governor.addressInfo(0)?.colourKnown).toBe(false);
+    expect(b.governor.addressInfo(1)?.colourKnown).toBe(false);
+    await b.clock.advance(2400);
     const r1 = await b.run(tx([c('DAPC', short(0), 160)]));
     expect(r1.kind === 'refused' ? r1.reason : r1.kind).toBe('done');
     await b.clock.advance(300);
+    // A second change 300 ms later is a second hard step for gear in an unknown state.
     const r2 = await b.run(tx([c('DAPC', short(0), 150)]));
-    expect(r2.kind === 'refused' ? r2.reason : r2.kind).toBe('done');
+    expect(r2.kind === 'refused' ? r2.reason : r2.kind).toMatch(/more than one hard step in 2 s/);
   });
 });
 

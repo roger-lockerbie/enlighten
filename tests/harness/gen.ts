@@ -173,6 +173,31 @@ export function commands(o: GenOptions = {}): fc.Arbitrary<Command[]> {
         .tuple(mix, level)
         .map(([m, v]) => [...rgbwafCommands(B, m, false), c('DAPC', B, v)]),
     },
+    {
+      // A colour loaded, then the gear's own copied over it (S8b-R2-H1).
+      weight: 2,
+      arbitrary: fc
+        .tuple(mix, fc.boolean())
+        .map(([m, act]) => [
+          ...rgbwafCommands(B, m, false),
+          c('DT8_COPY_REPORT_TO_TEMPORARY', B),
+          ...(act ? [c('DT8_ACTIVATE', B)] : []),
+        ]),
+    },
+    {
+      weight: 1,
+      arbitrary: fc
+        .tuple(
+          fc.constantFrom(
+            'DT8_COPY_REPORT_TO_TEMPORARY',
+            'DT8_ACTIVATE',
+            'DT8_TC_STEP_COOLER',
+            'DT8_TC_STEP_WARMER',
+          ),
+          address,
+        )
+        .map(([id, a]) => [c(id, a)]),
+    },
     { weight: 1, arbitrary: address.map((a) => [c('ENABLE_DAPC_SEQUENCE', a)]) },
     {
       weight: 1,

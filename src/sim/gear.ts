@@ -407,7 +407,17 @@ export class Da5l {
    * and identify toggles. Between two of these, the level and the colour each move one way.
    */
   breakpoints(from: number, to: number): number[] {
-    const out = new Set<number>([from, to]);
+    return [...new Set<number>([from, to, ...this.planBreakpoints(from, to)])].sort(
+      (a, b) => a - b,
+    );
+  }
+
+  /**
+   * `breakpoints` without the two ends of the range: only the times the plans themselves give. The
+   * rate rule's grid is made of these (ADR 0019).
+   */
+  planBreakpoints(from: number, to: number): number[] {
+    const out = new Set<number>();
     const plans = this.s.plans;
     for (let i = 0; i < plans.length; i++) {
       const p = plans[i];

@@ -6,26 +6,27 @@ import type { Da5l, OutputPlan } from '../../sim/gear.ts';
 import { LUMINANCE_WEIGHT, type Terminal } from '../../sim/profile.ts';
 import type { Simulator } from '../../sim/simulator.ts';
 import {
-  directedEvents,
-  events,
+  CAUTIOUS,
   FADE_MARGIN_MS,
+  GRID_MS,
   HARD_FADE_MS,
-  mergeDirected,
-  mergeTimes,
-  SAME_LEG_MS,
-  TIME_MARGIN_MS,
-  type DirectedEvents,
+  mergeRead,
+  read,
+  READINGS,
+  unite,
+  type Directed,
+  type Read,
+  type Reading,
   type Sample,
   type TraceEvents,
 } from './legs.ts';
 
 /** Saturated red: only the red channel above 10% (ADR 0005). */
 export const SATURATED_RED = 0.1;
-/** Interior samples inside a segment, at most this far apart. */
-const STEP_MS = 10;
-const MAX_INTERIOR = 400;
 /** A pre-step sample this long before each breakpoint catches instant steps. */
 const PRE_MS = 0.001;
+/** The most grid times read inside one fade: 20 s of the whole grid. */
+const MAX_GRID = 800;
 
 export interface UnitSample {
   readonly t: number;
@@ -40,21 +41,59 @@ export function scopeOf(id: string, shortAddress: number | null): string {
 export const ROOM = 'room';
 export const PHANTOM = 'phantom';
 
-export function sampleTimes(gear: Da5l, from: number, to: number, instant: boolean): number[] {
-  const bps = instant ? [from, to, ...gear.planStarts(from, to)] : gear.breakpoints(from, to);
-  const sorted = [...new Set(bps)].sort((a, b) => a - b);
-  const times = new Set<number>();
-  let last: number | undefined;
-  for (const b of sorted) {
-    if (b - PRE_MS > from) times.add(b - PRE_MS);
+/**
+ * The times a reading samples every trace in the room at (ADR 0019): every breakpoint of every unit's
+ * plans, 0.001 ms before each, and the reading's 25 ms grid. The first is the grid time at or before
+ * `from`. Grid times at which no unit is in a fade or identifying are left out, apart from the one
+ * after each breakpoint: nothing moves there, so they would repeat the sample before them and change
+ * no date. A fade longer than 20 s is read on a thinner grid, so a 16 minute fade does not cost 38,400
+ * samples a judge. Its legs and reversals are then dated to the nearest sample kept.
+ *
+ * With `instant`, every change is made at once at its plan's start, so the times are the plan starts
+ * and the moment before each.
+ */
+export function sampleTimes(
+  sim: Simulator,
+  from: number,
+  to: number,
+  shift: number,
+  instant: boolean,
+): number[] {
+  const start = Math.floor((from - shift) / GRID_MS) * GRID_MS + shift;
+  const times = new Set<number>([start]);
+  const add = (b: number) => {
+    if (b <= start || b > to) return;
+    if (b - PRE_MS > start) times.add(b - PRE_MS);
     times.add(b);
-    // Inside a segment, sample often enough to find the peak where a level and a colour fade cross.
-    if (!instant && last !== undefined && b - last > STEP_MS) {
-      const a = last;
-      const n = Math.min(MAX_INTERIOR, Math.ceil((b - a) / STEP_MS));
-      for (let k = 1; k < n; k++) times.add(a + ((b - a) * k) / n);
+    // The grid time after it too: a change that lands a moment after its breakpoint, as an identify
+    // toggle can by rounding, is then read where the rule reads it.
+    const next = Math.floor((b - shift) / GRID_MS) * GRID_MS + shift + GRID_MS;
+    if (!instant && next <= to) times.add(next);
+  };
+  /** The grid inside a stretch in which a unit's output can move. */
+  const grid = (a: number, b: number) => {
+    // A stretch longer than 20 s is read at every k-th grid time. A fade that long ran 0.7 s or
+    // longer, so nothing in it is fast, and a fast fade that crosses it brings the whole grid for as
+    // long as it runs.
+    const step = GRID_MS * Math.max(1, Math.ceil((b - a) / GRID_MS / MAX_GRID));
+    const first = Math.floor((a - shift) / step) * step + shift + step;
+    for (let t = first; t < b; t += step) times.add(t);
+  };
+  for (const u of sim.all) {
+    if (instant) {
+      for (const b of u.gear.planStarts(start, to)) add(b);
+      continue;
     }
-    last = b;
+    for (const b of u.gear.planBreakpoints(start, to)) add(b);
+    const plans = u.gear.plans();
+    plans.forEach((p, i) => {
+      const next = plans[i + 1]?.since ?? Infinity;
+      for (const f of [p.level, p.colour])
+        grid(Math.max(f.start, start), Math.min(f.end, next, to));
+      // Identify flashes for as long as it runs.
+      if (p.identifyUntil > p.since)
+        grid(Math.max(p.since, start), Math.min(p.identifyUntil, next, to));
+    });
   }
   return [...times].sort((a, b) => a - b);
 }
@@ -96,7 +135,10 @@ export const SLOW_RAN_MS = HARD_FADE_MS + FADE_MARGIN_MS;
  * and anything during identify are instant. Sample times must include every plan start and the time
  * just before it, so no interval holds a plan start except at its end.
  */
-export function slowTest(plans: readonly OutputPlan[]): (x: number, y: number) => boolean {
+export function slowTest(
+  plans: readonly OutputPlan[],
+  ran = SLOW_RAN_MS,
+): (x: number, y: number) => boolean {
   const n = plans.length;
   const levelRan: number[] = new Array<number>(n).fill(0);
   const colourRan: number[] = new Array<number>(n).fill(0);
@@ -130,9 +172,9 @@ export function slowTest(plans: readonly OutputPlan[]): (x: number, y: number) =
     if (x < p.identifyUntil) return false;
     const l = p.level;
     if (l.offAtEnd && x < l.end && l.end <= y) return false;
-    if (x < l.end && y > l.start && (levelRan[lo] ?? 0) < SLOW_RAN_MS) return false;
+    if (x < l.end && y > l.start && (levelRan[lo] ?? 0) < ran) return false;
     const c = p.colour;
-    if (x < c.end && y > c.start && (colourRan[lo] ?? 0) < SLOW_RAN_MS) return false;
+    if (x < c.end && y > c.start && (colourRan[lo] ?? 0) < ran) return false;
     return true;
   };
 }
@@ -165,64 +207,100 @@ export function satRed(d: readonly number[], labels: readonly Terminal[]): boole
   return d.every((x, i) => i === r || labels[i] === 'unused' || x <= SATURATED_RED);
 }
 
-/** Leg, hard step and reversal times for every unit (by scope) and for the room. */
-export function predictEvents(
+/** How long a fade must have run to be slow, in a reading: 0.7 s in the rule, and the fade margin more with margins. */
+function ranFor(reading: Reading): number {
+  return reading.exact ? HARD_FADE_MS : SLOW_RAN_MS;
+}
+
+/** Every unit's events (by scope) and the room's, in one reading of one set of samples. */
+function readAll(
   sim: Simulator,
-  from: number,
-  to: number,
-  instant: boolean,
-): Map<string, TraceEvents> {
-  const out = new Map<string, TraceEvents>();
-  const allTimes = new Set<number>();
-  const perUnit = sim.all.map((u) => {
-    const times = sampleTimes(u.gear, from, to, instant);
-    for (const t of times) allTimes.add(t);
-    return { u, times };
-  });
-  const tests = new Map<string, (x: number, y: number) => boolean>();
-  for (const { u, times } of perUnit) {
-    const test = slowTest(u.gear.plans());
-    tests.set(u.id, test);
-    const samples = tagSlow(sampleUnit(u.gear, times, instant), [test]);
+  times: readonly number[],
+  units: readonly (readonly UnitSample[])[],
+  reading: Reading,
+): Map<string, Read> {
+  const out = new Map<string, Read>();
+  const tests = sim.all.map((u) => slowTest(u.gear.plans(), ranFor(reading)));
+  sim.all.forEach((u, n) => {
+    const test = tests[n];
+    const samples = tagSlow(units[n] ?? [], test === undefined ? [] : [test]);
     const labels = u.gear.model.terminals;
-    const lists: DirectedEvents[] = [];
+    const lists: Read[] = [];
     labels.forEach((label, i) => {
       if (label === 'unused') return;
       lists.push(
-        directedEvents(samples.map((s): Sample => ({ t: s.t, v: s.d[i] ?? 0, slow: s.slow }))),
+        read(
+          samples.map((s): Sample => ({ t: s.t, v: s.d[i] ?? 0, slow: s.slow })),
+          reading,
+        ),
       );
     });
     lists.push(
-      directedEvents(samples.map((s) => ({ t: s.t, v: luminance(s.d, labels), slow: s.slow }))),
+      read(
+        samples.map((s) => ({ t: s.t, v: luminance(s.d, labels), slow: s.slow })),
+        reading,
+      ),
     );
-    const red: { t: number; dir: 0 }[] = [];
+    const red: Directed[] = [];
     let was: boolean | undefined;
     for (const s of samples) {
       const now = satRed(s.d, labels);
       if (was !== undefined && now !== was) red.push({ t: s.t, dir: 0 });
       was = now;
     }
-    out.set(scopeOf(u.id, u.gear.shortAddress), {
-      // The guard merges less than the rule allows, so it never counts fewer legs than the trace has.
-      legs: mergeDirected([...lists.map((l) => l.legs), red], SAME_LEG_MS - TIME_MARGIN_MS),
-      hard: mergeDirected(
-        lists.map((l) => l.hard),
-        SAME_LEG_MS - TIME_MARGIN_MS,
-      ),
-      reversals: mergeTimes(lists.map((l) => l.reversals)),
-    });
-  }
-  const grid = [...allTimes].sort((a, b) => a - b);
+    out.set(scopeOf(u.id, u.gear.shortAddress), mergeRead(lists, reading, red));
+  });
   const room = tagSlow(
-    grid.map((t) => ({
+    times.map((t, k) => ({
       t,
-      v: sim.all.reduce((acc, u) => {
-        const d = instant ? u.gear.settledOutputAt(t) : u.gear.outputAt(t);
-        return acc + luminance(d.terminals, d.labels);
-      }, 0),
+      v: sim.all.reduce(
+        (acc, u, n) => acc + luminance(units[n]?.[k]?.d ?? [], u.gear.model.terminals),
+        0,
+      ),
     })),
-    [...tests.values()],
+    tests,
   );
-  out.set(ROOM, events(room));
+  out.set(ROOM, read(room, reading));
+  return out;
+}
+
+/**
+ * Leg and reversal times and hard step ranges for every unit (by scope) and for the room: every
+ * reading of the faded prediction, united (ADR 0019). With `instant`, a reading with every change made
+ * at once is united with them too (ADR 0011). Tests pass `readings` to take one reading alone.
+ */
+export function predictEvents(
+  sim: Simulator,
+  from: number,
+  to: number,
+  instant: boolean,
+  readings: readonly Reading[] = READINGS,
+): Map<string, TraceEvents> {
+  const reads: Map<string, Read>[] = [];
+  const sampled = new Map<number, { times: number[]; units: UnitSample[][] }>();
+  for (const reading of readings) {
+    let s = sampled.get(reading.shift);
+    if (s === undefined) {
+      const times = sampleTimes(sim, from, to, reading.shift, false);
+      s = { times, units: sim.all.map((u) => sampleUnit(u.gear, times, false)) };
+      sampled.set(reading.shift, s);
+    }
+    reads.push(readAll(sim, s.times, s.units, reading));
+  }
+  if (instant) {
+    const times = sampleTimes(sim, from, to, 0, true);
+    reads.push(
+      readAll(
+        sim,
+        times,
+        sim.all.map((u) => sampleUnit(u.gear, times, true)),
+        CAUTIOUS,
+      ),
+    );
+  }
+  const out = new Map<string, TraceEvents>();
+  const empty: Read = { legs: [], hard: [], reversals: [] };
+  for (const scope of reads[0]?.keys() ?? [])
+    out.set(scope, unite(reads.map((r) => r.get(scope) ?? empty)));
   return out;
 }

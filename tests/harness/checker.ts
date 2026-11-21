@@ -16,6 +16,8 @@ const FADE_MS = 700;
 const FLOOR = 0.02;
 const FLAT_MS = 1000;
 const RED = 0.1;
+/** The rule reads the light every whole 25 ms of the clock (ADR 0019). */
+const GRID_MS = 25;
 const WEIGHT: Record<string, number> = {
   R: 0.2126,
   G: 0.7152,
@@ -45,12 +47,15 @@ export class TraceRecorder {
   /** A unit's slow test, set by tests that record made-up points instead of a simulator's. */
   readonly slow = new Map<string, SlowTest>();
   private last: number;
+  /** The time of the last sample taken. */
+  private sampled: number;
 
   constructor(
     private readonly sim: Simulator,
     start: number,
   ) {
     this.last = start;
+    this.sampled = start;
     for (const u of sim.all) {
       this.points.set(u.id, [{ t: start, d: u.gear.outputAt(start).terminals }]);
       this.labels.set(u.id, u.gear.model.terminals);
@@ -73,27 +78,32 @@ export class TraceRecorder {
   }
 
   /**
-   * Sample every unit from the last recorded time to `to`. Every unit is sampled at every unit's
-   * breakpoints, so the room's sum adds outputs from the same moment. Summing one unit's fresh value
-   * with another's older one shows a step in the room that the light never made.
+   * Sample every unit from the last recorded time to `to`, on the rule's grid (ADR 0019): every whole
+   * 25 ms of the clock, every breakpoint of every unit's plans, and 0.001 ms before each. The grid does
+   * not depend on where a recording starts or stops. Every unit is sampled at every time, so the
+   * room's sum adds outputs from the same moment. Summing one unit's fresh value with another's older
+   * one shows a step in the room that the light never made.
    */
   record(to: number): void {
     if (to <= this.last) return;
     const times = new Set<number>();
     for (const u of this.sim.all) {
-      for (const b of u.gear.breakpoints(this.last, to)) {
-        if (b > this.last) times.add(b);
-        if (b - 0.001 > this.last) times.add(b - 0.001);
+      for (const b of u.gear.planBreakpoints(this.last, to)) {
+        times.add(b - 0.001);
+        times.add(b);
       }
     }
-    for (let t = this.last + 25; t < to; t += 25) times.add(t);
-    times.add(to);
-    const sorted = [...times].filter((t) => t <= to).sort((a, b) => a - b);
+    for (let t = (Math.floor(this.last / GRID_MS) + 1) * GRID_MS; t <= to; t += GRID_MS)
+      times.add(t);
+    // Plans that started by the last recording cannot change, so a time just before a breakpoint can
+    // still be read when the last recording stopped between the two.
+    const sorted = [...times].filter((t) => t > this.sampled && t <= to).sort((a, b) => a - b);
     for (const u of this.sim.all) {
       const list = this.points.get(u.id) ?? [];
       for (const t of sorted) list.push({ t, d: u.gear.outputAt(t).terminals });
       this.points.set(u.id, list);
     }
+    this.sampled = sorted[sorted.length - 1] ?? this.sampled;
     this.keepPlans(to);
     this.last = to;
   }
@@ -315,7 +325,7 @@ function runsOf(pts: readonly Pt[]): Run[] {
   return out;
 }
 
-interface Events {
+export interface Events {
   legs: number[];
   hard: number[];
   reversals: number[];
@@ -436,6 +446,14 @@ function checkScope(scope: string, e: Events, swings: number, hardSpan: number):
  */
 export function rateProblems(rec: TraceRecorder, swings: number): RateProblem[] {
   const problems: RateProblem[] = [];
+  for (const [scope, e] of rateEvents(rec))
+    problems.push(...checkScope(scope, e, swings, scope === 'room' ? 1000 : 2000));
+  return problems;
+}
+
+/** The legs, hard steps and reversals of every unit and of the room, as the rule dates them. */
+export function rateEvents(rec: TraceRecorder): Map<string, Events> {
+  const found = new Map<string, Events>();
   const roomTimes = new Set<number>();
   for (const pts of rec.points.values()) for (const p of pts) roomTimes.add(p.t);
   const ids = [...rec.points.keys()];
@@ -508,7 +526,7 @@ export function rateProblems(rec: TraceRecorder, swings: number): RateProblem[] 
         vs: [...p.d.filter((_, i) => labels[i] !== 'unused'), lum(p.d, labels)],
       })),
     );
-    problems.push(...checkScope(id, e, swings, 2000));
+    found.set(id, e);
   }
   const times = [...roomTimes].sort((a, b) => a - b);
   // One cursor a unit: the times are sorted, so each unit's last point at or before t only moves on.
@@ -535,8 +553,8 @@ export function rateProblems(rec: TraceRecorder, swings: number): RateProblem[] 
     room,
     roomPts.map((p) => ({ t: p.t, vs: [p.v] })),
   );
-  problems.push(...checkScope('room', room, swings, 1000));
-  return problems;
+  found.set('room', room);
+  return found;
 }
 
 /** The ceiling's measure for one gear at a time, from its own model (SPEC R6.6). */

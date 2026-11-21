@@ -161,7 +161,7 @@ describe('guard checks in isolation', () => {
   });
   it('adds unknown and phantom events to their scope and to the room', () => {
     const m = withExtra(new Map(), [{ t: 5, scope: 'phantom' }]);
-    expect(m.get('phantom')?.hard).toEqual([5]);
+    expect(m.get('phantom')?.hard).toEqual([{ lo: 5, hi: 5 }]);
     expect(m.get('room')?.legs).toEqual([5]);
   });
 });

@@ -1,7 +1,7 @@
 /**
  * The rate guard's checks on predicted events (SPEC S3, ADR 0005, exact rules in ADR 0011).
  */
-import { TIME_MARGIN_MS as M, type TraceEvents } from './legs.ts';
+import { TIME_MARGIN_MS as M, type Range, type TraceEvents } from './legs.ts';
 import { ROOM } from './trace.ts';
 
 /** No setting, unlock or code path goes past three swings a second (S3.2). */
@@ -22,6 +22,8 @@ export interface Violation {
   readonly retryAt: number;
   /** Set on the hold after a connect or during a rebuild, which a judge further ahead cannot see past. */
   readonly hold?: true;
+  /** Set when no wait makes the change pass: something else has to be done first. */
+  readonly fixed?: true;
 }
 
 interface Tagged {
@@ -54,6 +56,51 @@ function windowViolations(ev: readonly Tagged[], span: number, max: number): num
   return out;
 }
 
+interface TaggedRange extends Range {
+  readonly isNew: boolean;
+}
+
+/**
+ * A hard step is new when the prediction without the transaction has no hard step that goes the same
+ * way and whose range overlaps it. Each old one stands for one new one at most (ADR 0019).
+ */
+function tagRanges(ranges: readonly Range[], baseline: readonly Range[]): TaggedRange[] {
+  const used = new Set<number>();
+  return ranges.map((r) => {
+    // A hard step the other way is another hard step, as when a change cancels a switch off the
+    // prediction had and steps up in its place (S8b-L4).
+    const i = baseline.findIndex(
+      (b, k) =>
+        !used.has(k) &&
+        b.lo <= r.hi + 2 &&
+        r.lo <= b.hi + 2 &&
+        (b.dir === undefined ||
+          r.dir === undefined ||
+          b.dir === 0 ||
+          r.dir === 0 ||
+          b.dir === r.dir),
+    );
+    if (i >= 0) used.add(i);
+    return { ...r, isNew: i < 0 };
+  });
+}
+
+/**
+ * Pairs of hard steps too close together, at least one of them new. A hard step counts once, and two
+ * are too close when the later one's earliest date is less than `span` after the earlier one's latest
+ * date. The same change could pass once `span` has gone by since the earlier one's latest date.
+ */
+function hardViolations(ev: readonly TaggedRange[], span: number): number[] {
+  const out: number[] = [];
+  ev.forEach((a, i) => {
+    for (const b of ev.slice(i + 1)) {
+      if (!a.isNew && !b.isNew) continue;
+      if (b.lo < a.hi + span && a.lo < b.hi + span) out.push(Math.min(a.hi, b.hi) + span);
+    }
+  });
+  return out;
+}
+
 export function swingLimit(n: number): number {
   // Anything that is not a finite number is the default (security review H2).
   if (!Number.isFinite(n)) return 1;
@@ -82,7 +129,7 @@ export function scopeViolations(
     });
   }
   const hardWindow = scope === ROOM ? HARD_WINDOW_ROOM_MS : HARD_WINDOW_MS;
-  for (const r of windowViolations(tag(cand.hard, base.hard), hardWindow + M, 1)) {
+  for (const r of hardViolations(tagRanges(cand.hard, base.hard), hardWindow + M)) {
     out.push({
       scope,
       rule: `more than one hard step in ${String(hardWindow / 1000)} s`,
@@ -133,28 +180,52 @@ export function violations(
   return out;
 }
 
+/** An extra event for one transaction, from `t` to `until`, at a scope and in the room. */
+export interface Extra {
+  readonly t: number;
+  readonly scope: string;
+  readonly until?: number | undefined;
+  /**
+   * The latest its hard step can come: when the gear may have stopped moving (ADR 0019). Left out, the
+   * hard step comes with the command.
+   */
+  readonly hardUntil?: number | undefined;
+}
+
 /**
  * Add extra events (unknown state, phantom gear) to a scope and to the room. Each covers one
  * transaction, from `t` to `until`. It merges with an event the trace already has inside that span,
- * so one transaction is not counted twice, and never with another transaction's.
+ * so one transaction is not counted twice, and never with another transaction's. Its hard step is a
+ * range, from `t` to `hardUntil`.
  */
 export function withExtra(
   m: ReadonlyMap<string, TraceEvents>,
-  extra: readonly { t: number; scope: string; until?: number | undefined }[],
+  extra: readonly Extra[],
 ): Map<string, TraceEvents> {
   const out = new Map<string, TraceEvents>();
   for (const [k, v] of m)
     out.set(k, { legs: [...v.legs], hard: [...v.hard], reversals: [...v.reversals] });
   for (const e of extra) {
+    const until = e.until ?? e.t;
+    // A hard step that can come later than the command, or one at the command's own moment.
+    const hi = Math.max(e.hardUntil ?? e.t, e.t);
     for (const scope of [e.scope, ROOM]) {
       const cur = out.get(scope) ?? { legs: [], hard: [], reversals: [] };
-      const add = (xs: number[]) => {
-        const until = e.until ?? e.t;
-        if (!xs.some((x) => x >= e.t - 5 && x <= until + 5)) xs.push(e.t);
-        xs.sort((a, b) => a - b);
-      };
-      add(cur.legs);
-      add(cur.hard);
+      if (!cur.legs.some((x) => x >= e.t - 5 && x <= until + 5)) cur.legs.push(e.t);
+      cur.legs.sort((a, b) => a - b);
+      // Only a hard step dated inside the transaction's span is its own. A range that began before
+      // and reaches past this time is another transaction's, or another movement's (S8b-D9).
+      const i = cur.hard.findIndex((x) => x.lo >= e.t - 5 && x.lo <= until + 5);
+      const same = cur.hard[i];
+      const range =
+        same === undefined
+          ? { lo: e.t, hi }
+          : hi > e.t
+            ? { lo: Math.min(same.lo, e.t), hi: Math.max(same.hi, hi) }
+            : same;
+      if (same === undefined) cur.hard.push(range);
+      else cur.hard[i] = range;
+      cur.hard.sort((a, b) => a.lo - b.lo);
       out.set(scope, cur);
     }
   }

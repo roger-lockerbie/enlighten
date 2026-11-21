@@ -83,6 +83,9 @@ export class ProfileError extends Error {}
 
 const q = (id: string, a: Address): Command => ({ id, address: a });
 
+/** How often a scan asks an address whether gear is there before calling it empty. */
+export const PRESENT_TRIES = 3;
+
 /** Read what the governor needs about one address. Returns false when nothing answers. */
 export async function scanAddress(
   n: number,
@@ -93,13 +96,19 @@ export async function scanAddress(
   const a = short(n);
   governor.beginScan(n);
   // Two gear sharing an address answer at once: a framing error still means gear is there.
-  const present = await answered(
-    submit,
-    [q('QUERY_CONTROL_GEAR_PRESENT', a)],
-    source,
-    `scan A${String(n)}`,
-  );
-  if (!present) return false;
+  // One lost reply would make gear look absent, so an address is empty after three (S8b-R2-H2).
+  let present = false;
+  for (let i = 0; i < PRESENT_TRIES && !present; i++)
+    present = await answered(
+      submit,
+      [q('QUERY_CONTROL_GEAR_PRESENT', a)],
+      source,
+      `scan A${String(n)}`,
+    );
+  if (!present) {
+    governor.markEmpty(n);
+    return false;
+  }
   let dt = await ask(submit, [q('QUERY_DEVICE_TYPE', a)], source, 'device type');
   const types: number[] = [];
   if (dt === 255) {
