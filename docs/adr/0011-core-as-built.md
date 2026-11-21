@@ -67,6 +67,7 @@ With swing limit N (1 by default, 2 or 3 with the `rate` unlock, never more):
 - A slow fade is one long leg, and the guard predicts to its end to see whether it reaches the leg ratio.
 - `tests/harness/checker.ts` implements these rules again, separately, without the margins. P-rate and P-rate-fade compare the simulator's trace against it.
 - Stage 4 builds the router on `FrameSink` and `isApproved`, the `RealClock`, and the hasseb report builder that the G-hasseb fixtures test.
+- ADR 0019 amends this: the guard reads its prediction on the rule's grid (every 25 ms of the clock and every plan breakpoint), where it sampled a fade every 10 ms. It reads it as the rule does and again with its margins, and a hard step's date is a range that counts once.
 
 ## Alternatives considered
 

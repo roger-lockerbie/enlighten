@@ -253,5 +253,6 @@ Run whenever the hasseb arrives, once Stage 4 is merged.
 4. Calibrate fade timing, colour mixing and low-level steps, optionally with lux and colour temperature readings from a meter entered by hand.
 5. Write the gear safety profile to both drivers and verify it.
 6. Decide with the owner whether to build the WebHID transport, from what part 1 found.
+7. Work through part 8 of the checklist: what the rate guard rests on. Stage 8b left the Hardware and Both targets trusting nothing about the drivers (ADR 0019 amendments 1 and 2), as a holding position until the real DA5-L could be read. Bring the simulator's profile into line with what the driver does, then relax each hardware rule that a read-back supports, each by its own ADR with property tests.
 
 Done when: the divergence log is clear or explained, and the stage-close checklist passes.

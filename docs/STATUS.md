@@ -245,20 +245,49 @@ Known gaps:
 - The floor's finishes are placeholders, and surfaces are neutral and matte.
 - The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove Chromium only.
 
-## Stage 8b (rate guard), in progress
+## Stage 8b (rate guard), built, PR open
 
-Branch `stage-8b-rate-guard`, on Fable as planned. Where it stands on 2026-11-20:
+Branch `stage-8b-rate-guard`, on Fable as planned. The owner approved ADR 0019 on 2026-11-20 and the build followed. Where it stands:
 
-- Step 1, reproduce, is done. S6-D18-1, S6-P14, S6-P16 and S5-P1 reproduce and are fixed cases in `tests/properties/hard-steps.test.ts`, marked `it.fails` until the fix. S6-P15 reproduces from its seed, with its counterexample saved in `tests/properties/s6-p15.counterexample.json`, and has no fixed case yet. S6-D18-3 and S6-D18-4 did not reproduce in sweeps, S6-D18-5 has no repro, and S6-P13 was not reproduced.
-- S6-P16 is not a dating fault: for gear in an unknown state the guard dates a fade's hard step at the command, and the light makes it when the fade ends. ADR 0019 covers it.
-- `tests/harness/diff.ts` holds the differential test's trace helpers, now with several channels and a shifted checker grid.
-- **ADR 0019 is proposed and waits for the owner.** No code in `src/safety` has changed. It differs from the approved plan in one way: the guard and the checker read the light on one shared grid, and the range comes from the guard's cautious readings. It also sets the S5-P1 rule, which the owner should read: on hardware, a DT8 driver whose colour is unknown takes OFF or a colour before it takes a level.
-- After approval, the build order is in the plan: the checker, the guard, S5-P1, the properties, coverage, mutation, docs, then the stage close.
+Built:
+
+- **One grid.** The trace checker records on the rule's grid: every whole 25 ms of the clock, every breakpoint of every unit's plans and 0.001 ms before each. The guard predicts on it (`src/safety/rate/trace.ts`).
+- **Readings and ranges.** `src/safety/rate/legs.ts` is rewritten. A trace is read as the rule reads it, and again with the guard's margins on that grid and on grids 8 ms and 17 ms out of step. United, a hard step's date is a range that counts once, and `guard.ts` measures the window between the nearest ends of two ranges. The Stage 6 border dates and their constants are gone.
+- **Gear in an unknown state** (S6-P16): the hard step of a change to it is a range to the end of its longest fade. An OFF, a scan that finds it at rest, or a scan that finds no gear ends the range.
+- **S5-P1**: a scan makes DT8 gear's colour unknown, and on hardware no level goes to DT8 gear until its colour is set. A level then waits for that colour's fade. The engine's Apply sends the colour first and the level after. Lowering the ceiling switches such gear off.
+- **S8b-1 (new)**: a scene recall on DT8 hardware gear had the same fault with the colour known. It goes only with no fade time. This is stricter than the ADR as approved and is the owner's to relax.
+- **S8b-2 (new, open)**: with the checker's grid out of step, the guard missed about 1 in 2,000 flagged traces in an aimed sweep. On the rule's grid it missed none. For the owner.
+- All nine findings the stage was to close are closed, each noted in its row of `docs/SECURITY_FINDINGS.md`. S6-P15 was a dating fault.
+- Three of the four refusals ADR 0016 listed are gone. The one for a movement 0.66 to 0.7 s after the last span stays.
+- No branch of `legs.ts` or `trace.ts` is reached only by the property tests: the unit tests alone reach every branch the whole suite does. What is left uncovered is fallbacks the type checker asks for.
+
+- **The first review** (both reviewers, 2026-11-20) failed the stage as first built. Its findings, S8b-H1 to S8b-I3 and S8b-D1 to S8b-D10 in `docs/SECURITY_FINDINGS.md`, are fixed or logged there. S8b-D4 and S8b-D7 have no row of their own: they are S8b-M1 and S8b-M3. The largest fix is S8b-D2: on hardware no level command other than OFF goes to an address that has not been scanned, to gear with no short address, or to a group or broadcast while the inventory is stale. That reverses part of ADR 0016.
+- **Mutation** (`docs/MUTATION.md`, "Stage 8b: the rate guard"): 92.01% on `src/safety/rate` and 83.19% on the lines of `governor.ts` the stage changed. All 244 survivors are grouped with reasons, and the 57 from Stage 5 are accounted for. The run found test gaps in the colour rule and the unknown-gear events, closed with 26 governor tests. None of them found a fault.
+- **Two `PROP_RUNS=1000` passes** with fresh seeds found nothing: `PROP_SEED=145527754` and `PROP_SEED=2050962690`, 64 properties each.
+- **The second review** (both reviewers, 2026-11-20) failed the stage again. The earlier fixes held and the dating is sound. Both found new ways round the colour rule, reproduced on the bench at the default limit. Fixed: S8b-R2-H1, -H2, -D3, -L1 and, in part, -M1 and -L2. **Open: S8b-R2-D1 and S8b-R2-D2, both High.**
+- Those two passes were run before the second review's fixes and say nothing about its findings: the generators then never made a real bench whose colour differs from the shadow's (S8b-R2-L2). They were run again on the closing build: see the end of this section.
+
+- **Amendment 1 to ADR 0019** (approved 2026-11-21) is built: on hardware the colour of DT8 gear is never known, a level needs an ACTIVATE first, and an address whose level becomes known stays unknown for 2 s after. It settles S8b-R2-D1 and S8b-R2-D2. A new aimed property fails on the old rule within 205 cases and passes on this one.
+- **The third review** (both reviewers, 2026-11-21) failed the stage again with three more Highs, S8b-R3-1 to S8b-R3-3, and three Mediums, all on the Hardware target and all reproduced. Two were older than this stage.
+- **Amendment 2 to ADR 0019** (approved 2026-11-21) is built: on Hardware and Both the shadow allows nothing. Every light change to any gear is its own leg and hard step, one address changes at a time, a colour changes only with no fade, and the addressing commands forget every address. It closes S8b-R3-1 to S8b-R3-8. The reviewers' reproductions are fixed cases, each failing on the rule before. The aimed property, widened as the review asked, fails on amendment 1's rule within 21 cases.
+
+- **The fourth review** (both reviewers, 2026-11-21) failed the stage again, on narrower ground. Fixed: S8b-R4-1 (fade settings only as read back), S8b-R4-2 (one lost presence reply) and S8b-R4-D2 (no group or broadcast light change but OFF). Not built: S8b-R4-D1, a faded level on gear with a red channel.
+- **The owner's closing position** (2026-11-22, in ADR 0019): the reviews' findings come from the simulator standing in for drivers nobody has had on a bench. The answer is to find out what the hardware does and bring the simulator into line, not to add rules against guesses. The stage closes with the dating fix, with amendments 1 and 2 as a holding position for Hardware and Both, with no further rule, and with the open findings logged for hardware day.
+- **The hardware-day plan** is `docs/TEST_PLAN.md` section 10 part 8 and step 7 of Stage 12 in `docs/STAGES.md`: read back the driver's colour, temporary colour, level and fade settings, time its fades, try the faults, correct the simulator's profile, then relax each hardware rule a read-back supports by its own ADR.
+- **The closing review** (both reviewers, 2026-11-22): both **signed off**, with follow-ups that are fixed or in the hardware-day plan (S8b-R5-1 to S8b-R5-12). The fourth-round fixes hold, nothing regressed in the simulator target, the guard and the checker still match and share no code, and the findings log is honest.
+
+Known gaps, all on the Hardware and Both targets, which nothing uses until the hasseb arrives:
+
+- The holding rules refuse too much: no colour fades, no group or broadcast levels, one change about every 2 s to an address, and the ceiling counts colour gear as every channel full.
+- S8b-R4-D1 (High, open): a faded level on gear with a red channel can make three legs where the guard counts one.
+- S8b-R4-3 and S8b-R3-9 (Medium, open): a scan ends a range on the fade-running bit, which the DA5-L may not set.
+- S8b-R4-4 (Low, open): DAPC 0 with a fade time is refused for good on hardware. OFF works.
+- S8b-2 (Low, open): out-of-step grids.
+- The rest are in `docs/SECURITY_FINDINGS.md` under the third and fourth reviews, marked for hardware day.
+- Mutation: the score in `docs/MUTATION.md` is from before the reviews. The colour rule and the unknown-gear events in `governor.ts` were rewritten after it and have unit tests and no mutation run.
+- Follow-up: no test pins which of two hard steps the RESET pair keeps.
 
 ## Next
 
-Review and merge the Stage 8 PR. Then, in either order:
-
-- The rate guard stage the owner chose on 2026-11-18 (S6-P13, S6-D18-1 to S6-D18-5, S6-P14 to S6-P16 and S5-P1), which needs a row in `docs/STAGES.md` and a model.
-- The branch coverage target on `src/safety` (95%) failed two CI runs of four on 2026-11-18 and 2026-11-19 at 94.96%. The property tests had no fixed seed, so the branches they reached in `src/safety/rate` changed from run to run. `pnpm coverage` now sets `PROP_SEED=1` and its figures are the same on every run. The margin over 95% is small, so the rate guard stage should add unit tests for the uncovered branches in `legs.ts` and `trace.ts`.
+- Review and merge the Stage 8b PR.
 - Stage 9 (scenes, sequences and effects) on Opus, in plan mode. Its choreography across more addresses than the bench has is where simulated drivers beyond the bench arrive.
