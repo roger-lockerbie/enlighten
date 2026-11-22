@@ -38,6 +38,19 @@ test('every control on every page has a role and a name, and Tab reaches it', as
   const w = await openApp(page);
   for (const name of PAGES) {
     await goTo(page, name);
+    // A page that loads when first opened goes on adding controls after its heading shows. Wait
+    // until the count holds still, so every control is counted and marked.
+    await expect
+      .poll(
+        async () => {
+          const count = () => page.locator(CONTROLS).count();
+          const before = await count();
+          await page.waitForTimeout(400);
+          return before > 0 && before === (await count());
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
     const ids = await reachable(page);
     expect(ids.length).toBeGreaterThan(5);
     for (const id of ids) {
