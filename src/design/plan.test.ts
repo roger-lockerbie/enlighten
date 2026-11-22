@@ -248,9 +248,7 @@ describe('planning a sequence', () => {
         step({ target: broadcast, arc: i % 2 === 0 ? 220 : 90, durationMs: 86_400_000 }),
       ),
     );
-    expect(no(long)).toBe(
-      `This sequence needs more than ${String(MAX_ROWS)} changes. Make it shorter.`,
-    );
+    expect(no(long)).toBe(`This needs more than ${String(MAX_ROWS)} changes. Make it shorter.`);
   });
 });
 

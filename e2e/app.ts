@@ -10,7 +10,8 @@ export type PageName =
   | 'Scripts'
   | 'Visualiser'
   | 'Looks'
-  | 'Sequences';
+  | 'Sequences'
+  | 'Effects';
 
 /** Open the app and wait until the bench is scanned, verified and read. */
 export async function openApp(page: Page, url = '/'): Promise<Watch> {

@@ -11,6 +11,7 @@ const PAGES: PageName[] = [
   'Visualiser',
   'Looks',
   'Sequences',
+  'Effects',
 ];
 
 test('each page matches its baseline', async ({ page }) => {

@@ -7,3 +7,4 @@ export { default as devices } from './Devices.svelte';
 export { default as visualiser } from './Visualiser.svelte';
 export { default as looks } from './Looks.svelte';
 export { default as sequences } from './Sequences.svelte';
+export { default as effects } from './Effects.svelte';

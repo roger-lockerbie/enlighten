@@ -20,6 +20,9 @@ const design: Design = {
       ],
     },
   ],
+  effects: [
+    { name: 'Slow breath', type: 'breathe', params: { depth: 8, period: 12 }, targets: [0, 1] },
+  ],
 };
 
 describe('the stored design', () => {
@@ -29,7 +32,7 @@ describe('the stored design', () => {
   });
 
   it('refuses a slot that names no look, unknown keys and missing parts', () => {
-    expect(parseDesign({ looks: [], slots: design.slots, sequences: [] })).toEqual({
+    expect(parseDesign({ looks: [], slots: design.slots, sequences: [], effects: [] })).toEqual({
       ok: false,
       error: 'slots: A0 slot 3 names a look the library does not have.',
     });
@@ -57,9 +60,12 @@ describe('the stored design', () => {
     expect(b.map.get('design')).toEqual({ version: 1, data: design });
     expect(await store.loadDesign(parseDesign, defaultDesign())).toEqual({ value: design });
     await expect(
-      store.saveDesign(parseDesign, { looks: [], slots: design.slots, sequences: [] }),
+      store.saveDesign(parseDesign, { looks: [], slots: design.slots, sequences: [], effects: [] }),
     ).rejects.toThrow();
-    await b.put('design', { version: 1, data: { looks: 'x', slots: [], sequences: [] } });
+    await b.put('design', {
+      version: 1,
+      data: { looks: 'x', slots: [], sequences: [], effects: [] },
+    });
     const r = await store.loadDesign(parseDesign, defaultDesign());
     expect(r.value).toEqual(defaultDesign());
     expect(r.problem).toMatch(/set aside/);

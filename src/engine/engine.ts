@@ -70,6 +70,7 @@ import { Router } from './router.ts';
 import { send, StepError, toSubmitted, txOf } from './submit.ts';
 import { lookFits, type Edit, type Look } from '../design/look.ts';
 import { planSequence, rowCommands, type Plan, type PlanRow } from '../design/plan.ts';
+import { planEffect, type EffectDef } from '../design/effects.ts';
 import type { Sequence } from '../design/sequence.ts';
 import { timeText } from '../design/text.ts';
 import { HARD_WINDOW_MS } from '../safety/rate/guard.ts';
@@ -217,10 +218,9 @@ export interface ScriptView {
 }
 
 /** What can be planned and run: a sequence today, and an effect (ADR 0020). */
-export interface RunDef {
-  readonly kind: 'sequence';
-  readonly sequence: Sequence;
-}
+export type RunDef =
+  | { readonly kind: 'sequence'; readonly sequence: Sequence }
+  | { readonly kind: 'effect'; readonly effect: EffectDef };
 
 /** The sequence or effect running now. */
 export interface RunView {
@@ -343,7 +343,7 @@ const CONSOLE_JOBS: readonly string[] = ['console', 'script'];
 const RUN_JOBS: readonly string[] = ['sequence', 'effect'];
 /** Work a person started. None of it is the engine's inventory. */
 const PERSON_JOBS: readonly string[] = [...CONSOLE_JOBS, ...RUN_JOBS, 'look'];
-const RUN_LABEL: Record<RunDef['kind'], string> = { sequence: 'Sequence' };
+const RUN_LABEL: Record<RunDef['kind'], string> = { sequence: 'Sequence', effect: 'Effect' };
 /** A repeating plan is checked for this long, or two periods if that is longer. */
 const DRY_EFFECT_MS = 30_000;
 
@@ -1816,7 +1816,9 @@ export class Engine {
   /** The plan for a definition, for the drivers the active connection has now. */
   private planFor(conn: Conn, def: RunDef): Edit<Plan> {
     const drivers = driversFrom(this.deviceViews(), this.lightOf(conn));
-    return planSequence(def.sequence, drivers, this.ceiling);
+    return def.kind === 'sequence'
+      ? planSequence(def.sequence, drivers, this.ceiling)
+      : planEffect(def.effect, drivers, this.ceiling);
   }
 
   /** Run a plan on a copy of the simulated bench, and say where the governor would refuse it. */
@@ -1896,7 +1898,7 @@ export class Engine {
     }
     if (refused !== undefined) return no(refused);
     if (this.active() !== conn) return no('The output target changed.');
-    const name = def.sequence.name;
+    const name = def.kind === 'sequence' ? def.sequence.name : def.effect.name;
     const kind = def.kind;
     const auto = this.autoOf(conn);
     void this.runJob(conn, kind, `${RUN_LABEL[kind]} "${name}"`, async (job) => {

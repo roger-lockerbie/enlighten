@@ -18,6 +18,7 @@ test('navigates by the rail, by Alt with a digit, and between regions with F6', 
     ['Alt+6', 'Visualiser'],
     ['Alt+7', 'Looks'],
     ['Alt+8', 'Sequences'],
+    ['Alt+9', 'Effects'],
     ['Alt+2', 'Devices'],
     ['Alt+1', 'Playground'],
   ] as const) {

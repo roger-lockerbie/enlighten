@@ -28,6 +28,7 @@ import {
   type SlotEntry,
 } from './look.ts';
 import { MAX_SEQUENCES, MAX_STEP_MS, MAX_STEPS, type Sequence, type Step } from './sequence.ts';
+import { EFFECT_IDS, MAX_EFFECTS, MAX_TARGETS, paramsProblem, type EffectDef } from './effects.ts';
 
 /** Names are at most 60 characters (SPEC section 8). */
 export const MAX_NAME = 60;
@@ -113,11 +114,45 @@ export const sequence: Schema<Sequence> = object({
 
 export const sequences = uniqueBy(arrayOf(sequence, MAX_SEQUENCES), (q) => q.name, 'the sequence');
 
-/** Something to plan and run: a sequence. */
-export const runDef: Schema<RunDef> = object({
-  kind: req(oneOf('sequence')),
-  sequence: req(sequence),
+const effectShape = object({
+  name: req(name),
+  type: req(oneOf(...EFFECT_IDS)),
+  params: req(
+    custom((x): Record<string, number> | string => {
+      if (typeof x !== 'object' || x === null || Array.isArray(x)) return 'settings as an object.';
+      const out: Record<string, number> = {};
+      const entries = Object.entries(x as Record<string, unknown>);
+      if (entries.length > 16) return 'at most 16 settings.';
+      for (const [k, v] of entries) {
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype' || k.length > 40)
+          return 'settings with plain names.';
+        if (typeof v !== 'number' || !Number.isFinite(v)) return 'settings that are numbers.';
+        out[k] = v;
+      }
+      return out;
+    }),
+  ),
+  targets: req(uniqueBy(arrayOf(int(0, 63), MAX_TARGETS), (n) => n, 'the address')),
 });
+
+/** A saved effect. Its settings are checked against the ranges of the effect it names. */
+export const effect: Schema<EffectDef> = (x, path) => {
+  const r = effectShape(x, path);
+  if (!r.ok) return r;
+  const wrong = paramsProblem(r.value.type, r.value.params);
+  return wrong === undefined ? r : { ok: false, error: `${path}: ${wrong}` };
+};
+
+export const effects = uniqueBy(arrayOf(effect, MAX_EFFECTS), (e) => e.name, 'the effect');
+
+const runSequence = object({ kind: req(oneOf('sequence')), sequence: req(sequence) });
+const runEffect = object({ kind: req(oneOf('effect')), effect: req(effect) });
+
+/** Something to plan and run: a sequence or an effect. */
+export const runDef: Schema<RunDef> = (x, path) =>
+  typeof x === 'object' && x !== null && (x as { kind?: unknown }).kind === 'effect'
+    ? runEffect(x, path)
+    : runSequence(x, path);
 
 export function parseRunDef(x: unknown): Result<RunDef> {
   return runDef(x, 'run');

@@ -161,10 +161,91 @@ interface State {
   fade: FadeSetting | undefined;
 }
 
+/** One change to one driver, starting at a time of its own. Effects are built from these. */
+export interface TimedStep {
+  readonly atMs: number;
+  readonly address: number;
+  readonly arc: number;
+  readonly colour: LookColour;
+  readonly durationMs: number;
+  /** The step of the sequence or effect it came from, for the preview. */
+  readonly step: number;
+}
+
 /**
- * Plan a sequence for the drivers there are. `ceiling` is the brightness ceiling: a level above it
- * is planned at it, since the governor would hold it there.
+ * Plan timed steps for the drivers there are. Each driver's steps are taken in time order, and each
+ * starts from where the one before left that driver. `ceiling` is the brightness ceiling: a level
+ * above it is planned at it, since the governor would hold it there.
  */
+export function planTimed(
+  steps: readonly TimedStep[],
+  drivers: readonly Driver[],
+  ceiling: number,
+  notes = new Set<string>(),
+): Edit<Plan> {
+  const rows: PlanRow[] = [];
+  const state = new Map<number, State>(
+    drivers.map((d) => [d.address, { arc: d.arc, colour: d.colour, fade: undefined }]),
+  );
+  let endMs = 0;
+  const ordered = steps.map((s, i) => ({ s, i })).sort((x, y) => x.s.atMs - y.s.atMs || x.i - y.i);
+  for (const { s } of ordered) {
+    const d = drivers.find((x) => x.address === s.address);
+    const st = state.get(s.address);
+    if (d === undefined || st === undefined) {
+      notes.add(`No driver at A${String(s.address)}, so it is skipped.`);
+      continue;
+    }
+    endMs = Math.max(endMs, s.atMs + s.durationMs);
+    const arc = Math.min(s.arc, ceiling);
+    if (arc !== s.arc) notes.add('A level above the ceiling is planned at the ceiling.');
+    let colour = s.colour;
+    if (colour.kind !== 'none' && colour.kind !== d.drive) {
+      notes.add(
+        `A${String(d.address)} does not take ${colour.kind === 'tc' ? 'a colour temperature' : 'RGBWAF channel levels'}: it gets the level only.`,
+      );
+      colour = { kind: 'none' };
+    }
+    const pieces = fadePieces(s.durationMs);
+    const total = pieces.reduce((sum, p) => sum + p.ms, 0);
+    const from = { arc: st.arc, colour: st.colour };
+    const to = over(from.colour, colour);
+    const a0 = from.arc === 0 ? d.minArc : from.arc;
+    const a1 = arc === 0 ? d.minArc : arc;
+    let before = 0;
+    for (const [k, p] of pieces.entries()) {
+      const last = k === pieces.length - 1;
+      const f = total === 0 ? 1 : (before + p.ms) / total;
+      const nextArc = last ? arc : Math.round(a0 + (a1 - a0) * f);
+      const nextColour = last ? to : between(from.colour, to, f);
+      const at = s.atMs + before;
+      before += p.ms;
+      const colourChanges = !sameColour(nextColour, st.colour);
+      if (nextArc === st.arc && !colourChanges) continue;
+      rows.push({
+        atMs: at,
+        address: d.address,
+        step: s.step,
+        arc: nextArc,
+        colour: colourChanges ? nextColour : { kind: 'none' },
+        fade: p.fade,
+        fadeMs: p.ms,
+        setFade: !sameFade(st.fade, p.fade),
+        fromArc: st.arc,
+      });
+      endMs = Math.max(endMs, at + p.ms);
+      st.arc = nextArc;
+      st.colour = nextColour;
+      st.fade = p.fade;
+      if (rows.length > MAX_ROWS)
+        return bad(`This needs more than ${String(MAX_ROWS)} changes. Make it shorter.`);
+    }
+  }
+  rows.sort((a, b) => a.atMs - b.atMs);
+  return { ok: true, value: { rows, endMs, notes: [...notes] } };
+}
+
+/** Plan a sequence for the drivers there are (see `planTimed`). */
 export function planSequence(
   seq: Sequence,
   drivers: readonly Driver[],
@@ -173,14 +254,10 @@ export function planSequence(
   if (seq.steps.length === 0) return bad('A sequence needs at least one step.');
   if (seq.steps.length > MAX_STEPS)
     return bad(`A sequence has at most ${String(MAX_STEPS)} steps.`);
-  const rows: PlanRow[] = [];
+  const timed: TimedStep[] = [];
   const notes = new Set<string>();
-  const state = new Map<number, State>(
-    drivers.map((d) => [d.address, { arc: d.arc, colour: d.colour, fade: undefined }]),
-  );
   let start = 0;
   let end = 0;
-  let endMs = 0;
   for (const [i, s] of seq.steps.entries()) {
     const problem = stepProblem(s, i);
     if (problem !== undefined) return bad(problem);
@@ -189,56 +266,21 @@ export function planSequence(
     const members = reached(s.target, drivers);
     if (members.length === 0)
       notes.add(`Step ${String(i + 1)}: no driver at ${addressText(s.target)}, so it is skipped.`);
-    const arc = Math.min(s.arc, ceiling);
-    if (arc !== s.arc) notes.add('A level above the ceiling is planned at the ceiling.');
-    const pieces = fadePieces(s.durationMs);
-    const total = pieces.reduce((sum, p) => sum + p.ms, 0);
-    for (const d of members) {
-      const st = state.get(d.address);
-      if (st === undefined) continue;
-      let colour = s.colour;
-      if (colour.kind !== 'none' && colour.kind !== d.drive) {
-        notes.add(
-          `A${String(d.address)} does not take ${colour.kind === 'tc' ? 'a colour temperature' : 'RGBWAF channel levels'}: it gets the level only.`,
-        );
-        colour = { kind: 'none' };
-      }
-      const from = { arc: st.arc, colour: st.colour };
-      const to = over(from.colour, colour);
-      const a0 = from.arc === 0 ? d.minArc : from.arc;
-      const a1 = arc === 0 ? d.minArc : arc;
-      let before = 0;
-      for (const [k, p] of pieces.entries()) {
-        const last = k === pieces.length - 1;
-        const f = total === 0 ? 1 : (before + p.ms) / total;
-        const nextArc = last ? arc : Math.round(a0 + (a1 - a0) * f);
-        const nextColour = last ? to : between(from.colour, to, f);
-        const at = start + before;
-        before += p.ms;
-        const colourChanges = !sameColour(nextColour, st.colour);
-        if (nextArc === st.arc && !colourChanges) continue;
-        rows.push({
-          atMs: at,
-          address: d.address,
-          step: i,
-          arc: nextArc,
-          colour: colourChanges ? nextColour : { kind: 'none' },
-          fade: p.fade,
-          fadeMs: p.ms,
-          setFade: !sameFade(st.fade, p.fade),
-          fromArc: st.arc,
-        });
-        endMs = Math.max(endMs, at + p.ms);
-        st.arc = nextArc;
-        st.colour = nextColour;
-        st.fade = p.fade;
-        if (rows.length > MAX_ROWS)
-          return bad(`This sequence needs more than ${String(MAX_ROWS)} changes. Make it shorter.`);
-      }
-    }
+    for (const d of members)
+      timed.push({
+        atMs: start,
+        address: d.address,
+        arc: s.arc,
+        colour: s.colour,
+        durationMs: s.durationMs,
+        step: i,
+      });
+    if (timed.length > MAX_ROWS)
+      return bad(`This needs more than ${String(MAX_ROWS)} changes. Make it shorter.`);
   }
-  rows.sort((a, b) => a.atMs - b.atMs);
-  return { ok: true, value: { rows, endMs: Math.max(endMs, end), notes: [...notes] } };
+  const plan = planTimed(timed, drivers, ceiling, notes);
+  if (!plan.ok) return plan;
+  return { ok: true, value: { ...plan.value, endMs: Math.max(plan.value.endMs, end) } };
 }
 
 /**

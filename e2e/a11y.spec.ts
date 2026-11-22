@@ -14,6 +14,7 @@ const PAGES: PageName[] = [
   'Visualiser',
   'Looks',
   'Sequences',
+  'Effects',
 ];
 const CONTROLS = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
 

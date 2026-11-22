@@ -42,6 +42,7 @@ export const PAGES = [
   'visualiser',
   'looks',
   'sequences',
+  'effects',
 ] as const;
 export type Page = (typeof PAGES)[number];
 
