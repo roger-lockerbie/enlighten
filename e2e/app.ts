@@ -3,7 +3,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { watch, type Watch } from './harness.ts';
 
 export type PageName =
-  'Playground' | 'Devices' | 'Bus monitor' | 'Settings' | 'Scripts' | 'Visualiser';
+  'Playground' | 'Devices' | 'Bus monitor' | 'Settings' | 'Scripts' | 'Visualiser' | 'Looks';
 
 /** Open the app and wait until the bench is scanned, verified and read. */
 export async function openApp(page: Page, url = '/'): Promise<Watch> {

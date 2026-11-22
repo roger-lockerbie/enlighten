@@ -79,7 +79,8 @@
   // These pages load when one of them is first opened, so the entry chunk stays within its budget
   // (ADR 0002): the visualiser with its light core, and Devices with the simulator's settings.
   type Later = typeof import('./ui/pages/later.ts');
-  const isLater = (p: Page): p is keyof Later => p === 'devices' || p === 'visualiser';
+  const LATER: readonly Page[] = ['devices', 'visualiser', 'looks'];
+  const isLater = (p: Page): p is keyof Later => LATER.includes(p);
   let later: Promise<Later> | undefined;
   const loadLater = () => (later ??= import('./ui/pages/later.ts'));
 
@@ -171,6 +172,7 @@
     settings: 'Settings',
     scripts: 'Scripts',
     visualiser: 'Visualiser',
+    looks: 'Looks',
   };
 </script>
 

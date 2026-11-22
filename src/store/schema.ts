@@ -40,6 +40,7 @@ export const PAGES = [
   'settings',
   'scripts',
   'visualiser',
+  'looks',
 ] as const;
 export type Page = (typeof PAGES)[number];
 

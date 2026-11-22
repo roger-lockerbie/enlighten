@@ -63,6 +63,8 @@ export const HISTORY_KEY = 'history';
 export const SCRIPTS_KEY = 'scripts';
 export const VISUALISER_KEY = 'visualiser';
 export const VISUALISER_VERSION = 1;
+export const DESIGN_KEY = 'design';
+export const DESIGN_VERSION = 1;
 export const SET_ASIDE_PREFIX = 'set-aside:';
 
 export interface Loaded<T> {
@@ -209,6 +211,25 @@ export class Store {
 
   saveVisualiser<T>(check: (x: unknown) => Result<T>, data: T): Promise<void> {
     return this.save(VISUALISER_KEY, VISUALISER_VERSION, check, data);
+  }
+
+  /**
+   * Looks, the slot map, sequences and effects (ADR 0020). As with the Visualiser's record, the
+   * check comes from the pages that use it.
+   */
+  loadDesign<T>(check: (x: unknown) => Result<T>, defaults: T): Promise<Loaded<T>> {
+    return this.load(
+      DESIGN_KEY,
+      'looks, sequences and effects',
+      DESIGN_VERSION,
+      [],
+      check,
+      defaults,
+    );
+  }
+
+  saveDesign<T>(check: (x: unknown) => Result<T>, data: T): Promise<void> {
+    return this.save(DESIGN_KEY, DESIGN_VERSION, check, data);
   }
 
   async setAside(): Promise<string[]> {

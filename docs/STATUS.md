@@ -298,7 +298,9 @@ Built so far:
 - **Extra simulated drivers (R14.2).** Up to four more DA5-Ls at addresses 2 to 63, added and removed on the Devices page, kept in preferences (version 4) and built at start. The engine's `setExtras` shares the bench rebuild with `setBench`: a driver that goes is turned off through the governor first. On Hardware and Both a mount on such an address shows "simulated only".
 - **The pages that load later.** Devices now loads on demand in one chunk with the Visualiser (`src/ui/pages/later.ts`), which brings the entry chunk from its 256,000 byte limit down to about 233 kB.
 
-Not built yet: looks and slots, sequences, effects, the export, the hidden-tab tests, workspace version 4, and the docs.
+- **Looks and slots (R5.1 to R5.3).** `src/design` is a new pure folder: a look (level, colour, optional fade), the slot map, and the commands that store, read, remove and recall. `src/engine/scenes.ts` runs them as jobs through the governor. A store puts the colour in as the temporary colour, reads the level back, and leaves a temporary colour that changes nothing. The Looks page (Alt-7) has the library, the editor and each driver's 16 slots with verified, mismatch and assumed marks. The stored record is `design`, version 1. E-looks covers it.
+
+Not built yet: sequences, effects, the export, the hidden-tab tests, workspace version 4, and the docs.
 
 ## Next
 

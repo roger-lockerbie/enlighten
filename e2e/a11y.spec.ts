@@ -12,6 +12,7 @@ const PAGES: PageName[] = [
   'Settings',
   'Scripts',
   'Visualiser',
+  'Looks',
 ];
 const CONTROLS = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
 
