@@ -30,7 +30,7 @@ Fable goes where depth of reasoning pays most: the research, the light and colou
 | 7     | Visualiser engine: light and colour                     | Fable                          | yes       |
 | 8     | Hallway, mounts and tapes                               | Opus                           | yes       |
 | 8b    | Rate guard                                              | Fable (Opus if Fable is short) | yes       |
-| 9     | Scenes, sequences and effects                           | Opus                           | yes       |
+| 9     | Scenes, sequences and effects                           | Fable (owner's choice)         | yes       |
 | 10    | Switchgear                                              | Sonnet                         | yes       |
 | 11    | Hardening, independent review, going public             | Opus                           | yes       |
 | 12    | Hardware day, whenever the hasseb arrives after Stage 4 | Opus                           | yes       |
