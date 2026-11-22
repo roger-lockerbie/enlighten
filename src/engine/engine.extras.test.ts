@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { simEngine } from '../../tests/harness/engine.ts';
-import { parseToWorker } from './protocol.ts';
+import { parseToWorker } from './protocol-in.ts';
 
 describe('simulated drivers beyond the bench (R14.2)', () => {
   it('starts with the extras it was given, scanned and verified', async () => {

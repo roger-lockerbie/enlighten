@@ -172,11 +172,13 @@ export function checkScripts(x: unknown): Result<StoredScripts> {
 // The workspace file
 
 export const WORKSPACE_FORMAT = 'enlighten-workspace';
-export const WORKSPACE_VERSION = 3;
+export const WORKSPACE_VERSION = 4;
 
 const workspaceDevice = object({
   address: req(int(0, 63)),
   alias: opt(str(MAX_NAME)),
+  /** A simulated driver beyond the bench's two is at this address, of this light type (R14.2). */
+  simulated: opt(oneOf('C2', 'C5')),
   /** For the simulated unit at this address only (SPEC R1.6). */
   presentation: opt(oneOf('tc', 'rgbwaf')),
   settings: opt(
@@ -202,9 +204,21 @@ const setupList: Schema<readonly unknown[]> = (x, path) =>
     ? { ok: true, value: x as unknown[] }
     : { ok: false, error: `${path}: a list of at most 6.` };
 
-const workspaceV3 = object({
+/**
+ * A part of the design: looks, slots, sequences or effects. Here only that it is a list of a
+ * sensible length is checked. `src/design/saved.ts` checks it in full before an import is offered
+ * (ADR 0020), so the first page's bundle does not carry those checks.
+ */
+const designList =
+  (max: number): Schema<readonly unknown[]> =>
+  (x, path) =>
+    Array.isArray(x) && x.length <= max
+      ? { ok: true, value: x as unknown[] }
+      : { ok: false, error: `${path.replace(/^\./, '')}: a list of at most ${String(max)}.` };
+
+const workspaceV4 = object({
   format: req(oneOf(WORKSPACE_FORMAT)),
-  version: req(oneOf(3)),
+  version: req(oneOf(4)),
   ceiling: opt(int(1, 254)),
   preferences: opt(
     object({
@@ -229,10 +243,15 @@ const workspaceV3 = object({
   links: opt(setupList),
   /** Set-up B, as `{ hallway, mounts, links }`. */
   compare: opt(setupObject),
+  /** The library of looks, each driver's slots, the sequences and the saved effects (Stage 9). */
+  looks: opt(designList(200)),
+  slots: opt(designList(1024)),
+  sequences: opt(designList(100)),
+  effects: opt(designList(100)),
 });
 
-export type Workspace = Extract<ReturnType<typeof workspaceV3>, { ok: true }>['value'];
+export type Workspace = Extract<ReturnType<typeof workspaceV4>, { ok: true }>['value'];
 
 export function checkWorkspace(x: unknown): Result<Workspace> {
-  return workspaceV3(x, '');
+  return workspaceV4(x, '');
 }

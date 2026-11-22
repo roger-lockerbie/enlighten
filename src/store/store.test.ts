@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { migrate } from './migrate.ts';
 import { preferencesTo4 } from './migrations/preferences-4.ts';
+import { workspaceTo4 } from './migrations/workspace-4.ts';
 import { DEFAULT_PREFERENCES, type Preferences } from './schema.ts';
 import { exportWorkspace, MemoryBackend, readWorkspace, Store } from './store.ts';
 import {
@@ -219,7 +220,7 @@ describe('workspace files (SPEC section 8)', () => {
     const r = readWorkspace(text, { ceilingArc: 220 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.workspace).toEqual({ format: 'enlighten-workspace', version: 3, ...content });
+    expect(r.value.workspace).toEqual({ format: 'enlighten-workspace', version: 4, ...content });
     expect(r.value.lowerCeiling).toBe(180);
     expect(r.value.changes).toEqual([
       'Ceiling: lowered from 39.5% (arc 220) to 13.3% (arc 180).',
@@ -249,10 +250,10 @@ describe('workspace files (SPEC section 8)', () => {
       ok: false,
       error: 'This is not an Enlighten workspace file.',
     });
-    expect(readWorkspace('{"format":"enlighten-workspace","version":4}', at).ok).toBe(false);
-    expect(readWorkspace('{"format":"enlighten-workspace","version":1,"looks":[]}', at)).toEqual({
+    expect(readWorkspace('{"format":"enlighten-workspace","version":5}', at).ok).toBe(false);
+    expect(readWorkspace('{"format":"enlighten-workspace","version":1,"plates":[]}', at)).toEqual({
       ok: false,
-      error: 'The file: unknown key "looks".',
+      error: 'The file: unknown key "plates".',
     });
     expect(readWorkspace('{"format":"enlighten-workspace","version":1,"ceiling":0}', at).ok).toBe(
       false,
@@ -468,7 +469,7 @@ describe('Stage 6 records (ADR 0014)', () => {
       '{"format":"enlighten-workspace","version":1,"ceiling":100,"preferences":{"playgroundMode":"live"}}',
       { ceilingArc: 220 },
     );
-    expect(r.ok && r.value.workspace.version).toBe(3);
+    expect(r.ok && r.value.workspace.version).toBe(4);
   });
 
   it('carries scripts and the history settings, and an import cannot turn verify mode off', () => {
@@ -517,11 +518,11 @@ describe('Stage 8 records (ADR 0018)', () => {
     expect(await s.setAside()).toEqual(['set-aside:visualiser:2026-11-16T09-00-00']);
   });
 
-  it('reads a version 2 workspace file as version 3', () => {
+  it('reads a version 2 workspace file as the present version', () => {
     const r = readWorkspace('{"format":"enlighten-workspace","version":2,"scripts":[]}', {
       ceilingArc: 220,
     });
-    expect(r.ok && r.value.workspace.version).toBe(3);
+    expect(r.ok && r.value.workspace.version).toBe(4);
   });
 
   it('carries the view settings, and lists them', () => {
@@ -556,5 +557,104 @@ describe('Stage 8 records (ADR 0018)', () => {
     expect(readWorkspace(`{${head},"compare":3}`, at).ok).toBe(false);
     expect(readWorkspace(`{${head},"mounts":[1,2,3,4,5,6,7]}`, at).ok).toBe(false);
     expect(readWorkspace(`{${head},"links":{}}`, at).ok).toBe(false);
+  });
+});
+
+describe('Stage 9 records (ADR 0020)', () => {
+  const at = { ceilingArc: 220 };
+  const file = (o: object) => JSON.stringify({ format: 'enlighten-workspace', version: 4, ...o });
+
+  it('reads a version 3 workspace file, which says nothing about simulated drivers', () => {
+    const r = readWorkspace(
+      '{"format":"enlighten-workspace","version":3,"devices":[{"address":0,"alias":"Left"}]}',
+      { ...at, extras: [{ address: 5, lightType: 'C2' }] },
+    );
+    expect(r.ok && r.value.workspace.version).toBe(4);
+    expect(r.ok && r.value.extras).toBeUndefined();
+    expect(r.ok && r.value.changes).toEqual(['A0: name "Left".']);
+    expect(workspaceTo4.run('text')).toBe('text');
+  });
+
+  it('lists the simulated drivers a version 4 file adds and removes', () => {
+    const r = readWorkspace(
+      file({
+        devices: [
+          { address: 7, simulated: 'C5', alias: 'Far end' },
+          { address: 3, simulated: 'C2' },
+        ],
+      }),
+      {
+        ...at,
+        extras: [
+          { address: 5, lightType: 'C2' },
+          { address: 3, lightType: 'C2' },
+        ],
+      },
+    );
+    expect(r.ok && r.value.extras).toEqual([
+      { address: 3, lightType: 'C2' },
+      { address: 7, lightType: 'C5' },
+    ]);
+    expect(r.ok && r.value.changes).toEqual([
+      'Simulated driver: a C5 is added at A7.',
+      'Simulated driver: the C2 at A5 is removed.',
+      'A7: name "Far end".',
+    ]);
+  });
+
+  it('leaves the simulated drivers alone when a version 4 file has the same ones', () => {
+    const same = readWorkspace(file({ devices: [{ address: 5, simulated: 'C2' }] }), {
+      ...at,
+      extras: [{ address: 5, lightType: 'C2' }],
+    });
+    expect(same.ok && same.value.extras).toBeUndefined();
+    expect(same.ok && same.value.changes).toEqual([]);
+    // A file with none takes away the ones there are.
+    const none = readWorkspace(file({}), { ...at, extras: [{ address: 5, lightType: 'C2' }] });
+    expect(none.ok && none.value.extras).toEqual([]);
+    const empty = readWorkspace(file({}), at);
+    expect(empty.ok && empty.value.extras).toBeUndefined();
+  });
+
+  it('refuses a simulated driver on a bench address, and more than four', () => {
+    expect(readWorkspace(file({ devices: [{ address: 1, simulated: 'C2' }] }), at)).toEqual({
+      ok: false,
+      error: "devices: An extra driver's address is from 2 to 63.",
+    });
+    const five = [2, 3, 4, 5, 6].map((address) => ({ address, simulated: 'C2' }));
+    expect(readWorkspace(file({ devices: five }), at)).toEqual({
+      ok: false,
+      error: 'devices: At most 4 simulated drivers can be added.',
+    });
+    expect(readWorkspace(file({ devices: [{ address: 5, simulated: 'C1' }] }), at).ok).toBe(false);
+  });
+
+  it('takes the design parts as lists of a sensible length, to be checked in full later', () => {
+    const r = readWorkspace(
+      file({ looks: [{ any: 1 }], slots: [], sequences: [], effects: [] }),
+      at,
+    );
+    expect(r.ok && r.value.workspace.looks).toEqual([{ any: 1 }]);
+    expect(readWorkspace(file({ looks: {} }), at).ok).toBe(false);
+    expect(readWorkspace(file({ sequences: Array.from({ length: 101 }, () => ({})) }), at)).toEqual(
+      {
+        ok: false,
+        error: 'sequences: a list of at most 100.',
+      },
+    );
+    expect(readWorkspace(file({ effects: 'x' }), at).ok).toBe(false);
+    expect(readWorkspace(file({ slots: Array.from({ length: 1025 }, () => 0) }), at).ok).toBe(
+      false,
+    );
+  });
+
+  it('exports the simulated drivers and the design parts', () => {
+    const text = exportWorkspace({
+      devices: [{ address: 5, simulated: 'C2' }],
+      looks: [{ name: 'Warm', arc: 120, colour: { kind: 'none' } }],
+    });
+    const r = readWorkspace(text, at);
+    expect(r.ok && r.value.extras).toEqual([{ address: 5, lightType: 'C2' }]);
+    expect(r.ok && r.value.workspace.looks).toHaveLength(1);
   });
 });

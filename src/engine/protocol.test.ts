@@ -1,7 +1,8 @@
 /** The Stage 5 and 6 messages: colour and Apply intents, the bench set-up, the start values and the console. */
 import { describe, expect, it } from 'vitest';
 import { short } from '../dali/address.ts';
-import { consoleContext, parseFromWorker, parseToWorker } from './protocol.ts';
+import { parseToWorker } from './protocol-in.ts';
+import { consoleContext, parseFromWorker } from './protocol.ts';
 
 const call = (c: unknown) => parseToWorker({ type: 'call', id: 1, call: c });
 const intent = (i: unknown) => call({ op: 'request', intent: i });

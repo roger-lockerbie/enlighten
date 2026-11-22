@@ -8,9 +8,9 @@
 import { TimerClock } from '../bus/clock.ts';
 import { withFloors } from '../bus/timing.ts';
 import { Engine } from '../engine/engine.ts';
+import { parseToWorker } from '../engine/protocol-in.ts';
 import {
   consoleContext,
-  parseToWorker,
   type Call,
   type CallResult,
   type FromWorker,

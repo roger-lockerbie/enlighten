@@ -33,6 +33,8 @@ export class AppState {
   prefs = $state<Preferences>(DEFAULT_PREFERENCES);
   /** A stored record that could not be used, for the banner. */
   storeProblem = $state<string | undefined>(undefined);
+  /** Counts up when the stored design is replaced from outside its pages, by an import. */
+  designRev = $state(0);
   /** A stored ceiling above the default, offered back with a confirmation rather than applied. */
   savedCeiling = $state<number | undefined>(undefined);
   /** The device the playground and inspector show. */

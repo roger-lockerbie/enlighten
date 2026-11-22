@@ -20,7 +20,8 @@ import { simEngine } from '../harness/engine.ts';
 import { timeout } from '../harness/gen.ts';
 import '../harness/seed.ts';
 
-const RUNS = Number(process.env['PROP_RUNS'] ?? 25);
+/** Each case runs the scan, a check and a run on the bench, about 3 s, so fewer by default. */
+const RUNS = Number(process.env['PROP_RUNS'] ?? 10);
 /** A repeating effect is watched for this long before it is stopped. */
 const WATCH_MS = 60_000;
 /** The longest a planned run is followed. Longer plans are stopped there. */

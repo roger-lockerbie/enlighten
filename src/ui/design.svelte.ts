@@ -3,7 +3,7 @@
  * Effects pages. It loads once, on the first of those pages opened, and saves shortly after a change.
  */
 import type { Library } from '../design/look.ts';
-import { defaultDesign, parseDesign, type Design } from '../design/saved.ts';
+import { defaultDesign, parseDesign, type Design } from '../design/stored.ts';
 import type { AppState } from './state.svelte.ts';
 
 export class DesignState {
@@ -45,11 +45,12 @@ export class DesignState {
   }
 }
 
-const states = new WeakMap<AppState, DesignState>();
+const states = new WeakMap<AppState, { rev: number; state: DesignState }>();
 
-/** The one design state for an app. */
+/** The one design state for an app. It is read from the store again after an import replaces it. */
 export function designOf(app: AppState): DesignState {
+  const rev = app.designRev;
   let d = states.get(app);
-  if (d === undefined) states.set(app, (d = new DesignState(app)));
-  return d;
+  if (d?.rev !== rev) states.set(app, (d = { rev, state: new DesignState(app) }));
+  return d.state;
 }

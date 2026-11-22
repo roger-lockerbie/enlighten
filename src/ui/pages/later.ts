@@ -8,3 +8,6 @@ export { default as visualiser } from './Visualiser.svelte';
 export { default as looks } from './Looks.svelte';
 export { default as sequences } from './Sequences.svelte';
 export { default as effects } from './Effects.svelte';
+
+/** The stored design's checks, for Settings' workspace export and import. */
+export * as design from '../../design/stored.ts';

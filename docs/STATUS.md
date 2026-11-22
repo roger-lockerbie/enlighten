@@ -304,7 +304,12 @@ Built so far:
 
 Found while building: the first run loop waited out every refusal that came with a retry time, which let a flashing plan through the check by slowing it down. The limit above is the fix, with tests.
 
-Not built yet: effects, the hidden-tab tests, workspace version 4, and the docs.
+- **Effects (R4).** `src/design/effects.ts` has the ten effects of SPEC R4.1, each a pure builder from its settings and the drivers it is aimed at. Four repeat until stopped (breathe, colour temperature drift, hue drift, two-tone) and six run once. The Effects page (Alt-9) has each setting as a slider, frames a second for each address and the share of the bus, the preview, and the same Check, Run, Stop and export as sequences. An effect can be aimed at simulated drivers beyond the bench's two. E-effects covers it.
+- **P-plan and P-effect** (`tests/properties/design.prop.test.ts`): any sequence or effect the check accepts runs with no refusal, and the simulator's trace keeps every rule of S3, at swing limits of 1 and 3. A case takes about 3 s, so the default is 10 cases each.
+- **Workspace version 4.** The file carries looks, slots, sequences, effects and the simulated drivers. Each part in a file takes the place of the stored one after the list of changes is confirmed. An import writes nothing to any driver and runs nothing.
+- **The entry chunk** is 239 kB. Two things keep it there: the pages that load later share one chunk, and the worker's checks on what the page sends moved to `src/engine/protocol-in.ts`, so the page's first chunk does not carry the checks on looks, sequences and effects.
+
+Not built yet: the hidden-tab tests and the docs.
 
 ## Next
 

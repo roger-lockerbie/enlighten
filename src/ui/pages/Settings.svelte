@@ -15,6 +15,7 @@
   import Segmented from '../components/Segmented.svelte';
   import Toggle from '../components/Toggle.svelte';
   import type { AppState } from '../state.svelte.ts';
+  import type { Design } from '../../design/stored.ts';
   import type { Saved, WorkspaceSetups } from '../../light/saved.ts';
 
   let { app }: { app: AppState } = $props();
@@ -30,6 +31,30 @@
 
   // The scene's code loads only here and on the Visualiser, not with the first page (ADR 0018).
   const savedCode = () => import('../../light/saved.ts');
+  // The same for looks, sequences and effects, whose checks load here and on their pages (ADR 0020).
+  // They come through the chunk of pages that load later, which holds them already: a chunk of
+  // their own would pull the code they share into the entry chunk.
+  const designCode = () => import('./later.ts').then((m) => m.design);
+  /** The stored design as the file writes it, once loaded, and the one an import would store. */
+  let designOut = $state<Partial<Design> | undefined>(undefined);
+  let incomingDesign: Design | undefined;
+
+  $effect(() => {
+    let gone = false;
+    void designCode()
+      .then(async (m) => {
+        const r = await app.store.loadDesign(m.parseDesign, m.defaultDesign());
+        if (gone) return;
+        if (r.problem !== undefined) app.storeProblem = r.problem;
+        designOut = m.exportDesign(r.value);
+      })
+      .catch(() => {
+        if (!gone) app.storeProblem = 'Looks, sequences and effects could not be read for export.';
+      });
+    return () => {
+      gone = true;
+    };
+  });
 
   $effect(() => {
     let gone = false;
@@ -63,6 +88,7 @@
     const devices: {
       address: number;
       alias?: string;
+      simulated?: 'C2' | 'C5';
       presentation?: 'tc' | 'rgbwaf';
       settings?: UnitSetup['settings'];
     }[] = [];
@@ -72,6 +98,8 @@
       if (setup === undefined) continue;
       devices.push({ address: n, presentation: setup.presentation, settings: setup.settings });
     }
+    for (const e of snap?.extras ?? app.prefs.extras)
+      devices.push({ address: e.address, simulated: e.lightType });
     for (const a of app.prefs.aliases) {
       const d = devices.find((x) => x.address === a.address);
       if (d === undefined) devices.push({ address: a.address, alias: a.alias });
@@ -94,6 +122,7 @@
       devices: devices.sort((x, y) => x.address - y.address),
       ...(app.scripts.length === 0 ? {} : { scripts: app.scripts }),
       ...(setups ?? {}),
+      ...(designOut ?? {}),
     });
   });
   const exportHref = $derived(
@@ -105,6 +134,7 @@
     importDone = '';
     plan = undefined;
     incoming = undefined;
+    incomingDesign = undefined;
     const file = input.files?.[0];
     input.value = '';
     if (file === undefined) return;
@@ -123,6 +153,7 @@
     const r = readWorkspace(text, {
       ceilingArc: app.snap?.ceilingArc ?? app.prefs.ceilingArc,
       scripts: app.scripts.map((s) => s.name),
+      extras: app.snap?.extras ?? app.prefs.extras,
     });
     if (!r.ok) {
       importError = r.error;
@@ -152,6 +183,27 @@
         return;
       }
       changes = [...changes, ...lines];
+    }
+    if (
+      w.looks !== undefined ||
+      w.slots !== undefined ||
+      w.sequences !== undefined ||
+      w.effects !== undefined
+    ) {
+      try {
+        const m = await designCode();
+        const present = await app.store.loadDesign(m.parseDesign, m.defaultDesign());
+        const d = m.importDesign(present.value, w);
+        if (!d.ok) {
+          importError = d.error;
+          return;
+        }
+        incomingDesign = d.value?.design;
+        changes = [...changes, ...(d.value?.changes ?? [])];
+      } catch {
+        importError = 'The looks, sequences and effects could not be checked.';
+        return;
+      }
     }
     plan = { ...r.value, changes };
   }
@@ -187,6 +239,27 @@
       } catch {
         notes.push('The visualiser set-ups were not imported: they could not be saved.');
       }
+    }
+    const design = incomingDesign;
+    incomingDesign = undefined;
+    if (design !== undefined) {
+      try {
+        const m = await designCode();
+        await app.store.saveDesign(m.parseDesign, design);
+        designOut = m.exportDesign(design);
+        // The pages that show the design read it from the store again.
+        app.designRev += 1;
+      } catch {
+        notes.push('The looks, sequences and effects were not imported: they could not be saved.');
+      }
+    }
+    if (p.extras !== undefined) {
+      const r = await app.call({ op: 'extras', extras: [...p.extras] });
+      if (r.ok) app.update({ extras: [...p.extras] });
+      else
+        notes.push(
+          `The simulated drivers were not changed: ${'reason' in r ? r.reason : 'refused'}.`,
+        );
     }
     if (w.scripts !== undefined) {
       const next = [...app.scripts];
@@ -332,10 +405,11 @@
     <h2 id="ws-h">Workspace</h2>
     <p class="muted">
       A workspace file holds the ceiling, these preferences, device names, the simulator settings
-      and your scripts. A script in it is only text: it runs when you type run, never on import.
-      Importing one lists what will change first. A lower ceiling in the file is applied at once,
-      which rewrites MAX LEVEL in every driver. A higher one is not applied. Nothing else in the
-      file reaches the lights.
+      and simulated drivers, your scripts, and your looks, sequences and effects. A script, a
+      sequence or an effect in it is only data: it runs when you run it, never on import. Importing
+      one lists what will change first. A lower ceiling in the file is applied at once, which
+      rewrites MAX LEVEL in every driver. A higher one is not applied. Nothing else in the file
+      reaches the lights.
     </p>
     <div class="row">
       <a class="button" href={exportHref} download="enlighten-workspace.json" data-testid="export"
