@@ -4,9 +4,10 @@
  * keys are refused and every value is copied fresh.
  */
 import type { Address } from '../dali/address.ts';
-import type { Channels, FadeSetting } from '../engine/engine.ts';
+import type { Channels, FadeSetting, RunDef } from '../engine/engine.ts';
 import {
   arrayOf,
+  bool,
   custom,
   int,
   object,
@@ -26,6 +27,7 @@ import {
   type LookColour,
   type SlotEntry,
 } from './look.ts';
+import { MAX_SEQUENCES, MAX_STEP_MS, MAX_STEPS, type Sequence, type Step } from './sequence.ts';
 
 /** Names are at most 60 characters (SPEC section 8). */
 export const MAX_NAME = 60;
@@ -95,6 +97,31 @@ export const target: Schema<Address> = custom((x) => {
   if (o['kind'] === 'group' && whole(15)) return { kind: 'group', n: n as number };
   return 'a target.';
 });
+
+const step: Schema<Step> = object({
+  target: req(target),
+  arc: req(int(0, 254)),
+  colour: req(colour),
+  durationMs: req(int(0, MAX_STEP_MS)),
+  together: opt(bool),
+});
+
+export const sequence: Schema<Sequence> = object({
+  name: req(name),
+  steps: req(arrayOf(step, MAX_STEPS)),
+});
+
+export const sequences = uniqueBy(arrayOf(sequence, MAX_SEQUENCES), (q) => q.name, 'the sequence');
+
+/** Something to plan and run: a sequence. */
+export const runDef: Schema<RunDef> = object({
+  kind: req(oneOf('sequence')),
+  sequence: req(sequence),
+});
+
+export function parseRunDef(x: unknown): Result<RunDef> {
+  return runDef(x, 'run');
+}
 
 export function parseLook(x: unknown): Result<Look> {
   return look(x, 'look');

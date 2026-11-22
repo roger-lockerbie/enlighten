@@ -80,6 +80,7 @@ function start(m: Extract<ToWorker, { type: 'init' }>): Engine {
     timing,
     bench,
     extras,
+    dryTransport: (copy, virtual) => new SimTransport(copy, virtual, timing),
     ...(m.ceilingArc === undefined ? {} : { ceilingArc: m.ceilingArc }),
     ...(hardware === undefined ? {} : { hardware }),
   });
@@ -137,6 +138,13 @@ async function handle(e: Engine, call: Call): Promise<CallResult> {
       return e.setBench(call.setup, src);
     case 'extras':
       return e.setExtras(call.extras, src);
+    case 'planCheck':
+      return e.planCheck(call.run, src);
+    case 'runPlan':
+      return e.runDesign(call.run, src);
+    case 'stopRun':
+      e.stopRun();
+      return { ok: true };
     case 'sceneWrite':
       return e.sceneWrite(call.address, call.slot, call.look, src);
     case 'sceneRemove':

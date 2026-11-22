@@ -26,7 +26,15 @@ export function simEngine(
   const extras = o.extras ?? [];
   for (const x of extras) sim.add(extraUnit(x, clock.now()));
   const simTransport = new SimTransport(sim, clock, withFloors({}), { keepLog: true });
-  const engine = new Engine({ clock, sim, simTransport, extras, ...o.options });
+  const timing = withFloors({});
+  const engine = new Engine({
+    clock,
+    sim,
+    simTransport,
+    extras,
+    dryTransport: (copy, virtual) => new SimTransport(copy, virtual, timing),
+    ...o.options,
+  });
   const drive = async <T>(p: Promise<T>, limit = 3_600_000): Promise<T> => {
     const st: { done: boolean; failed: boolean; value?: T; error?: unknown } = {
       done: false,

@@ -32,6 +32,7 @@ import {
   scanAddress,
   type ProfileResult,
   type Submit,
+  type Submitted,
 } from '../safety/profile.ts';
 import {
   isPerson,
@@ -67,8 +68,14 @@ import { ConsoleExec, fadeReadBack, type ConsoleHost, type ConsoleLine } from '.
 import { readFacts, type DriverFacts } from './inventory.ts';
 import { Router } from './router.ts';
 import { send, StepError, toSubmitted, txOf } from './submit.ts';
-import { lookFits, type Look } from '../design/look.ts';
+import { lookFits, type Edit, type Look } from '../design/look.ts';
+import { planSequence, rowCommands, type Plan, type PlanRow } from '../design/plan.ts';
+import type { Sequence } from '../design/sequence.ts';
+import { timeText } from '../design/text.ts';
 import { HARD_WINDOW_MS } from '../safety/rate/guard.ts';
+import { driversFrom } from './drivers.ts';
+import { dryRun } from './dryrun.ts';
+import { ROW_PATIENCE_MS, runPlan } from './runner.ts';
 import { readSlots, recallSlot, removeSlot, writeSlot } from './scenes.ts';
 import { TIME_MARGIN_MS } from '../safety/rate/legs.ts';
 import type { HardwareTransport, Transport } from './transport.ts';
@@ -209,6 +216,36 @@ export interface ScriptView {
   readonly paused?: string;
 }
 
+/** What can be planned and run: a sequence today, and an effect (ADR 0020). */
+export interface RunDef {
+  readonly kind: 'sequence';
+  readonly sequence: Sequence;
+}
+
+/** The sequence or effect running now. */
+export interface RunView {
+  readonly kind: RunDef['kind'];
+  readonly name: string;
+  /** Rows sent so far in this pass, and how many a pass has. */
+  readonly row: number;
+  readonly rows: number;
+  /** How many times a repeating plan has started again. */
+  readonly cycle: number;
+  /** The clock time it started, and how long it is planned to take. A repeating plan has no end. */
+  readonly startedAt: number;
+  readonly endMs?: number;
+  /** The latest any row has gone out after its time, in ms. */
+  readonly lateMs: number;
+}
+
+/** How the last run ended. */
+export interface RunEnded {
+  readonly kind: RunDef['kind'];
+  readonly name: string;
+  readonly outcome: 'finished' | 'stopped' | 'refused';
+  readonly text: string;
+}
+
 export interface JobView {
   readonly kind: string;
   readonly label: string;
@@ -244,6 +281,9 @@ export interface Snapshot {
   readonly feedback: readonly ControlFeedback[];
   /** The simulated bench's units and how each is set up (SPEC R1.6). */
   readonly bench: readonly { readonly unit: BenchUnit; readonly setup: UnitSetup }[];
+  /** The sequence or effect running now, and how the last one ended. */
+  readonly run?: RunView;
+  readonly lastRun?: RunEnded;
   /** The simulated drivers beyond the bench's two (SPEC R14.2). */
   readonly extras: readonly ExtraUnit[];
 }
@@ -263,6 +303,11 @@ export interface EngineOptions {
   readonly extras?: readonly ExtraUnit[];
   /** Scan the simulated bench and write its profile at start. On by default. */
   readonly startScan?: boolean;
+  /**
+   * A simulator transport on a clock, for the dry run of a plan (ADR 0020). Without it a plan is not
+   * checked ahead.
+   */
+  readonly dryTransport?: (sim: Simulator, clock: Clock) => Transport;
 }
 
 interface Conn {
@@ -296,6 +341,12 @@ const CONSOLE_JOBS: readonly string[] = ['console', 'script'];
 const RUN_JOBS: readonly string[] = ['sequence', 'effect'];
 /** Work a person started. None of it is the engine's inventory. */
 const PERSON_JOBS: readonly string[] = [...CONSOLE_JOBS, ...RUN_JOBS, 'look'];
+const RUN_LABEL: Record<RunDef['kind'], string> = { sequence: 'Sequence' };
+/** A repeating plan is checked for this long, or two periods if that is longer. */
+const DRY_EFFECT_MS = 30_000;
+
+/** A plan check's answer: what was checked, or why it would be refused. */
+export type PlanChecked = Outcome | { readonly ok: true; readonly text: string };
 
 type LiveValue = (
   | { readonly kind: 'level'; readonly arc: number; readonly live: boolean }
@@ -438,6 +489,11 @@ export class Engine {
   private consoleSeq = 0;
   private readonly consoleOut: ConsoleOut[] = [];
   private scriptView: ScriptView | undefined;
+  private runView: RunView | undefined;
+  private lastRun: RunEnded | undefined;
+  private readonly dryTransport: EngineOptions['dryTransport'];
+  /** A plan is being checked before its run starts. */
+  private checking = false;
   /** Continues a paused script. */
   private continueScript: (() => void) | undefined;
   /** After the bench is rebuilt, light changes on it wait until this time. */
@@ -470,6 +526,7 @@ export class Engine {
     this.ceiling = o.ceilingArc ?? DEFAULT_CEILING_ARC;
     this.benchSetup = { ...DEFAULT_SETUP, ...o.bench };
     this.extras = o.extras ?? [];
+    this.dryTransport = o.dryTransport;
     this.lastBeat = this.clock.now();
     this.simConn = this.makeConn('simulator');
     if (this.hardware !== undefined) this.standby = this.makeStandby(this.hardware);
@@ -1748,6 +1805,184 @@ export class Engine {
   }
 
   // -----------------------------------------------------------------------------------------------
+  // Sequences and effects (SPEC R4, R5.4, S5)
+
+  private autoOf(conn: Conn): (address: number) => boolean {
+    return (n) => ((conn.facts.get(n)?.gearFeatures ?? 0) & 1) === 1;
+  }
+
+  /** The plan for a definition, for the drivers the active connection has now. */
+  private planFor(conn: Conn, def: RunDef): Edit<Plan> {
+    const drivers = driversFrom(this.deviceViews(), this.lightOf(conn));
+    return planSequence(def.sequence, drivers, this.ceiling);
+  }
+
+  /** Run a plan on a copy of the simulated bench, and say where the governor would refuse it. */
+  private async dry(conn: Conn, plan: Plan, source: Source): Promise<string | undefined> {
+    if (this.dryTransport === undefined || conn !== this.simConn) return undefined;
+    const stops = this.stops;
+    const r = await dryRun(
+      {
+        sim: this.sim,
+        transport: this.dryTransport,
+        timing: this.timing,
+        ceilingArc: this.ceiling,
+        swingLimit: conn.governor.swingLimit,
+        now: this.clock.now(),
+        source,
+        auto: this.autoOf(conn),
+        forMs: Math.max(DRY_EFFECT_MS, 2 * (plan.periodMs ?? 0)),
+        // Let a panic, a heartbeat or anything else in between the steps of the check.
+        breathe: async () => {
+          await this.wait(0);
+          return this.stops === stops && !this.latched;
+        },
+      },
+      plan,
+    );
+    if (r.kind === 'refused') {
+      const row = plan.rows[r.row];
+      const at = row === undefined ? '' : ` at ${timeText(row.atMs)} for A${String(row.address)}`;
+      return `The governor would refuse the change${at}. ${r.reason}`;
+    }
+    if (r.kind === 'failed') return `The plan could not be checked: ${r.reason}`;
+    if (r.kind === 'stopped') return 'The check was stopped.';
+    return undefined;
+  }
+
+  /** Check a plan without running it (SPEC R4.2, ADR 0005). */
+  async planCheck(def: RunDef, source: Source): Promise<PlanChecked> {
+    const conn = this.active();
+    if (conn === undefined) return no('Hardware: disconnected.');
+    const plan = this.planFor(conn, def);
+    if (!plan.ok) return no(plan.reason);
+    if (plan.value.rows.length === 0) return no('Nothing here would change any light.');
+    if (conn !== this.simConn || this.dryTransport === undefined)
+      return {
+        ok: true,
+        text: 'Not checked ahead on hardware. The governor judges each change as it is sent.',
+      };
+    const refused = await this.dry(conn, plan.value, source);
+    return refused === undefined
+      ? {
+          ok: true,
+          text: 'Checked against the governor on a copy of the bench: nothing is refused.',
+        }
+      : no(refused);
+  }
+
+  /**
+   * Start a sequence or an effect as a job. The definition is planned here, from what the drivers
+   * are doing now, and checked on a copy of the bench first. The reply comes once it has started.
+   */
+  async runDesign(def: RunDef, source: Source): Promise<Outcome> {
+    const conn = this.active();
+    if (conn === undefined) return no('Hardware: disconnected.');
+    if (this.latched) return no('Panic is on. Resume first.');
+    if ([...this.jobs].some((j) => RUN_JOBS.includes(j.kind)) || this.checking)
+      return no('A sequence or an effect is running. Stop it first.');
+    const made = this.planFor(conn, def);
+    if (!made.ok) return no(made.reason);
+    const plan = made.value;
+    if (plan.rows.length === 0) return no('Nothing here would change any light.');
+    this.checking = true;
+    let refused: string | undefined;
+    try {
+      refused = await this.dry(conn, plan, source);
+    } finally {
+      this.checking = false;
+    }
+    if (refused !== undefined) return no(refused);
+    if (this.active() !== conn) return no('The output target changed.');
+    const name = def.sequence.name;
+    const kind = def.kind;
+    const auto = this.autoOf(conn);
+    void this.runJob(conn, kind, `${RUN_LABEL[kind]} "${name}"`, async (job) => {
+      const submit = this.rawSubmitter(conn, job);
+      const start = this.clock.now();
+      const view = (row: number, cycle: number, lateMs: number): RunView => ({
+        kind,
+        name,
+        row,
+        rows: plan.rows.length,
+        cycle,
+        startedAt: start,
+        ...(plan.periodMs === undefined ? { endMs: plan.endMs } : {}),
+        lateMs,
+      });
+      this.runView = view(0, 0, 0);
+      this.lastRun = undefined;
+      this.emit();
+      let late = 0;
+      const r = await runPlan(
+        {
+          now: () => this.clock.now(),
+          until: (time) => this.sleepIn(job, Math.max(0, time - this.clock.now())),
+          stopped: () => job.aborted,
+          patienceMs: ROW_PATIENCE_MS,
+          submitRow: (row) =>
+            conn.kind === 'simulator'
+              ? submit(txOf(rowCommands(row, auto(row.address)), source, `${kind} "${name}"`))
+              : this.sendRowOnHardware(row, source),
+          progress: (row, cycle, lateMs) => {
+            late = Math.max(late, lateMs);
+            this.runView = view(row + 1, cycle, late);
+            this.emitSoon();
+          },
+        },
+        plan,
+        start,
+      );
+      this.runView = undefined;
+      const took = this.clock.now() - start;
+      this.lastRun =
+        r.kind === 'done'
+          ? {
+              kind,
+              name,
+              outcome: 'finished',
+              text: `Finished after ${timeText(took)}, ${timeText(Math.max(0, took - plan.endMs))} after its planned end. Every change was sent.`,
+            }
+          : r.kind === 'refused'
+            ? { kind, name, outcome: 'refused', text: `Stopped at a refusal: ${r.reason}` }
+            : { kind, name, outcome: 'stopped', text: `Stopped: ${job.why ?? 'stopped'}` };
+      if (r.kind === 'refused') this.notice(`${name}: ${r.reason}`);
+    });
+    return OK;
+  }
+
+  /**
+   * One row on hardware goes through Apply, which sends a colour before its level and reads fades
+   * back, as the holding rules of ADR 0019 need.
+   */
+  private async sendRowOnHardware(row: PlanRow, source: Source): Promise<Submitted> {
+    const r = await this.request(
+      {
+        kind: 'apply',
+        address: row.address,
+        arc: row.arc,
+        ...(row.setFade ? { fade: row.fade } : {}),
+        ...(row.colour.kind === 'tc' ? { mirek: row.colour.mirek } : {}),
+        ...(row.colour.kind === 'rgbwaf' ? { channels: row.colour.channels } : {}),
+      },
+      source,
+    );
+    if (r.ok) return { kind: 'done', results: [] };
+    if (r.kind === 'dropped' || r.kind === 'fault') return { kind: r.kind, reason: r.reason };
+    return {
+      kind: 'refused',
+      reason: r.reason,
+      ...(r.retryAt === undefined ? {} : { retryAt: r.retryAt }),
+    };
+  }
+
+  /** Stop the running sequence or effect. Nothing is sent: the lights stay as they are. */
+  stopRun(): void {
+    for (const j of this.jobs) if (RUN_JOBS.includes(j.kind)) this.abort(j, 'Stopped by a person.');
+    this.emit();
+  }
+
+  // -----------------------------------------------------------------------------------------------
   // Scene slots (SPEC R5.2, R5.3)
 
   private async sceneJob(
@@ -2017,6 +2252,8 @@ export class Engine {
       monitor: this.monitor.slice(-50),
       console: this.consoleOut.slice(-CONSOLE_SNAPSHOT),
       ...(this.scriptView === undefined ? {} : { script: this.scriptView }),
+      ...(this.runView === undefined ? {} : { run: this.runView }),
+      ...(this.lastRun === undefined ? {} : { lastRun: this.lastRun }),
       notices: [...this.notices],
       busUse: conn?.scheduler.utilisation() ?? 0,
       light: conn === undefined ? [] : this.lightOf(conn),

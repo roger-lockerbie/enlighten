@@ -12,7 +12,7 @@ import { aliasProblem, parseTarget, type ParseContext } from '../console/parse.t
 import { MAX_LINE } from '../console/history.ts';
 import { MAX_BYTES, scriptNameProblem } from '../script/parse.ts';
 import type { Look } from '../design/look.ts';
-import { parseLook, parseTarget as parseAddress } from '../design/schema.ts';
+import { parseLook, parseRunDef, parseTarget as parseAddress } from '../design/schema.ts';
 import { DEFAULT_CEILING_ARC, type Outcome } from '../safety/governor.ts';
 import type { Unlock } from '../safety/types.ts';
 import { parseExtras, parseUnitSetup, type ExtraUnit, type UnitSetup } from '../sim/settings.ts';
@@ -22,6 +22,7 @@ import type {
   Intent,
   OutputTarget,
   RequestResult,
+  RunDef,
   Snapshot,
 } from './engine.ts';
 
@@ -66,6 +67,11 @@ export type Call =
       readonly slot: number;
       readonly fade?: FadeSetting;
     }
+  /** Check a sequence or effect against the governor without running it (SPEC R4.2). */
+  | { readonly op: 'planCheck'; readonly run: RunDef }
+  /** Start a sequence or effect. The worker plans it again from this definition. */
+  | { readonly op: 'runPlan'; readonly run: RunDef }
+  | { readonly op: 'stopRun' }
   /** Set the whole list of simulated drivers beyond the bench's two (SPEC R14.2). */
   | { readonly op: 'extras'; readonly extras: readonly ExtraUnit[] }
   /** A typed console line, with the page's aliases and `use` default. Parsed again in the worker. */
@@ -352,6 +358,13 @@ function parseCall(x: unknown): Call | undefined {
         ...(fade === undefined ? {} : { fade }),
       };
     }
+    case 'planCheck':
+    case 'runPlan': {
+      const run = parseRunDef(x['run']);
+      return run.ok ? { op: x['op'], run: run.value } : undefined;
+    }
+    case 'stopRun':
+      return { op: 'stopRun' };
     case 'extras': {
       const extras = parseExtras(x['extras']);
       return typeof extras === 'string' ? undefined : { op: 'extras', extras };
