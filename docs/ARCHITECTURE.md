@@ -151,6 +151,17 @@ The one object the page talks to. It owns the scheduler, governor state, router 
 - A live-control coalescer: for a moving slider it keeps the newest value per address and control, and submits it when the previous one has been sent or when a refusal's `retryAt` arrives.
 - `subscribe()`: state snapshots and events for the page (device state, verdicts, bus monitor lines, divergence, runner progress).
 
+As built in Stage 9 (ADR 0020):
+
+- `planCheck`, `runDesign` and `stopRun` take a sequence or an effect as its definition, never as frames. The engine plans it again from what the drivers are doing now, so what the page previews and what runs are made by the same pure code.
+- `dryrun.ts` checks a plan before it runs: it copies the simulated bench (`Simulator.fork`), gives the copy a governor of its own at the live ceiling and swing limit, scans it, and runs the plan on a virtual clock. It lets other work in between steps, so Panic is never held up by a check. The check is on the Simulator target only.
+- `runner.ts` is the one run loop, used by the check and by the real run. Each row has an absolute time from the start. A row is sent when the clock reaches its time or as soon after as the clock wakes, and a late row never makes later rows bunch up. A real run waits at most 0.5 s in all for one row the guard holds back, and the check waits for nothing. Any longer refusal stops the run.
+- A run is a job of kind `sequence` or `effect`, one at a time. Panic, a target change, a transport fault, the watchdog, a scan and a change of simulator settings stop it. Stopping sends nothing: the lights stay as they are.
+- On Hardware and Both a row goes through Apply, which sends a colour before its level and reads fades back, as ADR 0019's holding rules need.
+- `scenes.ts` writes, reads, removes and recalls the drivers' scene slots as jobs. `drivers.ts` builds what the planner needs to know about each driver from the snapshot, for the page and the engine alike.
+- `setExtras` adds and removes simulated drivers beyond the bench's two. It shares the rebuild of `setBench`: a driver that goes is turned off through the governor first, light changes are held, and the bench is scanned again.
+- `protocol.ts` holds the message types and the page's check on what the worker sends. `protocol-in.ts` holds the worker's check on what the page sends, so the page's first chunk does not carry the checks on looks, sequences and effects.
+
 ### `Store`
 
 ```ts
@@ -168,6 +179,11 @@ IndexedDB in the page, an in-memory map in tests. See section 5.
 
 - `src/console`: the line editor state machine, history and expansion, the command parser, completion. Pure.
 - `src/script`: the parser and step list. Pure. The runner is in the engine.
+- `src/design`: looks, sequences and effects (ADR 0020). Pure.
+  - `look.ts` is a look, the slot map and the commands that store, read, remove and recall a slot. `sequence.ts` is a sequence and its steps. `presets.ts` holds the built-in sequences.
+  - `plan.ts` is the planner: steps with start times become rows, each one change to one driver, using the drivers' own fades and chaining them. It also gives every frame with its time, and a plan's cost to the bus.
+  - `effects.ts` holds the ten effects, each a function from its settings and the drivers it is aimed at to timed steps.
+  - `export.ts` writes a plan as CSV and JSON. `schema.ts` checks everything stored or taken from outside. `stored.ts` is the stored record and its part of a workspace file.
 - `src/switch`: the part 301 event machine per button, on a `Clock`. Pure.
 - `src/light`: pure, and shared by the light worker, the page, the probe and the tests (ADR 0017).
   - `scene.ts` is the scene as plain data, with its validator and defaults. `geometry.ts` turns it into faces, openings (portals) and each tape's lit rectangle, and finds the surface under a ray. `camera.ts` is the view as numbers.
@@ -238,6 +254,7 @@ src/
                    inventory, divergence, commissioning, hardware check
   console/         line editor, history, parser, completion         pure
   script/          script parser                                    pure
+  design/          looks, slot map, planner, effects, export        pure
   switch/          part 301 event machine, presets                  pure
   light/           radiosity, direct term, emitters, colour,        pure
                    and the bench preview's placeholder colour

@@ -1946,7 +1946,7 @@ export class Engine {
               kind,
               name,
               outcome: 'finished',
-              text: `Finished after ${timeText(took)}, ${timeText(Math.max(0, took - plan.endMs))} after its planned end. Every change was sent.`,
+              text: `Finished after ${timeText(took)}, ${timeText(Math.max(0, took - plan.endMs))} after its planned end. Every change was sent. The latest went out ${timeText(late)} after its time.`,
             }
           : r.kind === 'refused'
             ? { kind, name, outcome: 'refused', text: `Stopped at a refusal: ${r.reason}` }
