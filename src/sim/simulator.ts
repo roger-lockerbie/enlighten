@@ -8,6 +8,7 @@ import type { BusReply } from '../dali/reply.ts';
 import type { TxFrame } from '../dali/sequences.ts';
 import { Da5l, type ChannelDrive, type Da5lOptions } from './gear.ts';
 import { benchA, benchB, type Da5lProfile } from './profile.ts';
+import { extraId, extraProfile, type ExtraUnit } from './settings.ts';
 
 /** From the start of the first copy of a send-twice pair to the start of the second: one frame and a priority 1 settle. */
 export const SEND_TWICE_GAP_MS = 14.2 + 14.0;
@@ -52,6 +53,14 @@ export class Simulator {
     const i = this.units.findIndex(match);
     if (i >= 0) this.units.splice(i, 1, unit);
     else this.units.push(unit);
+  }
+
+  /** Take out every unit that matches. */
+  remove(match: (u: SimUnit) => boolean): void {
+    for (let i = this.units.length - 1; i >= 0; i--) {
+      const u = this.units[i];
+      if (u !== undefined && match(u)) this.units.splice(i, 1);
+    }
   }
 
   unit(id: string): SimUnit | undefined {
@@ -115,4 +124,16 @@ export class Simulator {
   fork(): Simulator {
     return new Simulator(this.units.map((u) => ({ id: u.id, gear: u.gear.clone() })));
   }
+}
+
+/** The simulated unit for an extra driver, off and at its address. Each has its own seed. */
+export function extraUnit(extra: ExtraUnit, at: number): SimUnit {
+  return {
+    id: extraId(extra.address),
+    gear: new Da5l(extraProfile(extra), {
+      shortAddress: extra.address,
+      at,
+      seed: 0x2468ace + extra.address,
+    }),
+  };
 }

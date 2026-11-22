@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { extraUnit } from './simulator.ts';
 import { DEFAULT_SETTINGS, SETTINGS_INFO, type Da5lSettings } from './profile.ts';
 import {
   DEFAULT_SETUP,
+  extraId,
+  extraProfile,
   fitBench,
+  parseExtras,
   parseSettings,
   parseUnitSetup,
   SETTING_EDIT,
@@ -81,5 +85,49 @@ describe('the editable simulator settings', () => {
     expect(parseUnitSetup({ presentation: 'xy' })).toMatch(/tc or rgbwaf/);
     expect(parseUnitSetup({ presentation: 'tc', extra: 1 })).toMatch(/Unknown key/);
     expect(parseUnitSetup({ presentation: 'tc', settings: { reset: 'x' } })).toMatch(/no such/);
+  });
+});
+
+describe('extra simulated drivers (R14.2)', () => {
+  it('accepts up to four at addresses the bench does not use, in address order', () => {
+    expect(
+      parseExtras([
+        { address: 63, lightType: 'C5' },
+        { address: 2, lightType: 'C2' },
+      ]),
+    ).toEqual([
+      { address: 2, lightType: 'C2' },
+      { address: 63, lightType: 'C5' },
+    ]);
+    expect(parseExtras([])).toEqual([]);
+  });
+
+  it('gives a reason for anything else', () => {
+    expect(parseExtras({})).toBe('Extra drivers are a list.');
+    expect(parseExtras([1])).toBe('An extra driver is an object.');
+    expect(parseExtras([null])).toBe('An extra driver is an object.');
+    expect(parseExtras([{ address: 2, lightType: 'C2', x: 1 }])).toBe('Unknown key x.');
+    for (const address of [0, 1, 64, 2.5, '3'])
+      expect(parseExtras([{ address, lightType: 'C2' }])).toBe(
+        "An extra driver's address is from 2 to 63.",
+      );
+    expect(parseExtras([{ address: 2, lightType: 'C3' }])).toBe('An extra driver is a C2 or a C5.');
+    expect(
+      parseExtras([
+        { address: 2, lightType: 'C2' },
+        { address: 2, lightType: 'C5' },
+      ]),
+    ).toBe('Two drivers cannot share address 2.');
+    expect(parseExtras([2, 3, 4, 5, 6].map((address) => ({ address, lightType: 'C2' })))).toBe(
+      'At most 4 simulated drivers can be added.',
+    );
+  });
+
+  it('builds each as a DA5-L that presents as the bench units do', () => {
+    expect(extraProfile({ address: 2, lightType: 'C2' }).presentation).toBe('tc');
+    expect(extraProfile({ address: 2, lightType: 'C5' }).presentation).toBe('rgbwaf');
+    const u = extraUnit({ address: 9, lightType: 'C5' }, 50);
+    expect(u.id).toBe(extraId(9));
+    expect(u.gear.shortAddress).toBe(9);
   });
 });

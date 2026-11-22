@@ -11,7 +11,7 @@ import { EV_MAX, EV_MIN, PRESET_EV } from '../light/colour/exposure.ts';
 import { DEFAULT_CEILING_ARC } from '../safety/governor.ts';
 import { BUILTIN_SCRIPTS } from '../script/builtin.ts';
 import { MAX_BYTES, MAX_LINES, scriptNameProblem } from '../script/parse.ts';
-import { parseUnitSetup, type UnitSetup } from '../sim/settings.ts';
+import { parseExtras, parseUnitSetup, type UnitSetup } from '../sim/settings.ts';
 import {
   arrayOf,
   bool,
@@ -57,7 +57,7 @@ export const EXPOSURES = ['night', 'evening', 'day', 'manual'] as const;
 export const BALANCES = ['scene', 'daylight', 'kelvin'] as const;
 export const FALSE_VIEWS = ['off', 'illuminance', 'luminance'] as const;
 
-const preferencesV3 = object({
+const preferencesV4 = object({
   ceilingArc: req(int(1, 254)),
   playgroundMode: req(oneOf('live', 'commit')),
   page: req(oneOf(...PAGES)),
@@ -67,6 +67,8 @@ const preferencesV3 = object({
   reducedMotion: req(oneOf('system', 'always')),
   aliases: req(uniqueBy(arrayOf(alias, 64), (a) => a.address, 'address')),
   bench: req(object({ A: opt(unitSetup), B: opt(unitSetup) })),
+  /** Simulated drivers beyond the bench's two (SPEC R14.2, ADR 0020). */
+  extras: req(custom(parseExtras)),
   /** How many console lines history keeps. */
   historyLength: req(int(HISTORY_MIN, HISTORY_MAX)),
   /** Keep lines that start with a space out of history, as zsh's HIST_IGNORE_SPACE. */
@@ -82,9 +84,9 @@ const preferencesV3 = object({
   falseColour: req(oneOf(...FALSE_VIEWS)),
 });
 
-export type Preferences = Extract<ReturnType<typeof preferencesV3>, { ok: true }>['value'];
+export type Preferences = Extract<ReturnType<typeof preferencesV4>, { ok: true }>['value'];
 
-export const PREFERENCES_VERSION = 3;
+export const PREFERENCES_VERSION = 4;
 
 export const DEFAULT_PREFERENCES: Preferences = {
   ceilingArc: DEFAULT_CEILING_ARC,
@@ -96,6 +98,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   reducedMotion: 'system',
   aliases: [],
   bench: {},
+  extras: [],
   historyLength: DEFAULT_HISTORY,
   historyIgnoreSpace: false,
   verifyMode: true,
@@ -107,7 +110,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
 };
 
 export function checkPreferences(x: unknown): Result<Preferences> {
-  return preferencesV3(x, '');
+  return preferencesV4(x, '');
 }
 
 // -------------------------------------------------------------------------------------------------

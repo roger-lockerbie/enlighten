@@ -1,6 +1,7 @@
 /** U-store: the validator, the schemas, migrations, set-aside on failure, and workspace files. */
 import { describe, expect, it } from 'vitest';
 import { migrate } from './migrate.ts';
+import { preferencesTo4 } from './migrations/preferences-4.ts';
 import { DEFAULT_PREFERENCES, type Preferences } from './schema.ts';
 import { exportWorkspace, MemoryBackend, readWorkspace, Store } from './store.ts';
 import {
@@ -151,7 +152,7 @@ describe('the store', () => {
       bench: { B: { presentation: 'tc', settings: { maxLowerPullsDown: false } } },
     };
     await store.savePreferences(p);
-    expect(b.map.get('preferences')).toEqual({ version: 3, data: p });
+    expect(b.map.get('preferences')).toEqual({ version: 4, data: p });
     expect(await store.loadPreferences()).toEqual({ value: p });
   });
 
@@ -326,6 +327,7 @@ describe('Stage 6 records (ADR 0014)', () => {
       historyIgnoreSpace: false,
       verifyMode: true,
       ...visualiserDefaults,
+      extras: [],
     });
   });
 
@@ -341,8 +343,41 @@ describe('Stage 6 records (ADR 0014)', () => {
     await b.put('preferences', { version: 2, data: v2Preferences });
     const r = await new Store(b, stamp).loadPreferences();
     expect(r.problem).toBeUndefined();
-    expect(r.value).toEqual({ ...v2Preferences, ...visualiserDefaults });
+    expect(r.value).toEqual({ ...v2Preferences, ...visualiserDefaults, extras: [] });
     expect(migrate('text', 2, 3, [{ to: 3, run: (d) => d }])).toEqual({ ok: true, value: 'text' });
+  });
+
+  it('migrates version 3 preferences, with no extra simulated drivers', async () => {
+    // The shape Stage 7 stored.
+    const v3Preferences = {
+      ...v1Preferences,
+      historyLength: 500,
+      historyIgnoreSpace: true,
+      verifyMode: false,
+      ...visualiserDefaults,
+    };
+    const b = new MemoryBackend();
+    await b.put('preferences', { version: 3, data: v3Preferences });
+    const r = await new Store(b, stamp).loadPreferences();
+    expect(r.problem).toBeUndefined();
+    expect(r.value).toEqual({ ...v3Preferences, extras: [] });
+    expect(preferencesTo4.run('text')).toBe('text');
+  });
+
+  it('refuses extra drivers that share an address or sit on the bench', async () => {
+    const store = new Store(new MemoryBackend(), stamp);
+    for (const extras of [
+      [{ address: 1, lightType: 'C2' }],
+      [
+        { address: 5, lightType: 'C2' },
+        { address: 5, lightType: 'C5' },
+      ],
+      [{ address: 5, lightType: 'C1' }],
+      [2, 3, 4, 5, 6].map((address) => ({ address, lightType: 'C2' })),
+    ])
+      await expect(
+        store.savePreferences({ ...DEFAULT_PREFERENCES, extras } as never),
+      ).rejects.toThrow();
   });
 
   it('refuses visualiser settings out of range', async () => {

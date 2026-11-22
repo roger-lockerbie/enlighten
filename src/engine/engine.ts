@@ -42,8 +42,15 @@ import {
 } from '../safety/types.ts';
 import { Da5l } from '../sim/gear.ts';
 import { DEFAULT_SETTINGS, type Terminal } from '../sim/profile.ts';
-import { DEFAULT_SETUP, unitProfile, type BenchUnit, type UnitSetup } from '../sim/settings.ts';
-import { Simulator } from '../sim/simulator.ts';
+import {
+  DEFAULT_SETUP,
+  extraId,
+  unitProfile,
+  type BenchUnit,
+  type ExtraUnit,
+  type UnitSetup,
+} from '../sim/settings.ts';
+import { extraUnit, Simulator } from '../sim/simulator.ts';
 import { Coalescer, type CoalescedResult } from './coalescer.ts';
 import { commission, type CommissionResult } from './commission.ts';
 import { DivergenceGate, type Divergence } from './divergence.ts';
@@ -233,6 +240,8 @@ export interface Snapshot {
   readonly feedback: readonly ControlFeedback[];
   /** The simulated bench's units and how each is set up (SPEC R1.6). */
   readonly bench: readonly { readonly unit: BenchUnit; readonly setup: UnitSetup }[];
+  /** The simulated drivers beyond the bench's two (SPEC R14.2). */
+  readonly extras: readonly ExtraUnit[];
 }
 
 export interface EngineOptions {
@@ -246,6 +255,8 @@ export interface EngineOptions {
   readonly ceilingArc?: number;
   /** How the bench's units were built, when not from the defaults (SPEC R1.6). */
   readonly bench?: Partial<Record<BenchUnit, UnitSetup>>;
+  /** The extra simulated drivers the worker built into `sim` (SPEC R14.2). */
+  readonly extras?: readonly ExtraUnit[];
   /** Scan the simulated bench and write its profile at start. On by default. */
   readonly startScan?: boolean;
 }
@@ -424,6 +435,7 @@ export class Engine {
   /** After the bench is rebuilt, light changes on it wait until this time. */
   private benchHoldUntil = -Infinity;
   private benchSetup: Readonly<Record<BenchUnit, UnitSetup>>;
+  private extras: readonly ExtraUnit[];
   private readonly divergences: Divergence[] = [];
   private readonly monitor: MonitorLine[] = [];
   private readonly notices: string[] = [];
@@ -449,6 +461,7 @@ export class Engine {
     this.timing = withFloors(o.timing ?? {});
     this.ceiling = o.ceilingArc ?? DEFAULT_CEILING_ARC;
     this.benchSetup = { ...DEFAULT_SETUP, ...o.bench };
+    this.extras = o.extras ?? [];
     this.lastBeat = this.clock.now();
     this.simConn = this.makeConn('simulator');
     if (this.hardware !== undefined) this.standby = this.makeStandby(this.hardware);
@@ -1353,6 +1366,64 @@ export class Engine {
     };
     const early = tooHigh();
     if (early !== undefined) return early;
+    return this.rebuild(units, tooHigh, source, (now) => {
+      for (const unit of units) {
+        const next = setup[unit];
+        if (next === undefined) continue;
+        const old = this.sim.unit(unit)?.gear;
+        const gear = new Da5l(unitProfile(unit, next), {
+          shortAddress: old?.shortAddress ?? (unit === 'A' ? 0 : 1),
+          at: now,
+          ...(unit === 'B' ? { seed: 0x1234567 } : {}),
+        });
+        this.sim.replace({ id: unit, gear }, (u) => u.id === unit);
+        this.benchSetup = { ...this.benchSetup, [unit]: next };
+      }
+    });
+  }
+
+  /**
+   * Add, change or take away the simulated drivers beyond the bench's two (SPEC R14.2, ADR 0020).
+   * The list given is the whole list. A driver that goes is turned off first, as in `setBench`.
+   */
+  async setExtras(extras: readonly ExtraUnit[], source: Source): Promise<Outcome> {
+    if (!isPerson(source)) return no('Only a person changes the simulated drivers.');
+    if (this.benchHoldUntil === Infinity)
+      return no('The simulated bench is being rebuilt. Try again when it is done.');
+    const same = (a: ExtraUnit, b: ExtraUnit) =>
+      a.address === b.address && a.lightType === b.lightType;
+    const going = this.extras.filter((e) => !extras.some((n) => same(e, n)));
+    const coming = extras.filter((n) => !this.extras.some((e) => same(e, n)));
+    if (going.length === 0 && coming.length === 0) return no('Nothing to change.');
+    const taken = this.sim.all.find(
+      (u) =>
+        (u.id === 'A' || u.id === 'B') && coming.some((n) => n.address === u.gear.shortAddress),
+    );
+    if (taken !== undefined)
+      return no(`Unit ${taken.id} of the bench is at that address. Choose another.`);
+    const ids = going.map((e) => extraId(e.address));
+    return this.rebuild(
+      ids,
+      () => undefined,
+      source,
+      (now) => {
+        this.sim.remove((u) => ids.includes(u.id));
+        for (const n of coming) this.sim.add(extraUnit(n, now));
+        this.extras = [...extras];
+      },
+    );
+  }
+
+  /**
+   * The shared rebuild: turn the named units off through the governor, hold light changes, make the
+   * change, then scan and write the profile again.
+   */
+  private async rebuild(
+    units: readonly string[],
+    recheck: () => Outcome | undefined,
+    source: Source,
+    apply: (now: number) => void,
+  ): Promise<Outcome> {
     if (this.target === 'simulator') this.stopRunners('The simulator settings changed.');
     // The rate guard reads each unit's history from its gear, and new gear has none. So each lit
     // unit is first turned off through the governor, which judges that step and makes it wait if it
@@ -1412,24 +1483,13 @@ export class Engine {
       );
     }
     // The ceiling may have been lowered while the units were turned off (DALI review S5-D14).
-    const late = tooHigh();
+    const late = recheck();
     if (late !== undefined) {
       release();
       return late;
     }
     const now = this.clock.now();
-    for (const unit of units) {
-      const next = setup[unit];
-      if (next === undefined) continue;
-      const old = this.sim.unit(unit)?.gear;
-      const gear = new Da5l(unitProfile(unit, next), {
-        shortAddress: old?.shortAddress ?? (unit === 'A' ? 0 : 1),
-        at: now,
-        ...(unit === 'B' ? { seed: 0x1234567 } : {}),
-      });
-      this.sim.replace({ id: unit, gear }, (u) => u.id === unit);
-      this.benchSetup = { ...this.benchSetup, [unit]: next };
-    }
+    apply(now);
     // The new gear has no history for the rate guard, so light changes on the simulated bench wait
     // for the hard step window to pass (SPEC S3.3). The simulated connection keeps its governor and
     // scheduler, so no second frame can share the simulated bus with one already on it.
@@ -1900,6 +1960,7 @@ export class Engine {
       light: conn === undefined ? [] : this.lightOf(conn),
       feedback: [...this.feedback.values()],
       bench: (['A', 'B'] as const).map((unit) => ({ unit, setup: this.benchSetup[unit] })),
+      extras: this.extras,
     };
   }
 

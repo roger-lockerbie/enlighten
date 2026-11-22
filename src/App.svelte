@@ -11,7 +11,6 @@
   import { BusClient, readToken } from './ui/bus.ts';
   import { IdbBackend } from './ui/idb.ts';
   import BusMonitor from './ui/pages/BusMonitor.svelte';
-  import Devices from './ui/pages/Devices.svelte';
   import Playground from './ui/pages/Playground.svelte';
   import Settings from './ui/pages/Settings.svelte';
   import Banner from './ui/shell/Banner.svelte';
@@ -67,16 +66,22 @@
 
   void load().then((stored) => {
     const start = startCeiling(stored.prefs.ceilingArc);
-    const client = new BusClient(read.token, { ceilingArc: start, bench: stored.prefs.bench });
+    const client = new BusClient(read.token, {
+      ceilingArc: start,
+      bench: stored.prefs.bench,
+      extras: stored.prefs.extras,
+    });
     app = new AppState(client, store, stored, start);
   });
 
   const page = $derived<Page>(app?.prefs.page ?? 'playground');
 
-  // The visualiser and its light core load when the page is first opened, so the rest of the app
-  // does not pay for them (ADR 0002).
-  let visualiser: Promise<typeof import('./ui/pages/Visualiser.svelte')> | undefined;
-  const loadVisualiser = () => (visualiser ??= import('./ui/pages/Visualiser.svelte'));
+  // These pages load when one of them is first opened, so the entry chunk stays within its budget
+  // (ADR 0002): the visualiser with its light core, and Devices with the simulator's settings.
+  type Later = typeof import('./ui/pages/later.ts');
+  const isLater = (p: Page): p is keyof Later => p === 'devices' || p === 'visualiser';
+  let later: Promise<Later> | undefined;
+  const loadLater = () => (later ??= import('./ui/pages/later.ts'));
 
   function setPage(p: Page): void {
     app?.update({ page: p });
@@ -199,19 +204,18 @@
       {/if}
       {#if page === 'playground'}
         <Playground {app} />
-      {:else if page === 'devices'}
-        <Devices {app} />
       {:else if page === 'monitor'}
         <BusMonitor {app} />
       {:else if page === 'scripts'}
         <Scripts {app} />
-      {:else if page === 'visualiser'}
-        {#await loadVisualiser()}
-          <p class="muted">Loading the visualiser.</p>
+      {:else if isLater(page)}
+        {#await loadLater()}
+          <p class="muted">Loading {TITLES[page]}.</p>
         {:then loaded}
-          <loaded.default {app} />
+          {@const Loaded = loaded[page]}
+          <Loaded {app} />
         {:catch}
-          <p class="muted" role="alert">The visualiser could not be loaded. Reload the page.</p>
+          <p class="muted" role="alert">{TITLES[page]} could not be loaded. Reload the page.</p>
         {/await}
       {:else}
         <Settings {app} />

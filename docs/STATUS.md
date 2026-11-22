@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 8 are merged. Stage 8b (rate guard) is built on `stage-8b-rate-guard`, on Fable as planned, with its PR open. Stage 9 is next, on Opus.
+Stages 0 to 8b are merged. Stage 9 (scenes, sequences and effects) is in progress on `stage-9-scenes`, on Fable by the owner's choice. Its plan is ADR 0020.
 
 ## Done in Stage 0
 
@@ -245,7 +245,7 @@ Known gaps:
 - The floor's finishes are placeholders, and surfaces are neutral and matte.
 - The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove Chromium only.
 
-## Stage 8b (rate guard), built, PR open
+## Stage 8b (rate guard), merged
 
 Branch `stage-8b-rate-guard`, on Fable as planned. The owner approved ADR 0019 on 2026-11-20 and the build followed. Where it stands:
 
@@ -289,7 +289,17 @@ Known gaps, all on the Hardware and Both targets, which nothing uses until the h
 
 **The closing `PROP_RUNS=1000` passes** (2026-11-22, on the closing code: only docs changed after) found nothing: `PROP_SEED=2038634064` and `PROP_SEED=334024647`.
 
+## Stage 9 (scenes, sequences and effects), in progress
+
+Branch `stage-9-scenes`. ADR 0020 holds the plan the owner approved on 2026-11-22 and the four decisions made in planning. The build order is: extra simulated drivers, looks and scene slots, the planner with sequences, the effects, background timing, then docs and the stage close.
+
+Built so far:
+
+- **Extra simulated drivers (R14.2).** Up to four more DA5-Ls at addresses 2 to 63, added and removed on the Devices page, kept in preferences (version 4) and built at start. The engine's `setExtras` shares the bench rebuild with `setBench`: a driver that goes is turned off through the governor first. On Hardware and Both a mount on such an address shows "simulated only".
+- **The pages that load later.** Devices now loads on demand in one chunk with the Visualiser (`src/ui/pages/later.ts`), which brings the entry chunk from its 256,000 byte limit down to about 233 kB.
+
+Not built yet: looks and slots, sequences, effects, the export, the hidden-tab tests, workspace version 4, and the docs.
+
 ## Next
 
-- Review and merge the Stage 8b PR.
-- Stage 9 (scenes, sequences and effects) on Opus, in plan mode. Its choreography across more addresses than the bench has is where simulated drivers beyond the bench arrive.
+- Carry on with Stage 9 from the list above.

@@ -265,6 +265,11 @@
     return `Its driver does not feed the tape's ${missing.join(', ')}.`;
   }
 
+  /** On Hardware and Both, a mount on an address only the simulator has (SPEC R14.2). */
+  function simulatedOnly(m: Mount): boolean {
+    return prediction && app.prefs.extras.some((e) => e.address === m.address);
+  }
+
   function linkNote(s: Setup, m: Mount): string | undefined {
     const twin = linked(s, m.id, 'mirror');
     return twin === undefined ? undefined : `Mirrored with ${twin}.`;
@@ -376,7 +381,8 @@
           y
           <span data-testid={`mount${prefix}-${String(i)}-y`}>{(out[1] / sum).toFixed(5)}</span
           >{/if}.{#if note !== undefined}
-          <span class="warn-text">{note}</span>{/if}
+          <span class="warn-text">{note}</span>{/if}{#if simulatedOnly(m)}
+          <StatusChip kind="simulated only" />{/if}
       </li>
     {/each}
   </ul>

@@ -9,6 +9,7 @@
   import { assignedText, driveText, kelvin, num } from '../format.ts';
   import type { AppState } from '../state.svelte.ts';
   import HardwareCheck from './HardwareCheck.svelte';
+  import SimDrivers from './SimDrivers.svelte';
   import SimSettings from './SimSettings.svelte';
 
   let { app }: { app: AppState } = $props();
@@ -230,6 +231,7 @@
       </section>
     {/if}
 
+    <SimDrivers {app} />
     <SimSettings {app} />
     <HardwareCheck {snap} client={app.client} />
   {/if}

@@ -18,7 +18,7 @@ import {
 } from '../engine/protocol.ts';
 import { fitBench, unitProfile } from '../sim/settings.ts';
 import { DEFAULT_CEILING_ARC } from '../safety/governor.ts';
-import { Simulator } from '../sim/simulator.ts';
+import { extraUnit, Simulator } from '../sim/simulator.ts';
 import { ServerTransport, type WebSocketLike } from '../transport/server.ts';
 import { SimTransport } from '../transport/sim.ts';
 
@@ -52,6 +52,8 @@ function start(m: Extract<ToWorker, { type: 'init' }>): Engine {
     a: unitProfile('A', bench.A),
     b: unitProfile('B', bench.B),
   });
+  const extras = m.extras ?? [];
+  for (const x of extras) sim.add(extraUnit(x, clock.now()));
   const simTransport = new SimTransport(sim, clock, timing);
   let hardware: ServerTransport | undefined;
   if (token !== undefined) {
@@ -77,6 +79,7 @@ function start(m: Extract<ToWorker, { type: 'init' }>): Engine {
     simTransport,
     timing,
     bench,
+    extras,
     ...(m.ceilingArc === undefined ? {} : { ceilingArc: m.ceilingArc }),
     ...(hardware === undefined ? {} : { hardware }),
   });
@@ -132,6 +135,8 @@ async function handle(e: Engine, call: Call): Promise<CallResult> {
       return { ok: true };
     case 'bench':
       return e.setBench(call.setup, src);
+    case 'extras':
+      return e.setExtras(call.extras, src);
     case 'console': {
       const c = consoleContext(call.aliases, call.use);
       if (!c.ok) return c;

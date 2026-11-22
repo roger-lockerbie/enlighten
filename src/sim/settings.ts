@@ -160,3 +160,53 @@ export function fitBench(
 export function unitProfile(unit: BenchUnit, setup: UnitSetup): Da5lProfile {
   return da5l(unit === 'A' ? 'C2' : 'C5', setup.presentation, setup.settings);
 }
+
+/**
+ * A simulated driver beyond the bench's two (SPEC R14.2, ADR 0020): a DA5-L with the default
+ * settings, at a short address the bench does not use. It exists in the Simulator target only.
+ */
+export interface ExtraUnit {
+  readonly address: number;
+  readonly lightType: 'C2' | 'C5';
+}
+
+/** Six drivers in all, to match the visualiser's six mounts. */
+export const MAX_EXTRAS = 4;
+export const EXTRA_MIN_ADDRESS = 2;
+
+/** The stable name of the extra unit at an address. */
+export const extraId = (address: number): string => `X${String(address)}`;
+
+/** The profile an extra unit is built from: C2 presents Tc and C5 presents RGBWAF, as the bench's do. */
+export function extraProfile(extra: ExtraUnit): Da5lProfile {
+  return da5l(extra.lightType, extra.lightType === 'C2' ? 'tc' : 'rgbwaf');
+}
+
+/** Check a list of extra units from anywhere. Returns them in address order, or a reason. */
+export function parseExtras(input: unknown): ExtraUnit[] | string {
+  if (!Array.isArray(input)) return 'Extra drivers are a list.';
+  if (input.length > MAX_EXTRAS)
+    return `At most ${String(MAX_EXTRAS)} simulated drivers can be added.`;
+  const out: ExtraUnit[] = [];
+  for (const item of input as unknown[]) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item))
+      return 'An extra driver is an object.';
+    const o = item as Record<string, unknown>;
+    for (const k of Object.keys(o))
+      if (k !== 'address' && k !== 'lightType') return `Unknown key ${k.slice(0, 40)}.`;
+    const address = o['address'];
+    const lightType = o['lightType'];
+    if (
+      typeof address !== 'number' ||
+      !Number.isInteger(address) ||
+      address < EXTRA_MIN_ADDRESS ||
+      address > 63
+    )
+      return `An extra driver's address is from ${String(EXTRA_MIN_ADDRESS)} to 63.`;
+    if (lightType !== 'C2' && lightType !== 'C5') return 'An extra driver is a C2 or a C5.';
+    if (out.some((e) => e.address === address))
+      return `Two drivers cannot share address ${String(address)}.`;
+    out.push({ address, lightType });
+  }
+  return out.sort((a, b) => a.address - b.address);
+}

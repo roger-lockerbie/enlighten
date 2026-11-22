@@ -13,7 +13,7 @@ import { MAX_LINE } from '../console/history.ts';
 import { MAX_BYTES, scriptNameProblem } from '../script/parse.ts';
 import { DEFAULT_CEILING_ARC, type Outcome } from '../safety/governor.ts';
 import type { Unlock } from '../safety/types.ts';
-import { parseUnitSetup, type UnitSetup } from '../sim/settings.ts';
+import { parseExtras, parseUnitSetup, type ExtraUnit, type UnitSetup } from '../sim/settings.ts';
 import type {
   Channels,
   FadeSetting,
@@ -48,6 +48,8 @@ export type Call =
   | { readonly op: 'clearDivergences' }
   /** Set up the simulated bench's units again (SPEC R1.6). */
   | { readonly op: 'bench'; readonly setup: Partial<Record<'A' | 'B', UnitSetup>> }
+  /** Set the whole list of simulated drivers beyond the bench's two (SPEC R14.2). */
+  | { readonly op: 'extras'; readonly extras: readonly ExtraUnit[] }
   /** A typed console line, with the page's aliases and `use` default. Parsed again in the worker. */
   | {
       readonly op: 'console';
@@ -83,6 +85,8 @@ export type ToWorker =
       readonly ceilingArc?: number;
       /** The simulated bench's set-up, from the page's stored preferences. */
       readonly bench?: Partial<Record<'A' | 'B', UnitSetup>>;
+      /** The extra simulated drivers, from the page's stored preferences. */
+      readonly extras?: readonly ExtraUnit[];
     }
   | { readonly type: 'heartbeat'; readonly visible: boolean }
   | { readonly type: 'panic'; readonly id: number }
@@ -304,6 +308,10 @@ function parseCall(x: unknown): Call | undefined {
       const setup = parseBench(x['setup']);
       return setup === undefined ? undefined : { op: 'bench', setup };
     }
+    case 'extras': {
+      const extras = parseExtras(x['extras']);
+      return typeof extras === 'string' ? undefined : { op: 'extras', extras };
+    }
     case 'console': {
       const { line, use, confirmed } = x;
       const aliases = parseAliases(x['aliases']);
@@ -359,11 +367,14 @@ export function parseToWorker(x: unknown): ToWorker | undefined {
       if (arc !== undefined && !isInt(arc, 1, DEFAULT_CEILING_ARC)) return undefined;
       const bench = b === undefined ? undefined : parseBench(b, true);
       if (b !== undefined && bench === undefined) return undefined;
+      const extras = x['extras'] === undefined ? undefined : parseExtras(x['extras']);
+      if (typeof extras === 'string') return undefined;
       return {
         type: 'init',
         ...(t === undefined ? {} : { token: t.slice() }),
         ...(arc === undefined ? {} : { ceilingArc: arc }),
         ...(bench === undefined ? {} : { bench }),
+        ...(extras === undefined ? {} : { extras }),
       };
     }
     case 'heartbeat':
@@ -402,6 +413,7 @@ export function parseFromWorker(x: unknown): FromWorker | undefined {
         'light',
         'feedback',
         'bench',
+        'extras',
       ])
         if (!Array.isArray(s[k])) return undefined;
       if (!isBool(s['latched']) || !isInt(s['ceilingArc'], 1, 254)) return undefined;
