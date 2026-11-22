@@ -214,6 +214,38 @@ describe('running a sequence', () => {
     expect(jobs(b)).toEqual([]);
   });
 
+  it('says so when the wall clock ran on while the run was paused', async () => {
+    // The wall clock here is the bench's clock plus a skew, which jumps as it would after a sleep.
+    const wall = { skew: 0, now: () => 0 };
+    const b = simEngine({ options: { wallNow: () => wall.now() + wall.skew } });
+    wall.now = () => b.clock.now();
+    await b.settle();
+    await b.clock.advance(3000);
+    const short4 = run('Short', step({ arc: 180, durationMs: 4000 }));
+    await b.drive(b.engine.runDesign(short4, 'ui'));
+    await b.clock.advance(1000);
+    wall.skew = 600_000;
+    await b.settle();
+    expect(b.engine.snapshot().lastRun?.text).toMatch(
+      /^Finished after 4 s, 0 s after its planned end\. Every change was sent\. The latest went out [\d.]+ s after its time\. By the wall clock it took 10 min 4 s: the page or the computer was paused for 10 min of that, so it ended that much late\.$/,
+    );
+    // With the two clocks in step again, nothing is added.
+    await b.clock.advance(3000);
+    await b.drive(b.engine.runDesign(run('Back', step({ arc: 120, durationMs: 4000 })), 'ui'));
+    await b.settle();
+    expect(b.engine.snapshot().lastRun?.text).toMatch(/after its time\.$/);
+    // A run that is stopped says it too.
+    await b.clock.advance(3000);
+    await b.drive(b.engine.runDesign(run('Cut', step({ arc: 180, durationMs: 60_000 })), 'ui'));
+    await b.clock.advance(1000);
+    wall.skew += 120_000;
+    b.engine.stopRun();
+    await b.settle();
+    expect(b.engine.snapshot().lastRun?.text).toMatch(
+      /^Stopped: Stopped by a person\. By the wall clock it took 2 min 1 s: the page or the computer was paused for 2 min of that/,
+    );
+  });
+
   it('is not stopped by Ctrl-C in the console, which stops console work only', async () => {
     const b = await ready();
     await b.drive(b.engine.runDesign(run('Long', step({ arc: 180, durationMs: 60_000 })), 'ui'));

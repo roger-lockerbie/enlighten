@@ -81,6 +81,7 @@ function start(m: Extract<ToWorker, { type: 'init' }>): Engine {
     bench,
     extras,
     dryTransport: (copy, virtual) => new SimTransport(copy, virtual, timing),
+    wallNow: () => Date.now(),
     ...(m.ceilingArc === undefined ? {} : { ceilingArc: m.ceilingArc }),
     ...(hardware === undefined ? {} : { hardware }),
   });

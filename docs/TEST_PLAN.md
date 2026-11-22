@@ -129,10 +129,12 @@ This is the proof of S5.3 in a real browser. Do it once in Chrome and once in Br
 1. Run `pnpm start` and open `http://127.0.0.1:47821/` in the browser.
 2. Open Sequences (Alt-8), choose Sunrise, and press Run. The status line says "Running".
 3. Open another tab in the same window and leave the app's tab behind it for the full 30 minutes. Do not minimise the window on the first run, and do minimise it on a second run.
-4. Come back. The line under the buttons reads "Finished after 30 min, N s after its planned end. Every change was sent. The latest went out M s after its time."
-5. Pass: N and M are both under 2. Record both numbers, the browser and its version in the stage report.
+4. Come back. The line under the buttons reads "Finished after 30 min, N s after its planned end. Every change was sent. The latest went out M s after its time." If the browser suspended the page, a further sentence gives the time by the wall clock and how long the page was paused.
+5. Pass: N and M are both under 2, and there is no sentence about the wall clock. Record the numbers, the browser and its version in the stage report. Time it with a watch as well: the run should end 30 minutes after Run was pressed.
 
 If a browser fails this, S5 is not met in that browser and the design in ADR 0010 has to change: record the numbers and stop.
+
+Stage 9 ran this once in the desktop app's own browser pane with the pane hidden, and it failed there: the pane suspends a hidden page altogether, so the page's clock moved 7.6 minutes in 42 minutes and the run was 7 minutes in (S9-T1 in `docs/SECURITY_FINDINGS.md`). That pane is not one of the client's browsers, but a browser that freezes a background tab would do the same. On hardware the page holds an open WebSocket, which Chrome counts against freezing a tab. Whether that is enough is what this check finds out.
 
 CI runs Chromium only. The client uses Chrome and Brave, so from Stage 5 the app is checked by hand in both at each stage close, with hardware through the server from Stage 4. The simulator is also checked by hand in Firefox and Safari. The results go in the stage report.
 

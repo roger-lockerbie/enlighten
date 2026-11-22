@@ -207,7 +207,34 @@ describe('P-plan: a sequence the check accepts runs as planned', () => {
             // A run that finished ended within two seconds of its planned end (SPEC S5.3).
             if (o.outcome === 'finished') expect(o.overMs).toBeLessThan(2000);
           }),
-          { numRuns: RUNS },
+          {
+            numRuns: RUNS,
+            examples: [
+              // Found at 120 runs (seed -59731273): a colour change planned for lights that were
+              // off, chained across two fades, lit them at their minimum between the fades. The
+              // planner now keeps them off. What the guard then let through is S9-P1.
+              [
+                {
+                  name: 'P',
+                  steps: [
+                    {
+                      target: short(1),
+                      arc: 0,
+                      colour: { kind: 'tc', mirek: 154 },
+                      durationMs: 0,
+                    },
+                    {
+                      target: broadcast,
+                      arc: 0,
+                      colour: { kind: 'rgbwaf', channels: [0, 157, 175, 7, 55, 255] },
+                      durationMs: 170_000,
+                    },
+                  ],
+                },
+                { arcs: [0, 86, 86], mirek: 154, extra: false },
+              ],
+            ],
+          },
         );
       },
       timeout(RUNS, 4000),

@@ -95,16 +95,19 @@ The check gives way to other work every 400 steps of its clock, so Panic is not 
 - The worker's checks on what the page sends are in `src/engine/protocol-in.ts`. While they sat in `protocol.ts`, the page's import of the message types pulled the checks on looks, sequences and effects, and with them the planner and the effects, into the first chunk.
 - The entry chunk is 239 kB against 256,000 bytes.
 
-### Three differences from the approved plan
+### Four differences from the approved plan
 
 1. **The hidden-tab proof.** The plan had a 2-minute test in CI and a 30-minute run by hand with `pnpm e2e:hidden`. Both exist, but neither can make a browser treat a tab as hidden: Playwright keeps every page focused and turns background throttling off, and the test cannot undo it. The tests hide the page as the app sees it, which covers the heartbeat, the watchdog and the run loop. What a browser does to a hidden tab's timers is a check by hand in a real browser, written out in `docs/TEST_PLAN.md` section 7.
 2. **Extras have no settings of their own**, as above.
-3. **No change to `src/safety` was needed.** `src/sim` gained `Simulator.remove` and the extra-unit builder, and `src/dali` the fade command builder moved from the console.
+3. **A wall clock reaches the engine**, for the end-of-run report only.
+4. **No change to `src/safety` was made.** `src/sim` gained `Simulator.remove` and the extra-unit builder, and `src/dali` the fade command builder moved from the console.
 
 ## Consequences
 
 - R4, R5 and S5.1, S5.2 and S5.4 are built for the Simulator target. S5.3 is met in the tests as far as a test can show, and waits on the hidden-tab check by hand.
 - On Hardware and Both the features are there and the holding rules of ADR 0019 refuse most of what they send. Hardware day's part 7 lists which sequences and effects run, and part 8 relaxes the rules.
+- A run's clock stops while the page is suspended or the computer sleeps (S9-T1). The drivers finish the fade in hand and the run picks up late, without knowing. The report at the end gives the wall-clock time when it differs, from a wall clock the worker passes in for that alone. Making the run follow the wall clock would change the time the rate guard works in (ADR 0010), which is the owner's decision.
+- S9-P1 is open: five transactions the governor allows and the trace checker faults, found by P-plan. Nothing in `src/safety` was changed.
 - A stored colour in a slot is never verified. The slot map says "assumed".
 - There are no console commands for looks, sequences or effects. Stage 10's switch mappings call the engine's `sceneRecall`, `runDesign` and `stopRun`.
 - The rail is full at nine pages. Stage 10 has to decide where Switches goes.

@@ -210,8 +210,11 @@ export function planTimed(
     const total = pieces.reduce((sum, p) => sum + p.ms, 0);
     const from = { arc: st.arc, colour: st.colour };
     const to = over(from.colour, colour);
-    const a0 = from.arc === 0 ? d.minArc : from.arc;
-    const a1 = arc === 0 ? d.minArc : arc;
+    // A fade from off starts at the minimum, and a fade to off runs down to it. A step from off to
+    // off stays off throughout: it must never light the driver between its fades.
+    const stays = from.arc === 0 && arc === 0;
+    const a0 = from.arc === 0 && !stays ? d.minArc : from.arc;
+    const a1 = arc === 0 && !stays ? d.minArc : arc;
     let before = 0;
     for (const [k, p] of pieces.entries()) {
       const last = k === pieces.length - 1;

@@ -71,6 +71,8 @@ test('a sequence keeps its time with the page hidden, and every change is sent',
   const over = /, ([\d.]+) s after its planned end\./.exec(text);
   const latest = /The latest went out ([\d.]+) s after its time\./.exec(text);
   expect(text).toContain('Every change was sent.');
+  // The run's clock and the wall clock agree: nothing paused the page.
+  expect(text).not.toContain('wall clock');
   expect(Number(over?.[1] ?? NaN)).toBeLessThan(2);
   expect(Number(latest?.[1] ?? NaN)).toBeLessThan(2);
   // And by this test's clock, which the app has no part in. The run had started a moment before

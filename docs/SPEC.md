@@ -107,7 +107,7 @@ Terms: **arc level** is DALI's 0 to 254 level. **Output** is light output as a f
 - S5.3 A 30-minute sequence run in a hidden tab ends within 2 seconds of its planned time, with every step sent.
 - S5.4 Plans use the drivers' own fades first, so a late wake-up delays the next step and does not distort a fade in progress.
 
-Stage 9 note on S5 (ADR 0020): a plan's rows carry absolute times from the start, and the run loop sends a late row once and keeps later rows at their own times. The wake lock and the unload guard cover a script, a sequence and an effect. E-hidden runs a 2-minute chained sequence with the page hidden as the app sees it and holds it to S5.3's 2 seconds. A test cannot make a browser treat a tab as hidden, so what a browser does to a hidden tab's timers is checked by hand (`docs/TEST_PLAN.md`, section 7).
+Stage 9 note on S5 (ADR 0020): a plan's rows carry absolute times from the start, and the run loop sends a late row once and keeps later rows at their own times. The wake lock and the unload guard cover a script, a sequence and an effect. E-hidden runs a 2-minute chained sequence with the page hidden as the app sees it and holds it to S5.3's 2 seconds. A test cannot make a browser treat a tab as hidden, so what a browser does to a hidden tab's timers is checked by hand (`docs/TEST_PLAN.md`, section 7). A run times itself on the bus worker's clock, which stops while a page is suspended or the computer sleeps. When a run ends, its report also gives the time by the wall clock if the two differ by more than a second (S9-T1).
 
 **S6. The UI never flashes.**
 

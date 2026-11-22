@@ -310,6 +310,12 @@ export interface EngineOptions {
    * checked ahead.
    */
   readonly dryTransport?: (sim: Simulator, clock: Clock) => Transport;
+  /**
+   * The wall clock in ms, from the worker. It is used only to say, when a run ends, how long it took
+   * by the wall clock: the run's own clock stops while a page is suspended or the computer sleeps.
+   * Nothing is timed or judged by it.
+   */
+  readonly wallNow?: () => number;
 }
 
 interface Conn {
@@ -494,6 +500,7 @@ export class Engine {
   private runView: RunView | undefined;
   private lastRun: RunEnded | undefined;
   private readonly dryTransport: EngineOptions['dryTransport'];
+  private readonly wallNow: (() => number) | undefined;
   /** A plan is being checked before its run starts. */
   private checking = false;
   /** Continues a paused script. */
@@ -529,6 +536,7 @@ export class Engine {
     this.benchSetup = { ...DEFAULT_SETUP, ...o.bench };
     this.extras = o.extras ?? [];
     this.dryTransport = o.dryTransport;
+    this.wallNow = o.wallNow;
     this.lastBeat = this.clock.now();
     this.simConn = this.makeConn('simulator');
     if (this.hardware !== undefined) this.standby = this.makeStandby(this.hardware);
@@ -1917,6 +1925,7 @@ export class Engine {
     void this.runJob(conn, kind, label, async (job) => {
       const submit = this.rawSubmitter(conn, job);
       const start = this.clock.now();
+      const wallStart = this.wallNow?.();
       const view = (row: number, cycle: number, lateMs: number): RunView => ({
         kind,
         name,
@@ -1953,17 +1962,27 @@ export class Engine {
       );
       this.runView = undefined;
       const took = this.clock.now() - start;
+      // By the wall clock, when the worker gave one. More than a second apart means the page was
+      // suspended or the computer slept part way through.
+      const paused =
+        wallStart === undefined || this.wallNow === undefined
+          ? 0
+          : this.wallNow() - wallStart - took;
+      const wall =
+        paused > 1000
+          ? ` By the wall clock it took ${timeText(took + paused)}: the page or the computer was paused for ${timeText(paused)} of that, so it ended that much late.`
+          : '';
       this.lastRun =
         r.kind === 'done'
           ? {
               kind,
               name,
               outcome: 'finished',
-              text: `Finished after ${timeText(took)}, ${timeText(Math.max(0, took - plan.endMs))} after its planned end. Every change was sent. The latest went out ${timeText(late)} after its time.`,
+              text: `Finished after ${timeText(took)}, ${timeText(Math.max(0, took - plan.endMs))} after its planned end. Every change was sent. The latest went out ${timeText(late)} after its time.${wall}`,
             }
           : r.kind === 'refused'
             ? { kind, name, outcome: 'refused', text: `Stopped at a refusal: ${r.reason}` }
-            : { kind, name, outcome: 'stopped', text: `Stopped: ${job.why ?? 'stopped'}` };
+            : { kind, name, outcome: 'stopped', text: `Stopped: ${job.why ?? 'stopped'}${wall}` };
       if (r.kind === 'refused') this.notice(`${name}: ${r.reason}`);
     }).then(ended, (e: unknown) => {
       ended();

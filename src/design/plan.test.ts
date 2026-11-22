@@ -171,6 +171,25 @@ describe('planning a sequence', () => {
     expect(p.rows.map((r) => r.arc)).toEqual([135, 0]);
   });
 
+  it('keeps a driver off through a chained step from off to off, whatever colour it carries', () => {
+    // Found by P-plan at 120 runs: the levels between the chained fades were the minimum, so a
+    // colour change planned for lights that were off turned them on at 1%.
+    const p = plan(
+      seq(
+        step({
+          target: broadcast,
+          arc: 0,
+          colour: { kind: 'rgbwaf', channels: [0, 157, 175, 7, 55, 255] },
+          durationMs: 170_000,
+        }),
+      ),
+    );
+    expect(p.rows.every((r) => r.arc === 0)).toBe(true);
+    // The driver that takes no such colour has nothing to do at all.
+    expect(p.rows.every((r) => r.address === 1)).toBe(true);
+    expect(p.rows.map((r) => r.fadeMs)).toEqual([160_000, 10_000]);
+  });
+
   it('runs steps one after another, or together when asked', () => {
     const p = plan(
       seq(
