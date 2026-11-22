@@ -1906,7 +1906,15 @@ export class Engine {
     const name = def.kind === 'sequence' ? def.sequence.name : def.effect.name;
     const kind = def.kind;
     const auto = this.autoOf(conn);
-    void this.runJob(conn, kind, `${RUN_LABEL[kind]} "${name}"`, async (job) => {
+    const label = `${RUN_LABEL[kind]} "${name}"`;
+    // Whatever ends the job, the page is not left showing a run that is not there.
+    const ended = () => {
+      if (this.runView === undefined) return;
+      this.runView = undefined;
+      this.lastRun = { kind, name, outcome: 'stopped', text: 'Stopped: it could not go on.' };
+      this.emit();
+    };
+    void this.runJob(conn, kind, label, async (job) => {
       const submit = this.rawSubmitter(conn, job);
       const start = this.clock.now();
       const view = (row: number, cycle: number, lateMs: number): RunView => ({
@@ -1957,6 +1965,9 @@ export class Engine {
             ? { kind, name, outcome: 'refused', text: `Stopped at a refusal: ${r.reason}` }
             : { kind, name, outcome: 'stopped', text: `Stopped: ${job.why ?? 'stopped'}` };
       if (r.kind === 'refused') this.notice(`${name}: ${r.reason}`);
+    }).then(ended, (e: unknown) => {
+      ended();
+      this.notice(`${label}: ${e instanceof Error ? e.message : 'stopped with an error'}`);
     });
     return OK;
   }

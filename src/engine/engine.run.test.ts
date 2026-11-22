@@ -195,6 +195,25 @@ describe('running a sequence', () => {
     expect(b.engine.snapshot().lastRun?.text).toBe('Stopped: A scan started.');
   });
 
+  it('says a run stopped when a driver stops answering part way through', async () => {
+    const b = await ready();
+    const def = run(
+      'Two',
+      step({ arc: 180, durationMs: 4000 }),
+      step({ arc: 100, durationMs: 4000 }),
+    );
+    await b.drive(b.engine.runDesign(def, 'ui'));
+    await b.clock.advance(1000);
+    // The bench is taken apart under the run: its next change has nowhere to go.
+    b.sim.remove(() => true);
+    await b.settle();
+    const s = b.engine.snapshot();
+    expect(s.run).toBeUndefined();
+    // However it ended, it says so.
+    expect(s.lastRun?.name).toBe('Two');
+    expect(jobs(b)).toEqual([]);
+  });
+
   it('is not stopped by Ctrl-C in the console, which stops console work only', async () => {
     const b = await ready();
     await b.drive(b.engine.runDesign(run('Long', step({ arc: 180, durationMs: 60_000 })), 'ui'));
