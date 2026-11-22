@@ -289,28 +289,44 @@ Known gaps, all on the Hardware and Both targets, which nothing uses until the h
 
 **The closing `PROP_RUNS=1000` passes** (2026-11-22, on the closing code: only docs changed after) found nothing: `PROP_SEED=2038634064` and `PROP_SEED=334024647`.
 
-## Stage 9 (scenes, sequences and effects), in progress
+## Stage 9 (scenes, sequences and effects), built, PR open
 
-Branch `stage-9-scenes`. ADR 0020 holds the plan the owner approved on 2026-11-22 and the four decisions made in planning. The build order is: extra simulated drivers, looks and scene slots, the planner with sequences, the effects, background timing, then docs and the stage close.
+Branch `stage-9-scenes`, on Fable by the owner's choice. ADR 0020 holds the plan the owner approved on 2026-11-22, the four decisions made in planning, what was built and how it differs from the plan. What is in it:
 
-Built so far:
+- **Looks and slots (R5.1 to R5.3).** `src/design`, a new pure folder. A look is a level, a colour and an optional fade. The slot map records which look was written to which of a driver's 16 slots, with the level and colour written. `src/engine/scenes.ts` stores, reads, removes and recalls as jobs through the governor. A slot is verified by the level the driver reads back, and a stored colour is marked "assumed". The Looks page (Alt-7).
+- **Sequences (R5.4 to R5.6).** `src/design/plan.ts` uses one driver fade where one fits a step and chains fades where none does (25 minutes is 16 and 9). `src/engine/dryrun.ts` checks a plan on a copy of the bench with a governor of its own, and `src/engine/runner.ts` is the one run loop for the check and the run. Four built-in sequences, the preview of every change and frame, Check, Run, Stop, and the CSV and JSON export. The Sequences page (Alt-8).
+- **Effects (R4).** The ten effects of SPEC R4.1 in `src/design/effects.ts`, with settings as sliders, frames a second for each address and the share of the bus. The Effects page (Alt-9).
+- **Simulated drivers beyond the bench's two (R14.2).** Up to four, added on the Devices page, on the Simulator target only.
+- **Workspace files version 4** and preferences version 4, each with a migration.
+- **Background timing (S5).** A run holds the wake lock and the unload guard. Its report says how close to its planned end it finished, how late its latest change went out, and the time by the wall clock when the page was paused.
+- **The entry chunk** is about 239 kB of its 256,000 bytes. Devices, the Visualiser and the three new pages load in one chunk when first opened, and the worker's checks on page messages are in `src/engine/protocol-in.ts`.
 
-- **Extra simulated drivers (R14.2).** Up to four more DA5-Ls at addresses 2 to 63, added and removed on the Devices page, kept in preferences (version 4) and built at start. The engine's `setExtras` shares the bench rebuild with `setBench`: a driver that goes is turned off through the governor first. On Hardware and Both a mount on such an address shows "simulated only".
-- **The pages that load later.** Devices now loads on demand in one chunk with the Visualiser (`src/ui/pages/later.ts`), which brings the entry chunk from its 256,000 byte limit down to about 233 kB.
+On Hardware and Both nothing in ADR 0019 is relaxed. The governor refuses most of what sequences and effects send there, and the pages say so.
 
-- **Looks and slots (R5.1 to R5.3).** `src/design` is a new pure folder: a look (level, colour, optional fade), the slot map, and the commands that store, read, remove and recall. `src/engine/scenes.ts` runs them as jobs through the governor. A store puts the colour in as the temporary colour, reads the level back, and leaves a temporary colour that changes nothing. The Looks page (Alt-7) has the library, the editor and each driver's 16 slots with verified, mismatch and assumed marks. The stored record is `design`, version 1. E-looks covers it.
+Stage close:
 
-- **Sequences (R5.4 to R5.6).** `src/design/plan.ts` turns steps into rows: one driver fade where one fits a step's duration, and a chain of fades where none does (25 minutes is 16 and 9), spaced evenly in arc level. `src/engine/dryrun.ts` checks a plan by running it on a copy of the bench with a governor of its own, on a virtual clock, and `src/engine/runner.ts` is the one run loop for the check and the real run. A real run waits at most 0.5 s in all for one change the guard holds back, and the check waits for nothing. The Sequences page (Alt-8) has four built-in sequences, the step editor, the preview of every change and frame, Check, Run, Stop, and the CSV and JSON export. A run holds the screen wake lock and the unload guard. E-sequence covers it, with panic part way through a run.
+- `pnpm verify`: see the report in the PR for the counts.
+- `security-reviewer` **failed** the first build on S9-H1: a check could hold the bus worker for seconds, and Panic with it. That is fixed and tested, with its seven other findings. `dali-reviewer` **passed with follow-ups**: no path round the governor and no protocol error. Its findings on two-tone, the fast fade time, colour temperature limits, sunrise, the slot map and the store are fixed. Both reviews are in `docs/SECURITY_FINDINGS.md`.
+- `src/safety` was not changed, so `pnpm mutate` was not run.
+- P-plan and P-effect ran at 120 cases each once, on a loaded machine. P-plan found S9-B1 and S9-P1. P-effect ran out of its time limit there, with no fault found in the cases it ran. A 1,000-case pass of this file takes about 3 hours and was not run.
+- V-ui baselines for the three new pages and for Devices were not written: `pnpm e2e:visual` is by hand, for the owner's machine.
 
-Found while building: the first run loop waited out every refusal that came with a retry time, which let a flashing plan through the check by slowing it down. The limit above is the fix, with tests.
+Open, for the owner:
 
-- **Effects (R4).** `src/design/effects.ts` has the ten effects of SPEC R4.1, each a pure builder from its settings and the drivers it is aimed at. Four repeat until stopped (breathe, colour temperature drift, hue drift, two-tone) and six run once. The Effects page (Alt-9) has each setting as a slider, frames a second for each address and the share of the bus, the preview, and the same Check, Run, Stop and export as sequences. An effect can be aimed at simulated drivers beyond the bench's two. E-effects covers it.
-- **P-plan and P-effect** (`tests/properties/design.prop.test.ts`): any sequence or effect the check accepts runs with no refusal, and the simulator's trace keeps every rule of S3, at swing limits of 1 and 3. A case takes about 3 s, so the default is 10 cases each.
-- **Workspace version 4.** The file carries looks, slots, sequences, effects and the simulated drivers. Each part in a file takes the place of the stored one after the list of changes is confirmed. An import writes nothing to any driver and runs nothing.
-- **The entry chunk** is 239 kB. Two things keep it there: the pages that load later share one chunk, and the worker's checks on what the page sends moved to `src/engine/protocol-in.ts`, so the page's first chunk does not carry the checks on looks, sequences and effects.
+- **S9-P1 (open):** five transactions a person can send that the governor allows and the trace checker faults, found by P-plan. `dali-reviewer`'s analysis is that the checker follows S3.1 as written, the guard misses the leg because it reads a limited history, and the light made one swing at under 3%: not a hazard, and the fix is to the wording of S3.1 by ADR. `security-reviewer` rates it Medium. It is saved with a test that is marked as failing on purpose.
+- **S9-T1 (open):** a run depends on the bus worker staying awake and cannot tell when it has not. In the desktop app's browser pane, hidden, a 30-minute run was 7 minutes in after 42. On hardware the server would end the session and switch the lights off. Whether a run should follow the wall clock, stop when late, or live in the server is a change to ADR 0010.
+- **The hidden-tab check by hand** (`docs/TEST_PLAN.md` section 7) in Chrome and Brave. No test can hide a tab, so S5.3 is proved only as far as the app's side.
+- S9-D3, S9-D5, S9-D10 and S9-D12 wait on hardware day: how the driver fades to off, the order of the RGBWAF channels, whether a colour follows the fade, and what a colour of 0xFFFF does.
 
-Not built yet: the hidden-tab tests and the docs.
+Known gaps:
+
+- No console commands for looks, sequences or effects. Stage 10's switch mappings call the engine's `sceneRecall`, `runDesign` and `stopRun`.
+- The rail is full at nine pages, so Stage 10 has to decide where Switches goes.
+- Extra simulated drivers use the default profile settings.
+- Breathe is a triangle wave. A stopped effect leaves each light where it was in its cycle.
+- The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review.
 
 ## Next
 
-- Carry on with Stage 9 from the list above.
+- Review and merge the Stage 9 PR, with the owner's decisions on S9-P1 and S9-T1 and the hidden-tab check by hand.
+- Stage 10 (switchgear) on Sonnet, in plan mode.
