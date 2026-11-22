@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 7 are merged. Stage 8 (hallway, mounts and tapes) is on `stage-8-hallway`, on Opus as planned. The rate guard stage the owner chose on 2026-11-18 has not run: Stage 8 ran beside it and changed nothing in `src/safety`, `src/sim`, `src/bus` or `src/dali`.
+Stages 0 to 8 are merged. Stage 8b (rate guard) is built on `stage-8b-rate-guard`, on Fable as planned, with its PR open. Stage 9 is next, on Opus.
 
 ## Done in Stage 0
 
@@ -211,7 +211,7 @@ Known gaps, all in ADR 0017:
 - Bounced light within about 50 mm of an opening's shadow edge is smoothed over one 12.5 mm patch.
 - The frame budget is met with a thin margin.
 
-## Stage 8 (hallway, mounts and tapes), in review
+## Stage 8 (hallway, mounts and tapes), merged
 
 Branch `stage-8-hallway`. ADR 0018 records what was built and two differences from the approved plan. What is in it:
 
@@ -286,6 +286,8 @@ Known gaps, all on the Hardware and Both targets, which nothing uses until the h
 - The rest are in `docs/SECURITY_FINDINGS.md` under the third and fourth reviews, marked for hardware day.
 - Mutation: the score in `docs/MUTATION.md` is from before the reviews. The colour rule and the unknown-gear events in `governor.ts` were rewritten after it and have unit tests and no mutation run.
 - Follow-up: no test pins which of two hard steps the RESET pair keeps.
+
+**The closing `PROP_RUNS=1000` passes** (2026-11-22, on the closing code: only docs changed after) found nothing: `PROP_SEED=2038634064` and `PROP_SEED=334024647`.
 
 ## Next
 
