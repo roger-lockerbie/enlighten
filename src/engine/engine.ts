@@ -916,6 +916,7 @@ export class Engine {
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
     // A scan from the console runs inside its own line. From anywhere else it stops the console.
+    this.stopRunsFor('A scan started.');
     if (source !== 'console') this.stopConsoleFor('A scan started.');
     return this.inventory(conn);
   }
@@ -925,6 +926,7 @@ export class Engine {
     if (!isPerson(source)) return no('Only a person re-applies the profile.');
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
+    this.stopRunsFor('The safety profile is being written again.');
     if (source !== 'console') this.stopConsoleFor('The safety profile is being written again.');
     const r = await this.runJob(conn, 'profile', 'Safety profile', async (job, submit) => {
       for (const n of conn.found) {
@@ -947,6 +949,7 @@ export class Engine {
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
     if (!conn.governor.isUnlocked('reset')) return no('RESET needs the reset unlock.');
+    this.stopRunsFor('A RESET started.');
     if (source !== 'console') this.stopConsoleFor('A RESET started.');
     const r = await this.runJob(conn, 'reset', `RESET A${String(n)}`, async (job, submit) =>
       resetAndRestore(
@@ -1596,6 +1599,7 @@ export class Engine {
     if (conn === undefined) return no('Hardware: disconnected.');
     if (!conn.governor.isUnlocked('reset')) return no('Commissioning needs the reset unlock.');
     if (typed !== 'commission') return no('Type "commission" to confirm.');
+    this.stopRunsFor('Commissioning started.');
     this.stopConsoleFor('Commissioning started.');
     const r = await this.runJob(conn, 'commission', 'Commissioning', async (job, submit) => {
       const result = await commission({
@@ -1645,6 +1649,7 @@ export class Engine {
     if (step.unlock !== undefined && !conn.governor.isUnlocked(step.unlock))
       return no(`This step needs the ${step.unlock} unlock.`);
     const run = step.run;
+    this.stopRunsFor('A hardware check step started.');
     this.stopConsoleFor('A hardware check step started.');
     const r = await this.runJob(conn, 'check', step.title, async (_job, submit) => {
       const ctx: CheckContext = {
@@ -2153,7 +2158,21 @@ export class Engine {
   private stopConsoleFor(why: string): void {
     let any = false;
     for (const j of this.jobs)
-      if (CONSOLE_JOBS.includes(j.kind) || RUN_JOBS.includes(j.kind)) {
+      if (CONSOLE_JOBS.includes(j.kind)) {
+        this.abort(j, why);
+        any = true;
+      }
+    if (any) this.emit();
+  }
+
+  /**
+   * Stop a running sequence or effect before the same kinds of work, whoever started it: a plan was
+   * made for the bench as it was, and a scan, a profile write or a RESET changes that.
+   */
+  private stopRunsFor(why: string): void {
+    let any = false;
+    for (const j of this.jobs)
+      if (RUN_JOBS.includes(j.kind)) {
         this.abort(j, why);
         any = true;
       }

@@ -68,6 +68,15 @@ SPEC R5.5 names one preset: off to 20% at 2700 K over 25 minutes. The others bui
 - Stopping a run sends nothing. A repeating effect that is stopped leaves each light where it was in its cycle. Panic turns everything off, as always.
 - On Hardware and Both a row goes through the engine's Apply, which sends a colour as its own change and reads fades back. Nothing is checked ahead there.
 
+### Cost, measured
+
+On an Apple M1 Pro in Node, with six simulated drivers (the bench's two and four more), while other tests were running:
+
+- Checking two-tone across all six takes about 0.7 s. Checking a 25-minute fade on all six takes about 0.9 s.
+- A minute of two-tone across all six, 60 changes, costs about 0.9 s of work in the worker: the governor's judgement of each change over its fade.
+
+The check gives way to other work every 400 steps of its clock, so Panic is not held up by it.
+
 ### Effects
 
 - Each effect is built as timed steps from its settings and the drivers it is aimed at, and planned by the same planner. A repeating effect returns to where it started, so its plan starts again each period.

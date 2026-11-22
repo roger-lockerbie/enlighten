@@ -195,6 +195,18 @@ describe('running a sequence', () => {
     expect(b.engine.snapshot().lastRun?.text).toBe('Stopped: A scan started.');
   });
 
+  it('is not stopped by Ctrl-C in the console, which stops console work only', async () => {
+    const b = await ready();
+    await b.drive(b.engine.runDesign(run('Long', step({ arc: 180, durationMs: 60_000 })), 'ui'));
+    b.engine.stopConsole();
+    await b.clock.advance(1000);
+    expect(jobs(b)).toEqual(['sequence']);
+    // A scan typed in the console stops it all the same.
+    void b.engine.rescan('console');
+    await b.settle();
+    expect(b.engine.snapshot().lastRun?.text).toBe('Stopped: A scan started.');
+  });
+
   it('is not the engine’s inventory: a run does not hold the background work off', async () => {
     const b = await ready();
     await b.drive(b.engine.runDesign(run('Long', step({ arc: 180, durationMs: 60_000 })), 'ui'));
