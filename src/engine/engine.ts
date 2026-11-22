@@ -350,6 +350,10 @@ const RUN_JOBS: readonly string[] = ['sequence', 'effect'];
 /** Work a person started. None of it is the engine's inventory. */
 const PERSON_JOBS: readonly string[] = [...CONSOLE_JOBS, ...RUN_JOBS, 'look'];
 const RUN_LABEL: Record<RunDef['kind'], string> = { sequence: 'Sequence', effect: 'Effect' };
+/** The longest a check holds the worker before it lets other work in, in ms of real time. */
+const CHECK_SLICE_MS = 12;
+/** And the most steps of its clock, whatever the time. */
+const CHECK_SLICE_STEPS = 25;
 /** A repeating plan is checked for this long, or two periods if that is longer. */
 const DRY_EFFECT_MS = 30_000;
 
@@ -1838,6 +1842,12 @@ export class Engine {
   private async dry(conn: Conn, plan: Plan, source: Source): Promise<string | undefined> {
     if (this.dryTransport === undefined || conn !== this.simConn) return undefined;
     const stops = this.stops;
+    // The check gives way to other work, a panic above all, whenever it has held the worker for
+    // `CHECK_SLICE_MS` of real time, and in any case every `CHECK_SLICE_STEPS` steps. The real time
+    // is the worker's wall clock where there is one: the engine's own clock may be a test's.
+    const real = this.wallNow ?? (() => this.clock.now());
+    let since = real();
+    let steps = 0;
     const r = await dryRun(
       {
         sim: this.sim,
@@ -1849,10 +1859,14 @@ export class Engine {
         source,
         auto: this.autoOf(conn),
         forMs: Math.max(DRY_EFFECT_MS, 2 * (plan.periodMs ?? 0)),
-        // Let a panic, a heartbeat or anything else in between the steps of the check.
-        breathe: async () => {
-          await this.wait(0);
-          return this.stops === stops && !this.latched;
+        breathe: () => {
+          const go = () => this.stops === stops && !this.latched;
+          steps += 1;
+          if (real() - since < CHECK_SLICE_MS && steps % CHECK_SLICE_STEPS !== 0) return go();
+          return this.wait(0).then(() => {
+            since = real();
+            return go();
+          });
         },
       },
       plan,
@@ -1879,7 +1893,14 @@ export class Engine {
         ok: true,
         text: 'Not checked ahead on hardware. The governor judges each change as it is sent.',
       };
-    const refused = await this.dry(conn, plan.value, source);
+    if (this.checking) return no('A check is running. Wait for it to end.');
+    this.checking = true;
+    let refused: string | undefined;
+    try {
+      refused = await this.dry(conn, plan.value, source);
+    } finally {
+      this.checking = false;
+    }
     return refused === undefined
       ? {
           ok: true,
@@ -1896,8 +1917,9 @@ export class Engine {
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
     if (this.latched) return no('Panic is on. Resume first.');
-    if ([...this.jobs].some((j) => RUN_JOBS.includes(j.kind)) || this.checking)
+    if ([...this.jobs].some((j) => RUN_JOBS.includes(j.kind)))
       return no('A sequence or an effect is running. Stop it first.');
+    if (this.checking) return no('A check is running. Wait for it to end.');
     const made = this.planFor(conn, def);
     if (!made.ok) return no(made.reason);
     const plan = made.value;
@@ -1911,6 +1933,11 @@ export class Engine {
     }
     if (refused !== undefined) return no(refused);
     if (this.active() !== conn) return no('The output target changed.');
+    // The check took time. If a light was changed meanwhile, the plan was made for a bench that is
+    // no longer there, so it is not run.
+    const again = this.planFor(conn, def);
+    if (!again.ok || JSON.stringify(again.value.rows) !== JSON.stringify(plan.rows))
+      return no('The lights changed while the plan was being checked. Run it again.');
     const name = def.kind === 'sequence' ? def.sequence.name : def.effect.name;
     const kind = def.kind;
     const auto = this.autoOf(conn);

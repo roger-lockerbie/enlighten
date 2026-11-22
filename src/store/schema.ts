@@ -206,7 +206,7 @@ const setupList: Schema<readonly unknown[]> = (x, path) =>
 
 /**
  * A part of the design: looks, slots, sequences or effects. Here only that it is a list of a
- * sensible length is checked. `src/design/saved.ts` checks it in full before an import is offered
+ * sensible length is checked. `src/design/stored.ts` checks it in full before an import is offered
  * (ADR 0020), so the first page's bundle does not carry those checks.
  */
 const designList =

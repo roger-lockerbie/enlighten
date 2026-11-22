@@ -36,16 +36,14 @@ export interface DryRunOptions {
   /** For a repeating plan: how long to run it. */
   readonly forMs?: number;
   /**
-   * Called now and then so the caller can let other work in. Returns false to give up, which a
-   * panic does.
+   * Called after every step of the check's clock, so the caller can let other work in whenever
+   * enough real time has passed. Returns false to give up, which a panic does. One step is at most
+   * one judgement by the governor, so nothing waits longer than that.
    */
-  readonly breathe?: () => Promise<boolean>;
+  readonly breathe?: () => boolean | Promise<boolean>;
 }
 
 export type DryRunResult = RunResult | { readonly kind: 'failed'; readonly reason: string };
-
-/** How many clock steps between calls to `breathe`. */
-const BREATHE_EVERY = 400;
 
 export async function dryRun(o: DryRunOptions, plan: Plan): Promise<DryRunResult> {
   const clock = new VirtualClock(o.now);
@@ -116,13 +114,13 @@ export async function dryRun(o: DryRunOptions, plan: Plan): Promise<DryRunResult
     },
   );
   const settled = () => st.done;
-  for (let steps = 1; !settled(); steps++) {
+  while (!settled()) {
     await flushMicrotasks();
     if (settled()) break;
     const next = clock.next();
     if (next === undefined) return { kind: 'failed', reason: 'The check could not finish.' };
     await clock.advanceTo(next);
-    if (steps % BREATHE_EVERY === 0 && o.breathe !== undefined && !(await o.breathe())) {
+    if (o.breathe !== undefined && !(await o.breathe())) {
       gaveUp = true;
       return { kind: 'stopped', lateMs: 0 };
     }

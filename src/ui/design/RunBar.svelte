@@ -45,8 +45,11 @@
       : { key: asked, ok: false, text: 'reason' in r ? r.reason : 'Refused.' };
   }
 
-  const href = (type: string, text: string) =>
-    `data:${type};charset=utf-8,${encodeURIComponent(text)}`;
+  // The file is made when the link is used, not each time the plan changes: a long plan is about a
+  // megabyte, and the plan is made again on every change of a run.
+  function fill(link: HTMLAnchorElement, type: string, text: string): void {
+    link.href = `data:${type};charset=utf-8,${encodeURIComponent(text)}`;
+  }
 </script>
 
 <div class="stack" data-testid="run-bar">
@@ -75,13 +78,20 @@
         class="button"
         data-testid="export-csv"
         download={fileName(name, 'csv')}
-        href={href('text/csv', toCsv(plan))}>Export CSV</a
+        href="#export-csv"
+        onclick={(e) => {
+          if (plan !== undefined) fill(e.currentTarget, 'text/csv', toCsv(plan));
+        }}>Export CSV</a
       >
       <a
         class="button"
         data-testid="export-json"
         download={fileName(name, 'json')}
-        href={href('application/json', toJson(name, def.kind, plan))}>Export JSON</a
+        href="#export-json"
+        onclick={(e) => {
+          if (plan !== undefined && def !== undefined)
+            fill(e.currentTarget, 'application/json', toJson(name, def.kind, plan));
+        }}>Export JSON</a
       >
     {/if}
   </div>

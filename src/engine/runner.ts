@@ -1,8 +1,9 @@
 /**
  * The run loop for a plan (SPEC R5.4, S5, ADR 0010, ADR 0020). Each row is sent when its time comes
- * by the clock, or as soon after as the clock wakes: times are absolute from the start, so a late
- * wake-up delays a row and never bunches rows up or sends faster than the scheduler allows. The
- * guard judges every row when it is sent, and a refusal stops the run (ADR 0005).
+ * by the clock, or as soon after as the clock wakes: times are absolute from the start. After a late
+ * wake-up the rows that are overdue go one after another, each through the scheduler and each
+ * judged by the guard as it is sent, and a refusal stops the run (ADR 0005). A repeating plan that
+ * wakes more than a period late does not replay the passes it missed: it starts its next pass.
  *
  * The same loop runs a plan on the real bench and, on a virtual clock, in the dry run.
  */
@@ -51,6 +52,9 @@ export async function runPlan(
 ): Promise<RunResult> {
   let late = 0;
   for (let cycle = 0; ; cycle++) {
+    // A repeating plan that is a whole pass or more behind skips the passes it missed.
+    if (plan.periodMs !== undefined && plan.periodMs > 0)
+      cycle = Math.max(cycle, Math.floor((env.now() - start) / plan.periodMs));
     const base = start + cycle * (plan.periodMs ?? 0);
     for (const [i, row] of plan.rows.entries()) {
       const due = base + row.atMs;

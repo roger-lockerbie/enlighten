@@ -408,8 +408,8 @@
       and simulated drivers, your scripts, and your looks, sequences and effects. A script, a
       sequence or an effect in it is only data: it runs when you run it, never on import. Importing
       one lists what will change first. A lower ceiling in the file is applied at once, which
-      rewrites MAX LEVEL in every driver. A higher one is not applied. Nothing else in the file
-      reaches the lights.
+      rewrites MAX LEVEL in every driver. A higher one is not applied. A simulated driver the file
+      leaves out is switched off and removed. Nothing else in the file reaches the lights.
     </p>
     <div class="row">
       <a class="button" href={exportHref} download="enlighten-workspace.json" data-testid="export"

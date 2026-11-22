@@ -65,6 +65,7 @@ SPEC R5.5 names one preset: off to 20% at 2700 K over 25 minutes. The others bui
 - The check copies the bench, so it starts with no history: what the bench did in the last few seconds is not carried over. The copy's governor scans the copy first, which takes time on the copy's clock, so a fade in progress on the bench has ended by the time the plan starts on the copy. The guard still judges every row when the real run sends it.
 - The first run loop waited out every refusal that came with a retry time. That let a plan of on, off, on, off through the check by spacing it out, and made the check's answer mean little. The check waits for nothing, and a real run waits at most 0.5 s in all for one row. A retry time that has already passed still costs 10 ms, so the waits always add up to the limit.
 - A repeating effect is checked for the longer of 30 s and two periods. A fault that needs a longer build-up is left to the guard at run time, which stops the run.
+- After a late wake-up the overdue rows of a sequence go one after another, each judged as it is sent. A repeating effect that wakes a pass or more late skips the passes it missed.
 - Stopping a run sends nothing. A repeating effect that is stopped leaves each light where it was in its cycle. Panic turns everything off, as always.
 - On Hardware and Both a row goes through the engine's Apply, which sends a colour as its own change and reads fades back. Nothing is checked ahead there.
 
@@ -75,7 +76,7 @@ On an Apple M1 Pro in Node, with six simulated drivers (the bench's two and four
 - Checking two-tone across all six takes about 0.7 s. Checking a 25-minute fade on all six takes about 0.9 s.
 - A minute of two-tone across all six, 60 changes, costs about 0.9 s of work in the worker: the governor's judgement of each change over its fade.
 
-The check gives way to other work every 400 steps of its clock, so Panic is not held up by it.
+The check gives way to other work whenever it has held the worker for 12 ms of real time, and at least every 25 steps of its clock. One step is at most one judgement by the governor. As first built it gave way every 400 steps, which the security review measured at up to 5.6 s without a break on a long plan: long enough to hold up Panic (S9-H1). A panic during a check ends the check. One check runs at a time, and a run is refused if the lights changed while its check was going.
 
 ### Effects
 
@@ -106,7 +107,7 @@ The check gives way to other work every 400 steps of its clock, so Panic is not 
 
 - R4, R5 and S5.1, S5.2 and S5.4 are built for the Simulator target. S5.3 is met in the tests as far as a test can show, and waits on the hidden-tab check by hand.
 - On Hardware and Both the features are there and the holding rules of ADR 0019 refuse most of what they send. Hardware day's part 7 lists which sequences and effects run, and part 8 relaxes the rules.
-- A run's clock stops while the page is suspended or the computer sleeps (S9-T1). The drivers finish the fade in hand and the run picks up late, without knowing. The report at the end gives the wall-clock time when it differs, from a wall clock the worker passes in for that alone. Making the run follow the wall clock would change the time the rate guard works in (ADR 0010), which is the owner's decision.
+- A run depends on the bus worker staying awake (S9-T1). If the page is suspended and its clock stops, the run picks up late without knowing. If timers stop and the clock runs on, the overdue rows go one after another on waking. On hardware a suspended worker also stops sending the server its ping, so after 3 s the server ends the session and sends every driver to the safe level. The report at the end gives the wall-clock time when it differs, from a wall clock the worker passes in for that alone. Making the run follow the wall clock would change the time the rate guard works in (ADR 0010), which is the owner's decision.
 - S9-P1 is open: five transactions the governor allows and the trace checker faults, found by P-plan. Nothing in `src/safety` was changed.
 - A stored colour in a slot is never verified. The slot map says "assumed".
 - There are no console commands for looks, sequences or effects. Stage 10's switch mappings call the engine's `sceneRecall`, `runDesign` and `stopRun`.

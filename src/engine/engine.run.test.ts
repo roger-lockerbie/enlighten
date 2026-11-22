@@ -214,6 +214,66 @@ describe('running a sequence', () => {
     expect(jobs(b)).toEqual([]);
   });
 
+  it('ends a check at once when Panic is pressed during it, and sends nothing', async () => {
+    const b = await ready();
+    const long = run('Long', step({ target: broadcast, arc: 180, durationMs: 20 * min }));
+    const checking = b.engine.planCheck(long, 'ui');
+    const panicking = b.engine.panic();
+    expect(await b.drive(checking)).toEqual({ ok: false, reason: 'The check was stopped.' });
+    await b.drive(panicking);
+    expect(b.engine.snapshot().latched).toBe(true);
+    expect(level(b, 'A')).toBe(0);
+  });
+
+  it('lets other work in during a check at least every 25 steps of the check, and on real time', async () => {
+    // The wall clock here moves 5 ms each time it is read, as if every step took that long.
+    let wall = 0;
+    let yields = 0;
+    const b = simEngine({ options: { wallNow: () => (wall += 5) } });
+    await b.settle();
+    await b.clock.advance(3000);
+    const at = b.clock.at.bind(b.clock);
+    b.clock.at = (time, fn) => {
+      // A wait of no time at all is the check giving way.
+      if (time === b.clock.now()) yields += 1;
+      return at(time, fn);
+    };
+    const r = await b.drive(
+      b.engine.planCheck(run('Up', step({ target: broadcast, arc: 150, durationMs: 4000 })), 'ui'),
+    );
+    expect(r.ok).toBe(true);
+    // 12 ms at 5 ms a reading: it gives way about every third step, hundreds of times in all.
+    expect(yields).toBeGreaterThan(100);
+  });
+
+  it('takes one check at a time, and will not run while one is going', async () => {
+    const b = await ready();
+    const def = run('Up', step({ target: broadcast, arc: 150, durationMs: 4000 }));
+    const first = b.engine.planCheck(def, 'ui');
+    expect(await b.engine.planCheck(def, 'ui')).toEqual({
+      ok: false,
+      reason: 'A check is running. Wait for it to end.',
+    });
+    expect(await b.engine.runDesign(def, 'ui')).toEqual({
+      ok: false,
+      reason: 'A check is running. Wait for it to end.',
+    });
+    expect((await b.drive(first)).ok).toBe(true);
+  });
+
+  it('does not run a plan made for lights that changed while it was being checked', async () => {
+    const b = await ready();
+    const def = run('Up', step({ arc: 150, durationMs: 4000 }));
+    const starting = b.engine.runDesign(def, 'ui');
+    // A person moves the light while the check is going.
+    void b.engine.request({ kind: 'apply', address: 0, arc: 120 }, 'ui');
+    expect(await b.drive(starting)).toEqual({
+      ok: false,
+      reason: 'The lights changed while the plan was being checked. Run it again.',
+    });
+    expect(jobs(b)).toEqual([]);
+  });
+
   it('says so when the wall clock ran on while the run was paused', async () => {
     // The wall clock here is the bench's clock plus a skew, which jumps as it would after a sleep.
     const wall = { skew: 0, now: () => 0 };

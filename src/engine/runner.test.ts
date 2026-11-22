@@ -178,6 +178,21 @@ describe('the run loop', () => {
     expect(t.progress.at(-1)).toEqual([1, 2, 0]);
   });
 
+  it('skips the passes a repeating plan missed while it slept, and starts the next one', async () => {
+    // Asleep from just after the first pass until 10.2 s: nine passes are missed.
+    const t = env({
+      late: (time) => (time > 500 && time < 10_200 ? 10_200 - time : 0),
+      stopAt: 12_500,
+    });
+    const r = await runPlan(t.e, plan([row(0, 1), row(400, 2)], 800, 1000), 0);
+    expect(r.kind).toBe('stopped');
+    expect(t.sent.map((s) => s.at)).toEqual([
+      0, 400, 10_200, 10_400, 11_000, 11_400, 12_000, 12_400,
+    ]);
+    // The pass it woke in is the tenth, counted from nought.
+    expect(t.progress.find((p) => p[2] > 0)?.[1]).toBe(10);
+  });
+
   it('runs a repeating plan until it is stopped when no end is given', async () => {
     const t = env({ stopAt: 3200 });
     const r = await runPlan(t.e, plan([row(0, 1)], 500, 1000), 0);
