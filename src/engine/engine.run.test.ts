@@ -274,6 +274,32 @@ describe('running a sequence', () => {
     expect(jobs(b)).toEqual([]);
   });
 
+  it('runs a plan with a colour step while a colour fade is still going', async () => {
+    const b = await ready();
+    // A slow colour fade is under way when Run is pressed: the colour reads differently before
+    // and after the check, and that alone is no reason to refuse.
+    await b.drive(
+      b.engine.request(
+        {
+          kind: 'apply',
+          address: 0,
+          arc: 150,
+          mirek: 200,
+          fade: { kind: 'extended', value: 0x2b },
+        },
+        'ui',
+      ),
+    );
+    await b.clock.advance(4000);
+    const def = run(
+      'Warm',
+      step({ arc: 150, colour: { kind: 'tc', mirek: 370 }, durationMs: 4000 }),
+    );
+    expect(await b.drive(b.engine.runDesign(def, 'ui'))).toEqual({ ok: true });
+    b.engine.stopRun();
+    await b.settle();
+  });
+
   it('says so when the wall clock ran on while the run was paused', async () => {
     // The wall clock here is the bench's clock plus a skew, which jumps as it would after a sleep.
     const wall = { skew: 0, now: () => 0 };

@@ -238,6 +238,7 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Sunrise and colour temperature drift: does the colour move with the fade, or jump at the start of each (`colourFade`, S9-D10)?
 - [ ] Store a look with no colour in a slot, change the colour, and recall the slot: the colour should not change (S9-D12).
 - [ ] On driver B, which RGBWAF channel is which: the effects take 0 to 2 as red, green and blue, 3 as warm white and 4 as cool (S9-D5).
+- [ ] Time Panic to off while a check is running and while an effect runs across six simulated drivers in Both, on an idle machine, against S4.3's 100 ms (S9-I2).
 - [ ] The hidden-tab check of section 7, with the 30-minute sunrise running on the tapes in Both.
 - [ ] If driver A (C2) presents colour as RGBWAF rather than Tc, `first-light` stops at its first `tc 0` step, where `tools/first_light.py` would go on to tape B. Record it, and change the built-in script to match what the drivers report (DALI review S6-D10).
 - [ ] Every divergence is either fixed in the DA5-L profile or explained in the log. No special cases for hardware in the code.

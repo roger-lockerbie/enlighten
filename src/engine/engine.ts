@@ -1937,8 +1937,13 @@ export class Engine {
     if (this.active() !== conn) return no('The output target changed.');
     // The check took time. If a light was changed meanwhile, the plan was made for a bench that is
     // no longer there, so it is not run.
+    // Levels are compared, as planned from each driver's target. Colours are not: a colour that is
+    // still fading reads differently from one moment to the next, and the order of colour and
+    // level that matters here follows from the levels.
+    const levels = (p: Plan) =>
+      JSON.stringify(p.rows.map((r) => [r.atMs, r.address, r.arc, r.fromArc, r.fade]));
     const again = this.planFor(conn, def);
-    if (!again.ok || JSON.stringify(again.value.rows) !== JSON.stringify(plan.rows))
+    if (!again.ok || levels(again.value) !== levels(plan))
       return no('The lights changed while the plan was being checked. Run it again.');
     const name = def.kind === 'sequence' ? def.sequence.name : def.effect.name;
     const kind = def.kind;

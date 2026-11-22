@@ -306,7 +306,7 @@ On Hardware and Both nothing in ADR 0019 is relaxed. The governor refuses most o
 Stage close:
 
 - `pnpm verify`: see the report in the PR for the counts.
-- `security-reviewer` **failed** the first build on S9-H1: a check could hold the bus worker for seconds, and Panic with it. That is fixed and tested, with its seven other findings. `dali-reviewer` **passed with follow-ups**: no path round the governor and no protocol error. Its findings on two-tone, the fast fade time, colour temperature limits, sunrise, the slot map and the store are fixed. Both reviews are in `docs/SECURITY_FINDINGS.md`.
+- `security-reviewer` **failed** the first build on S9-H1: a check could hold the bus worker for seconds, and Panic with it. That is fixed and tested, with its seven other findings, and its re-review **passed with follow-ups**. `dali-reviewer` **passed with follow-ups**: no path round the governor and no protocol error. Its findings on two-tone, the fast fade time, colour temperature limits, sunrise, the slot map and the store are fixed. Both reviews are in `docs/SECURITY_FINDINGS.md`.
 - `src/safety` was not changed, so `pnpm mutate` was not run.
 - P-plan and P-effect ran at 120 cases each once, on a loaded machine. P-plan found S9-B1 and S9-P1. P-effect ran out of its time limit there, with no fault found in the cases it ran. A 1,000-case pass of this file takes about 3 hours and was not run.
 - V-ui baselines for the three new pages and for Devices were not written: `pnpm e2e:visual` is by hand, for the owner's machine.
