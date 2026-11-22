@@ -7,7 +7,7 @@
  * Every frame goes through the engine, the scheduler and the governor like any other source.
  */
 import { short } from '../dali/address.ts';
-import { rgbwafCommands, tcCommands, type TxFrame } from '../dali/sequences.ts';
+import { framesForAll, rgbwafCommands, tcCommands, type TxFrame } from '../dali/sequences.ts';
 import type { Command } from '../dali/codec.ts';
 import type { Governor } from '../safety/governor.ts';
 import { WARM_MIREK, type ProfileResult, type Submit } from '../safety/profile.ts';
@@ -59,6 +59,12 @@ const q = (id: string, n: number, value?: number): Command =>
 
 const v = (x: number | undefined): Value => x ?? null;
 
+/** The read-back that follows a fade write: the guard rests on fade settings only as read (ADR 0019). */
+const readFades = (n: number): Command[] => [
+  q('QUERY_FADE_TIME_FADE_RATE', n),
+  q('QUERY_EXTENDED_FADE_TIME', n),
+];
+
 /** Read one query from each address. */
 async function each(
   ctx: CheckContext,
@@ -75,13 +81,34 @@ const one = (ctx: CheckContext, id: string, n: number, value?: number) =>
 const withDtr0 = (ctx: CheckContext, id: string, n: number, dtr: number) =>
   ask(ctx.submit, [{ id: 'DTR0', value: dtr }, q(id, n)], ctx.source, id);
 
-/** Load and activate a warm colour, so this session knows the gear's colour. */
-async function knownColour(ctx: CheckContext, n: number): Promise<void> {
+/**
+ * Send a light change, asking again while the rate guard holds it for a time. On hardware a colour
+ * driver's colour is never known, so each change to it waits out the one before (ADR 0019
+ * amendment 1).
+ */
+async function sendWhenAllowed(
+  ctx: CheckContext,
+  cmds: readonly Command[],
+  label: string,
+): Promise<void> {
+  for (let tries = 0; ; tries++) {
+    const r = await ctx.submit({ frames: framesForAll(cmds), source: ctx.source, label });
+    if (r.kind === 'done') return;
+    if (r.kind !== 'refused' || r.retryAt === undefined || tries >= HELD_TRIES)
+      throw new Error(`${label}: ${r.reason}`);
+    await ctx.wait(HELD_RETRY_MS);
+  }
+}
+const HELD_RETRY_MS = 500;
+const HELD_TRIES = 40;
+
+/** Load and activate a warm colour, so no temporary colour waits in the gear. */
+async function activateColour(ctx: CheckContext, n: number): Promise<void> {
   const facts = ctx.governor.colourFacts(n);
   if (facts === undefined) return;
   const a = short(n);
   if (facts.tc) {
-    await send(ctx.submit, tcCommands(a, WARM_MIREK, true), ctx.source, 'warm colour');
+    await sendWhenAllowed(ctx, tcCommands(a, WARM_MIREK, true), 'warm colour');
   } else if (facts.channels > 0) {
     const warm = facts.channels >= 4 ? 3 : 0;
     const mix = [0, 1, 2, 3, 4, 5].map((i) => (i === warm ? 254 : 0)) as [
@@ -92,7 +119,7 @@ async function knownColour(ctx: CheckContext, n: number): Promise<void> {
       number,
       number,
     ];
-    await send(ctx.submit, rgbwafCommands(a, mix, true), ctx.source, 'warm colour');
+    await sendWhenAllowed(ctx, rgbwafCommands(a, mix, true), 'warm colour');
   }
 }
 
@@ -320,7 +347,7 @@ const RUNS: Readonly<Record<string, NonNullable<CheckStep['run']>>> = {
     // Fade time 6 is 4.0 s (dali.md section 7).
     await send(
       ctx.submit,
-      [{ id: 'DTR0', value: 6 }, q('SET_FADE_TIME', n)],
+      [{ id: 'DTR0', value: 6 }, q('SET_FADE_TIME', n), ...readFades(n)],
       ctx.source,
       'SET FADE TIME',
     );
@@ -342,23 +369,22 @@ const RUNS: Readonly<Record<string, NonNullable<CheckStep['run']>>> = {
     if (n === undefined) return { skipped: 'No driver was found.' };
     const target = Math.min(200, ctx.governor.ceilingArc);
     const lowered = Math.min(150, target - 1);
-    // A whole colour set this session on every driver makes the colours known, so the rate guard
-    // can predict the change instead of counting it as an unknown hard step (ADR 0011).
-    for (const a of ctx.addresses) await knownColour(ctx, a);
-    await send(ctx.submit, [{ id: 'DAPC', address: short(n), value: target }], ctx.source, 'DAPC');
+    // A colour driver takes a level only after an ACTIVATE, and the level then waits out the
+    // colour's window (ADR 0019 amendment 1).
+    await activateColour(ctx, n);
+    await sendWhenAllowed(ctx, [{ id: 'DAPC', address: short(n), value: target }], 'DAPC');
     await ctx.wait(2000);
     const before = await one(ctx, 'QUERY_ACTUAL_LEVEL', n);
-    await send(
-      ctx.submit,
+    await sendWhenAllowed(
+      ctx,
       [{ id: 'DTR0', value: lowered }, q('SET_MAX_LEVEL', n)],
-      ctx.source,
       'SET MAX LEVEL',
     );
     const atOnce = await one(ctx, 'QUERY_ACTUAL_LEVEL', n);
     await ctx.wait(2000);
     const after2s = await one(ctx, 'QUERY_ACTUAL_LEVEL', n);
     const profile = await ctx.applyProfile(n);
-    await send(ctx.submit, [{ id: 'OFF', address: short(n) }], ctx.source, 'OFF');
+    await sendWhenAllowed(ctx, [{ id: 'OFF', address: short(n) }], 'OFF');
     return {
       address: n,
       level: target,
@@ -378,7 +404,7 @@ const RUNS: Readonly<Record<string, NonNullable<CheckStep['run']>>> = {
     const watch = ctx.whenStarted((f) => f.sendTwice);
     const sending = send(
       ctx.submit,
-      [{ id: 'DTR0', value: time }, q('SET_FADE_TIME', n)],
+      [{ id: 'DTR0', value: time }, q('SET_FADE_TIME', n), ...readFades(n)],
       ctx.source,
       'SET FADE TIME',
     ).then(

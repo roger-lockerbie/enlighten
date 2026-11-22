@@ -58,6 +58,7 @@ The owner chose to fix this in Stage 6. The DALI review of the first version of 
   - Engine and console tests that RESET from the console is followed by OFF within 500 ms and a verified profile.
 - The guard and the checker still share no code.
 - ADR 0016 amends this: change from fades that ran 0.7 s or longer is slow and never a hard step, fast change above 2 within 0.7 s is a hard step from where it starts, and a fast leg is dated where its fast movement began.
+- ADR 0019 amends this: a hard step is still dated where it happens, on a grid the guard and the checker share. Where the guard's readings date it differently, its date is a range, and it counts once.
 
 ## Alternatives considered
 

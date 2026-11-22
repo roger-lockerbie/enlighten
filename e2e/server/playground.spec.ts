@@ -36,12 +36,14 @@ test('in Hardware, level, colour temperature, colour and fade reach the bus', as
   await playground(page);
   await expect(page.getByTestId('bench-preview')).toContainText('prediction');
 
+  // A colour driver takes a colour before it takes a level (ADR 0019).
   let from = s.lines.length;
-  await enter(page, 'level-0-right', '170');
-  await expect(page.getByTestId('level-0-feedback')).toContainText('Sent level 170.', {
-    timeout: 15_000,
-  });
-  await s.waitFor(() => s.bus(from).includes('general.DAPC'));
+  await enter(page, 'level-0-right', '160');
+  await expect(page.getByTestId('level-0-feedback')).toContainText(
+    'may hold a colour that is not activated, so set its colour before its level',
+    { timeout: 15_000 },
+  );
+  expect(s.bus(from)).not.toContain('general.DAPC');
 
   from = s.lines.length;
   await enter(page, 'tc-0-left', '3000');
@@ -50,6 +52,13 @@ test('in Hardware, level, colour temperature, colour and fade reach the bus', as
   });
   await s.waitFor(() => s.bus(from).includes('colour.Activate'));
   expect(s.bus(from)).toContain('colour.SetTemporaryColourTemperature');
+
+  from = s.lines.length;
+  await enter(page, 'level-0-right', '170');
+  await expect(page.getByTestId('level-0-feedback')).toContainText('Sent level 170.', {
+    timeout: 15_000,
+  });
+  await s.waitFor(() => s.bus(from).includes('general.DAPC'));
 
   from = s.lines.length;
   await page
@@ -79,6 +88,11 @@ test('in Both, lowering the ceiling turns lit gear down before the profile work'
   await page.goto(s.url);
   await connect(page, 'Both');
   await playground(page);
+  // The colour first, so the governor takes a level and the ceiling's hold (ADR 0019).
+  await enter(page, 'tc-0-left', '3000');
+  await expect(page.getByTestId('tc-0-feedback')).toContainText('Sent 333 mirek.', {
+    timeout: 15_000,
+  });
   await enter(page, 'level-0-right', '200');
   await expect(page.getByTestId('level-0-feedback')).toContainText('Sent level 200.', {
     timeout: 15_000,

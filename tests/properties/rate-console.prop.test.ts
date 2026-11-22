@@ -94,6 +94,18 @@ async function check(swings: number): Promise<void> {
             { kind: 'script', lines: ['level 1 39%', 'cap 30'] },
           ],
         ],
+        // S6-P15, found at 1,000 runs in Stage 6: red and white on, then three fades to 26% with a
+        // query between them. The checker dated two hard steps on one channel under 2 s apart, by
+        // where its samples fell (ADR 0019).
+        [
+          [
+            { kind: 'script', lines: ['rgb 1 118 0 0 w 15'] },
+            {
+              kind: 'script',
+              lines: ['repeat 3', 'level 1 26% fade 300ms', 'query 0 level', 'end'],
+            },
+          ],
+        ],
       ],
     },
   );

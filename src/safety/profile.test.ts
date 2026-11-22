@@ -271,17 +271,34 @@ describe('scanning an address', () => {
     const g = gov();
     const bus = fakeBus(g, { QUERY_MISSING_SHORT_ADDRESS: reply(255) });
     expect(await scan(g, bus.submit)).toEqual([]);
-    expect(bus.log.slice(0, 64).map((l) => l.cmds[0]?.address)).toEqual(
-      Array.from({ length: 64 }, (_, i) => short(i)),
+    // An address is empty after three tries with no answer (S8b-R2-H2).
+    expect(bus.log.slice(0, 192).map((l) => l.cmds[0]?.address)).toEqual(
+      Array.from({ length: 192 }, (_, i) => short(Math.floor(i / 3))),
     );
-    const last = bus.log[64];
+    const last = bus.log[192];
     expect([last?.label, last?.source, last?.cmds[0]?.id]).toEqual([
       'unaddressed gear',
       'internal',
       'QUERY_MISSING_SHORT_ADDRESS',
     ]);
-    expect(bus.log).toHaveLength(65);
+    expect(bus.log).toHaveLength(193);
     expect(g.inventoryStale).toBe(false);
+  });
+
+  it('one lost reply does not make gear look absent (S8b-R2-H2)', async () => {
+    for (const [lost, found] of [
+      [1, true],
+      [2, true],
+      [3, false],
+    ] as const) {
+      const g = gov();
+      const none: Answer = { kind: 'no-reply' };
+      const bus = fakeBus(g, {
+        QUERY_CONTROL_GEAR_PRESENT: [...Array.from({ length: lost }, () => none), reply(255)],
+      });
+      expect(await scanAddress(0, g, bus.submit), String(lost)).toBe(found);
+      expect(g.addressInfo(0)?.present, String(lost)).toBe(found);
+    }
   });
 });
 

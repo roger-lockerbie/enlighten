@@ -476,11 +476,17 @@ describe('the hardware target', () => {
     expect(h.governor.addressInfo(0)?.modelled).toBe(true);
     expect(h.governor.addressInfo(0)?.colourKnown).toBe(false);
     await h.clock.advance(3000);
-    const first = await h.run(tx([c('DAPC', A, 120)]));
+    // No level goes to colour gear until its colour is known (ADR 0019, S5-P1).
+    const level = await h.run(tx([c('DAPC', A, 120)]));
+    expect(level.kind === 'refused' ? level.reason : level.kind).toMatch(
+      /set its colour before its level/,
+    );
+    expect(level.kind === 'refused' ? level.retryAt : 0).toBeUndefined();
+    // An OFF goes, and while the colour is unknown it counts as a leg and a hard step.
+    const first = await h.run(tx([c('OFF', A)]));
     expect(first.kind).toBe('done');
-    // A second change on hardware within 2 s is another hard step: fades are not confirmed (S3.7).
-    await h.run(tx([dtr0(8), c('SET_FADE_TIME', A)]));
-    const second = h.governor.judge(tx([c('DAPC', A, 50)]), h.clock.now() + 100);
+    // A second change within 2 s is another hard step.
+    const second = h.governor.judge(tx([c('OFF', A)]), h.clock.now() + 100);
     expect(reason(second)).toMatch(/hard step/);
   });
   it('broadcasts count a phantom driver while the inventory is stale', () => {

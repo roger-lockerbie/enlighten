@@ -33,7 +33,7 @@ describe('TraceRecorder', () => {
     expect(times[1]).toEqual(times[0]);
     expect(times[2]).toEqual(times[0]);
     // R0's 0.7 s fade ends between the grid's samples, and the other units are sampled there too.
-    const end = sim.all[2]?.gear.breakpoints(rig.t, rig.t + 3000) ?? [];
+    const end = sim.all[2]?.gear.planBreakpoints(rig.t, rig.t + 3000) ?? [];
     for (const b of end) expect(times[1]).toContain(b);
   });
 

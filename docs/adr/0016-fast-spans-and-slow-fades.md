@@ -73,6 +73,7 @@ The owner chose to fix all three in Stage 6. The fix also found that the checker
 - The guard and the checker still share no code.
 - S5-P1, two swings in a second on a C5 driver the shadow never saw, is a different case and stays open.
 - The guard still misses some breaches the checker finds, where the two date one hard step differently by where the samples fall (S6-P13, S6-D18-1 to S6-D18-5 and S6-P14 to S6-P16). Each pair of hard steps it misses is a little closer than 2 s at an address or 1 s in the room. The owner chose to fix these in a rate guard stage of their own, with a design that treats a hard step's date as a range counted once, which should also end the refusals the border dates cost.
+- ADR 0019 amends this: the border dates are gone. Three of the four refusals listed above went with them, and the one for a movement 0.66 to 0.7 s after the last span stays. The findings in the item above are closed there. Gear in an unknown state now has a range for its hard step, up to the end of its longest fade, and S5-P1 is closed by a rule on DT8 gear whose colour is not known. That rule reverses one line above: a level no longer goes to gear that has not been scanned, even on its own, since it may be colour gear. OFF still goes. And each command to gear in an unknown state now counts on its own, where one transaction counted once.
 
 ## Alternatives considered
 

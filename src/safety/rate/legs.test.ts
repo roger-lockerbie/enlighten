@@ -1,8 +1,8 @@
 /** U-safety: legs, hard steps and reversals on hand-made traces. */
 import { describe, expect, it } from 'vitest';
 import {
-  events,
-  hardTimes,
+  events as readEvents,
+  hardSteps,
   isLeg,
   mergeTimes,
   ratio,
@@ -12,6 +12,12 @@ import {
 } from './legs.ts';
 
 const tr = (...pts: [number, number][]): Sample[] => pts.map(([t, v]) => ({ t, v }));
+/** One cautious reading, with each hard step as its one date. */
+const events = (s: readonly Sample[]) => {
+  const e = readEvents(s);
+  return { ...e, hard: e.hard.map((r) => r.lo) };
+};
+const hardTimes = (r: Parameters<typeof hardSteps>[0]) => hardSteps(r).map((x) => x.t);
 
 describe('legs', () => {
   it('ratio treats off as infinitely far from on', () => {
@@ -31,12 +37,10 @@ describe('legs', () => {
           dir: 1,
           from: 1,
           to: 1,
-          jumpMax: 1,
           jumps: [],
           fastRatio: 1,
           fastStart: undefined,
           spans: [],
-          border: [],
         },
       ),
     ).toBe(true);
@@ -78,16 +82,14 @@ describe('legs', () => {
       dir: 1 as const,
       from: 0,
       to: 0.5,
-      jumpMax: 25,
-      jumps: [{ t: 0, v: 0, endT: 10, endV: 0.5, max: 25 }],
+      jumps: [{ t: 0, endT: 10 }],
       fastRatio: 25,
       fastStart: 0,
       spans: [],
-      border: [],
     };
     expect(touchesOff(r)).toBe(true);
     expect(hardTimes(r)).toEqual([0]);
-    expect(hardTimes({ ...r, jumpMax: 1, jumps: [] })).toEqual([]);
+    expect(hardTimes({ ...r, jumps: [] })).toEqual([]);
     expect(hardTimes({ ...r, from: 0.1, to: 0.105 })).toEqual([]);
   });
   it('merges event times from several traces', () => {

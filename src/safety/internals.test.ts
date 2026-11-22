@@ -259,14 +259,18 @@ describe('rules on the edges', () => {
     const g = bare('hardware');
     g.observe({ frame: one(c('OFF', unaddressed)), at: 100, source: 'ui' }, { kind: 'sent' });
     expect(reason(g.judge(tx([c('OFF', group(1))]), 400))).toMatch(/hard step/);
-    expect(reason(g.judge(tx([c('DAPC', unaddressed, 100)]), 400))).toMatch(/hard step/);
+    // No level goes to gear the inventory has not found: it may be colour gear (ADR 0019).
+    expect(reason(g.judge(tx([c('DAPC', unaddressed, 100)]), 400))).toMatch(
+      /Gear the inventory has not found may be colour gear/,
+    );
   });
   it('light changes wait 2 s after a hardware connect', () => {
     const g = new Governor({ target: 'hardware', shadow: Simulator.bench(), connectedAt: 1000 });
     expect(g.judge(tx([c('OFF', A)]), 1500).kind).not.toBe('refuse');
     const v = g.judge(tx([c('DAPC', A, 100)]), 1500);
     expect(reason(v)).toMatch(/just after connecting/);
-    expect(v.kind === 'refuse' ? v.retryAt : 0).toBeGreaterThanOrEqual(3000);
+    // The gear has not been scanned, so the level would not go after the hold either (ADR 0019).
+    expect(v).not.toHaveProperty('retryAt');
   });
 });
 

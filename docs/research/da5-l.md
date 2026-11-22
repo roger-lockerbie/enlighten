@@ -156,3 +156,4 @@ Each is a setting on the profile, not a constant in the code.
 4. Lux meter sweeps: level steps at the bottom of the range at FA and at F2, the Tc sweep at a fixed level, and the single-channel RGBWAF sweeps.
 5. Time a fade from off, a colour fade and an extended fade.
 6. Power-cycle with the safety profile written, and watch for any flash before the power-on level applies.
+7. Work through part 8 of the checklist in `docs/TEST_PLAN.md` section 10: the read-backs, timings and faults the rate guard's hardware rules wait on (ADR 0019). They include the colour and the temporary colour as read back, the fade-running bit during a colour fade, whether a fade setting is always taken, how long each fade time runs, and what a colour change does at fade time 0.
