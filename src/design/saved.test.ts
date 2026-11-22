@@ -5,6 +5,21 @@ import { defaultDesign, parseDesign, type Design } from './saved.ts';
 const design: Design = {
   looks: [{ name: 'Warm', arc: 120, colour: { kind: 'tc', mirek: 370 } }],
   slots: [{ address: 0, slot: 3, look: 'Warm', arc: 120 }],
+  sequences: [
+    {
+      name: 'Up',
+      steps: [
+        { target: { kind: 'broadcast' }, arc: 150, colour: { kind: 'none' }, durationMs: 2000 },
+        {
+          target: { kind: 'short', n: 1 },
+          arc: 0,
+          colour: { kind: 'none' },
+          durationMs: 0,
+          together: true,
+        },
+      ],
+    },
+  ],
 };
 
 describe('the stored design', () => {
@@ -14,12 +29,21 @@ describe('the stored design', () => {
   });
 
   it('refuses a slot that names no look, unknown keys and missing parts', () => {
-    expect(parseDesign({ looks: [], slots: design.slots })).toEqual({
+    expect(parseDesign({ looks: [], slots: design.slots, sequences: [] })).toEqual({
       ok: false,
       error: 'slots: A0 slot 3 names a look the library does not have.',
     });
     expect(parseDesign({ ...design, extra: 1 }).ok).toBe(false);
     expect(parseDesign({ looks: [] }).ok).toBe(false);
+    const twice = { ...design, sequences: [...design.sequences, ...design.sequences] };
+    expect(parseDesign(twice).ok).toBe(false);
+    const step = {
+      target: { kind: 'broadcast' },
+      arc: 1,
+      colour: { kind: 'none' },
+      durationMs: -1,
+    };
+    expect(parseDesign({ ...design, sequences: [{ name: 'Bad', steps: [step] }] }).ok).toBe(false);
     expect(parseDesign(null).ok).toBe(false);
   });
 
@@ -33,9 +57,9 @@ describe('the stored design', () => {
     expect(b.map.get('design')).toEqual({ version: 1, data: design });
     expect(await store.loadDesign(parseDesign, defaultDesign())).toEqual({ value: design });
     await expect(
-      store.saveDesign(parseDesign, { looks: [], slots: design.slots }),
+      store.saveDesign(parseDesign, { looks: [], slots: design.slots, sequences: [] }),
     ).rejects.toThrow();
-    await b.put('design', { version: 1, data: { looks: 'x', slots: [] } });
+    await b.put('design', { version: 1, data: { looks: 'x', slots: [], sequences: [] } });
     const r = await store.loadDesign(parseDesign, defaultDesign());
     expect(r.value).toEqual(defaultDesign());
     expect(r.problem).toMatch(/set aside/);

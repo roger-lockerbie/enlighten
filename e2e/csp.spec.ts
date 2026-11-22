@@ -44,6 +44,7 @@ test('every page loads with no CSP violation, console error or page error', asyn
     'Scripts',
     'Visualiser',
     'Looks',
+    'Sequences',
     'Playground',
   ]) {
     await page

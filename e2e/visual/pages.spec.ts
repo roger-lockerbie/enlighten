@@ -10,6 +10,7 @@ const PAGES: PageName[] = [
   'Scripts',
   'Visualiser',
   'Looks',
+  'Sequences',
 ];
 
 test('each page matches its baseline', async ({ page }) => {

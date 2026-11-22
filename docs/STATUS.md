@@ -300,7 +300,11 @@ Built so far:
 
 - **Looks and slots (R5.1 to R5.3).** `src/design` is a new pure folder: a look (level, colour, optional fade), the slot map, and the commands that store, read, remove and recall. `src/engine/scenes.ts` runs them as jobs through the governor. A store puts the colour in as the temporary colour, reads the level back, and leaves a temporary colour that changes nothing. The Looks page (Alt-7) has the library, the editor and each driver's 16 slots with verified, mismatch and assumed marks. The stored record is `design`, version 1. E-looks covers it.
 
-Not built yet: sequences, effects, the export, the hidden-tab tests, workspace version 4, and the docs.
+- **Sequences (R5.4 to R5.6).** `src/design/plan.ts` turns steps into rows: one driver fade where one fits a step's duration, and a chain of fades where none does (25 minutes is 16 and 9), spaced evenly in arc level. `src/engine/dryrun.ts` checks a plan by running it on a copy of the bench with a governor of its own, on a virtual clock, and `src/engine/runner.ts` is the one run loop for the check and the real run. A real run waits at most 0.5 s in all for one change the guard holds back, and the check waits for nothing. The Sequences page (Alt-8) has four built-in sequences, the step editor, the preview of every change and frame, Check, Run, Stop, and the CSV and JSON export. A run holds the screen wake lock and the unload guard. E-sequence covers it, with panic part way through a run.
+
+Found while building: the first run loop waited out every refusal that came with a retry time, which let a flashing plan through the check by slowing it down. The limit above is the fix, with tests.
+
+Not built yet: effects, the hidden-tab tests, workspace version 4, and the docs.
 
 ## Next
 

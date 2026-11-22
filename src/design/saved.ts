@@ -1,20 +1,22 @@
 /**
- * The stored `design` record: the library of looks and the slot map (ADR 0020). Sequences and
- * effects join it as they are built. Loaded only by the pages that use it and by a workspace import
+ * The stored `design` record: the library of looks, the slot map and the sequences (ADR 0020).
+ * Effects join it as they are built. Loaded only by the pages that use it and by a workspace import
  * or export, so the entry chunk does not carry these checks.
  */
 import { object, req, type Result } from '../store/validate.ts';
 import type { Look, SlotEntry } from './look.ts';
-import { looks, slots } from './schema.ts';
+import { looks, sequences, slots } from './schema.ts';
+import type { Sequence } from './sequence.ts';
 
 export interface Design {
   readonly looks: readonly Look[];
   readonly slots: readonly SlotEntry[];
+  readonly sequences: readonly Sequence[];
 }
 
-export const defaultDesign = (): Design => ({ looks: [], slots: [] });
+export const defaultDesign = (): Design => ({ looks: [], slots: [], sequences: [] });
 
-const design = object({ looks: req(looks), slots: req(slots) });
+const design = object({ looks: req(looks), slots: req(slots), sequences: req(sequences) });
 
 /** Check a stored or imported design. Every slot must name a look the library has. */
 export function parseDesign(x: unknown): Result<Design> {

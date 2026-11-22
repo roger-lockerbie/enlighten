@@ -13,6 +13,7 @@ const PAGES: PageName[] = [
   'Scripts',
   'Visualiser',
   'Looks',
+  'Sequences',
 ];
 const CONTROLS = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
 

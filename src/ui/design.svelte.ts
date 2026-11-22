@@ -2,6 +2,7 @@
  * The page's copy of the stored design (looks and the slot map), shared by the Looks, Sequences and
  * Effects pages. It loads once, on the first of those pages opened, and saves shortly after a change.
  */
+import type { Library } from '../design/look.ts';
 import { defaultDesign, parseDesign, type Design } from '../design/saved.ts';
 import type { AppState } from './state.svelte.ts';
 
@@ -25,6 +26,11 @@ export class DesignState {
       .finally(() => {
         this.loaded = true;
       });
+  }
+
+  /** Keep a change to the looks and the slot map. */
+  setLibrary(lib: Library): void {
+    this.set({ ...this.value, looks: lib.looks, slots: lib.slots });
   }
 
   /** Keep a change, and save it shortly after. */

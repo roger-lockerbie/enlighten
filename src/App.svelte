@@ -79,7 +79,7 @@
   // These pages load when one of them is first opened, so the entry chunk stays within its budget
   // (ADR 0002): the visualiser with its light core, and Devices with the simulator's settings.
   type Later = typeof import('./ui/pages/later.ts');
-  const LATER: readonly Page[] = ['devices', 'visualiser', 'looks'];
+  const LATER: readonly Page[] = ['devices', 'visualiser', 'looks', 'sequences'];
   const isLater = (p: Page): p is keyof Later => LATER.includes(p);
   let later: Promise<Later> | undefined;
   const loadLater = () => (later ??= import('./ui/pages/later.ts'));
@@ -92,17 +92,17 @@
     app?.client.panic();
   }
 
-  // A screen wake lock while a script runs (SPEC S5.2).
+  // A screen wake lock while a script, a sequence or an effect runs (SPEC S5.2).
   const wake = new ScreenWake((why) => {
     app?.console.print('note', why);
   });
   $effect(() => {
-    wake.want(app?.snap?.script !== undefined);
+    wake.want(app?.snap?.script !== undefined || app?.snap?.run !== undefined);
   });
 
   /** Ask before leaving with a half-typed console line or a script running. */
   function beforeUnload(e: BeforeUnloadEvent): void {
-    if (app?.console.guarded === true) e.preventDefault();
+    if (app?.console.guarded === true || app?.snap?.run !== undefined) e.preventDefault();
   }
 
   // Less motion when asked for in Settings, as well as when the system asks (SPEC S6.2).
@@ -173,6 +173,7 @@
     scripts: 'Scripts',
     visualiser: 'Visualiser',
     looks: 'Looks',
+    sequences: 'Sequences',
   };
 </script>
 

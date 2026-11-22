@@ -14,6 +14,7 @@ export function driversFrom(devices: readonly DeviceView[], light: readonly Ligh
     // A driver that is not verified or not read yet takes no part: the governor would refuse it.
     if (f === undefined || !d.verified) continue;
     const l = light.find((x) => x.address === d.address);
+    const count = f.colour?.channels ?? 0;
     const colour: LookColour =
       l === undefined
         ? { kind: 'none' }
@@ -22,7 +23,10 @@ export function driversFrom(devices: readonly DeviceView[], light: readonly Ligh
           : f.drive === 'rgbwaf'
             ? {
                 kind: 'rgbwaf',
-                channels: l.channels.map((v) => Math.round(v)) as unknown as Channels,
+                // A channel the driver does not have is "no change", whatever the model holds there.
+                channels: l.channels.map((v, i) =>
+                  i < count ? Math.round(v) : 255,
+                ) as unknown as Channels,
               }
             : { kind: 'none' };
     out.push({

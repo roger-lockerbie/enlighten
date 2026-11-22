@@ -236,6 +236,8 @@ export interface RunView {
   readonly endMs?: number;
   /** The latest any row has gone out after its time, in ms. */
   readonly lateMs: number;
+  /** How long it has been running, as of this snapshot. */
+  readonly elapsedMs: number;
 }
 
 /** How the last run ended. */
@@ -1909,6 +1911,7 @@ export class Engine {
         startedAt: start,
         ...(plan.periodMs === undefined ? { endMs: plan.endMs } : {}),
         lateMs,
+        elapsedMs: 0,
       });
       this.runView = view(0, 0, 0);
       this.lastRun = undefined;
@@ -2252,7 +2255,9 @@ export class Engine {
       monitor: this.monitor.slice(-50),
       console: this.consoleOut.slice(-CONSOLE_SNAPSHOT),
       ...(this.scriptView === undefined ? {} : { script: this.scriptView }),
-      ...(this.runView === undefined ? {} : { run: this.runView }),
+      ...(this.runView === undefined
+        ? {}
+        : { run: { ...this.runView, elapsedMs: this.clock.now() - this.runView.startedAt } }),
       ...(this.lastRun === undefined ? {} : { lastRun: this.lastRun }),
       notices: [...this.notices],
       busUse: conn?.scheduler.utilisation() ?? 0,

@@ -14,6 +14,7 @@
     setSlot,
     slotState,
     SLOTS,
+    type Library,
     type Look,
     type LookColour,
     type SlotState,
@@ -79,7 +80,7 @@
 
   function save(): void {
     const look: Look = { name, arc, colour, ...(ownFade ? { fade } : {}) };
-    let next = lib;
+    let next: Library = lib;
     if (editing !== undefined && editing !== name.trim()) {
       const renamed = renameLook(next, editing, name);
       if (!renamed.ok) {
@@ -96,13 +97,13 @@
       message = put.reason;
       return;
     }
-    design.set(put.value);
+    design.setLibrary(put.value);
     open = false;
     message = `Saved "${name.trim()}".`;
   }
 
   function remove(l: Look): void {
-    design.set(removeLook(lib, l.name));
+    design.setLibrary(removeLook(lib, l.name));
     if (editing === l.name) open = false;
     message = `Removed "${l.name}". The drivers still hold what was written.`;
   }
@@ -165,7 +166,7 @@
       `"${look.name}" is in slot ${String(slot)} of A${String(at)}, read back.`,
     );
     if (ok)
-      design.set(
+      design.setLibrary(
         setSlot(designOf(app).value, { address: at, slot, look: look.name, arc: look.arc }),
       );
   }
@@ -177,7 +178,7 @@
       app.call({ op: 'sceneRemove', address: at, slot }),
       `Slot ${String(slot)} of A${String(at)} is empty.`,
     );
-    if (ok) design.set(clearSlot(designOf(app).value, at, slot));
+    if (ok) design.setLibrary(clearSlot(designOf(app).value, at, slot));
   }
 
   function recallOne(slot: number): void {
