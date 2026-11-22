@@ -11,6 +11,7 @@ import { percentText } from '../dali/curve.ts';
 import { extendedFades, fadeInUse, standardFades } from '../dali/fade.ts';
 import { decodeFadeTimeRate } from '../dali/reply.ts';
 import {
+  fadeCommands,
   mirekToKelvin,
   queryColourValueCommands,
   rgbwafCommands,
@@ -136,20 +137,6 @@ export function fadeReadBack(a: Address): Command[] {
   return [
     { id: 'QUERY_FADE_TIME_FADE_RATE', address: a },
     { id: 'QUERY_EXTENDED_FADE_TIME', address: a },
-  ];
-}
-
-function fadeCommands(a: Address, s: FadeSetting): Command[] {
-  if (s.kind === 'standard')
-    return [
-      { id: 'DTR0', value: s.value },
-      { id: 'SET_FADE_TIME', address: a },
-    ];
-  return [
-    { id: 'DTR0', value: 0 },
-    { id: 'SET_FADE_TIME', address: a },
-    { id: 'DTR0', value: s.value },
-    { id: 'SET_EXTENDED_FADE_TIME', address: a },
   ];
 }
 

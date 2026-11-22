@@ -39,6 +39,7 @@ export default defineConfig({
         'src/store/**/*.ts',
         'src/console/**/*.ts',
         'src/script/**/*.ts',
+        'src/design/**/*.ts',
       ],
       exclude: ['**/*.test.ts', '**/index.ts'],
       reporter: ['text-summary', 'text'],

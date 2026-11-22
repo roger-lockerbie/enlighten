@@ -11,6 +11,8 @@ import type { Command } from '../dali/codec.ts';
 import { aliasProblem, parseTarget, type ParseContext } from '../console/parse.ts';
 import { MAX_LINE } from '../console/history.ts';
 import { MAX_BYTES, scriptNameProblem } from '../script/parse.ts';
+import type { Look } from '../design/look.ts';
+import { parseLook, parseTarget as parseAddress } from '../design/schema.ts';
 import { DEFAULT_CEILING_ARC, type Outcome } from '../safety/governor.ts';
 import type { Unlock } from '../safety/types.ts';
 import { parseExtras, parseUnitSetup, type ExtraUnit, type UnitSetup } from '../sim/settings.ts';
@@ -48,6 +50,22 @@ export type Call =
   | { readonly op: 'clearDivergences' }
   /** Set up the simulated bench's units again (SPEC R1.6). */
   | { readonly op: 'bench'; readonly setup: Partial<Record<'A' | 'B', UnitSetup>> }
+  /** Write a look to one slot of one driver, and read it back (SPEC R5.2). */
+  | {
+      readonly op: 'sceneWrite';
+      readonly address: number;
+      readonly slot: number;
+      readonly look: Look;
+    }
+  | { readonly op: 'sceneRemove'; readonly address: number; readonly slot: number }
+  | { readonly op: 'sceneRead'; readonly address: number }
+  /** Recall a slot by address, group or broadcast, with the look's fade set first (SPEC R5.3). */
+  | {
+      readonly op: 'sceneRecall';
+      readonly target: Address;
+      readonly slot: number;
+      readonly fade?: FadeSetting;
+    }
   /** Set the whole list of simulated drivers beyond the bench's two (SPEC R14.2). */
   | { readonly op: 'extras'; readonly extras: readonly ExtraUnit[] }
   /** A typed console line, with the page's aliases and `use` default. Parsed again in the worker. */
@@ -307,6 +325,32 @@ function parseCall(x: unknown): Call | undefined {
     case 'bench': {
       const setup = parseBench(x['setup']);
       return setup === undefined ? undefined : { op: 'bench', setup };
+    }
+    case 'sceneWrite': {
+      const look = parseLook(x['look']);
+      const { address, slot } = x;
+      if (!look.ok || !isInt(address, 0, 63) || !isInt(slot, 0, 15)) return undefined;
+      return { op: 'sceneWrite', address, slot, look: look.value };
+    }
+    case 'sceneRemove': {
+      const { address, slot } = x;
+      if (!isInt(address, 0, 63) || !isInt(slot, 0, 15)) return undefined;
+      return { op: 'sceneRemove', address, slot };
+    }
+    case 'sceneRead':
+      return isInt(x['address'], 0, 63) ? { op: 'sceneRead', address: x['address'] } : undefined;
+    case 'sceneRecall': {
+      const target = parseAddress(x['target']);
+      const slot = x['slot'];
+      const fade = x['fade'] === undefined ? undefined : parseFade(x['fade']);
+      if (!target.ok || !isInt(slot, 0, 15)) return undefined;
+      if (x['fade'] !== undefined && fade === undefined) return undefined;
+      return {
+        op: 'sceneRecall',
+        target: target.value,
+        slot,
+        ...(fade === undefined ? {} : { fade }),
+      };
     }
     case 'extras': {
       const extras = parseExtras(x['extras']);

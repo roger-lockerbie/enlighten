@@ -15,6 +15,7 @@ export const PURE_FOLDERS = [
   'src/store/**',
   'src/console/**',
   'src/script/**',
+  'src/design/**',
 ];
 
 const timeMessage = 'The pure core takes time from a Clock (ADR 0010).';

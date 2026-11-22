@@ -137,6 +137,14 @@ async function handle(e: Engine, call: Call): Promise<CallResult> {
       return e.setBench(call.setup, src);
     case 'extras':
       return e.setExtras(call.extras, src);
+    case 'sceneWrite':
+      return e.sceneWrite(call.address, call.slot, call.look, src);
+    case 'sceneRemove':
+      return e.sceneRemove(call.address, call.slot, src);
+    case 'sceneRead':
+      return e.sceneRead(call.address, src);
+    case 'sceneRecall':
+      return e.sceneRecall(call.target, call.slot, call.fade, src);
     case 'console': {
       const c = consoleContext(call.aliases, call.use);
       if (!c.ok) return c;

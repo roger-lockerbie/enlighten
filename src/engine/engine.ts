@@ -9,7 +9,7 @@
 import type { Cancel, Clock } from '../bus/clock.ts';
 import { Scheduler, type BusRecord, type Gate, type TxResult } from '../bus/scheduler.ts';
 import { withFloors, type BusTiming } from '../bus/timing.ts';
-import { short } from '../dali/address.ts';
+import { short, type Address } from '../dali/address.ts';
 import {
   commandText,
   decode,
@@ -67,7 +67,9 @@ import { ConsoleExec, fadeReadBack, type ConsoleHost, type ConsoleLine } from '.
 import { readFacts, type DriverFacts } from './inventory.ts';
 import { Router } from './router.ts';
 import { send, StepError, toSubmitted, txOf } from './submit.ts';
+import { lookFits, type Look } from '../design/look.ts';
 import { HARD_WINDOW_MS } from '../safety/rate/guard.ts';
+import { readSlots, recallSlot, removeSlot, writeSlot } from './scenes.ts';
 import { TIME_MARGIN_MS } from '../safety/rate/legs.ts';
 import type { HardwareTransport, Transport } from './transport.ts';
 
@@ -141,6 +143,8 @@ export interface DeviceView {
   readonly groups?: number;
   /** The level the governor predicts now, for ordering a colour change (S6-D1). */
   readonly level?: number;
+  /** The sixteen scene levels as last read (255 is not in the scene), for the slot map. */
+  readonly scenes?: readonly (number | undefined)[];
 }
 
 export interface MonitorLine {
@@ -288,6 +292,10 @@ interface Job {
 
 /** Console lines and scripts are a person's or a script's work, not the engine's own (ADR 0014). */
 const CONSOLE_JOBS: readonly string[] = ['console', 'script'];
+/** A sequence or an effect that is running (ADR 0020). One at a time. */
+const RUN_JOBS: readonly string[] = ['sequence', 'effect'];
+/** Work a person started. None of it is the engine's inventory. */
+const PERSON_JOBS: readonly string[] = [...CONSOLE_JOBS, ...RUN_JOBS, 'look'];
 
 type LiveValue = (
   | { readonly kind: 'level'; readonly arc: number; readonly live: boolean }
@@ -813,7 +821,7 @@ export class Engine {
 
   private inventoryRunning(conn: Conn): boolean {
     for (const j of this.jobs)
-      if (j.conn === conn && j.kind !== 'check' && !CONSOLE_JOBS.includes(j.kind)) return true;
+      if (j.conn === conn && j.kind !== 'check' && !PERSON_JOBS.includes(j.kind)) return true;
     return false;
   }
 
@@ -919,7 +927,7 @@ export class Engine {
   private background(): void {
     const hw = this.hwConn;
     if (this.target !== 'both' || hw === undefined || this.latched || this.backgroundBusy) return;
-    const busy = [...this.jobs].some((j) => !CONSOLE_JOBS.includes(j.kind));
+    const busy = [...this.jobs].some((j) => !PERSON_JOBS.includes(j.kind));
     if (hw.scheduler.queued > 0 || busy || this.coalescer.waiting() > 0) return;
     const now = this.clock.now();
     const n = [...this.pendingRescan].find(
@@ -1739,6 +1747,60 @@ export class Engine {
     return r.ok && r.value ? OK : no(r.ok ? 'The line did not finish.' : r.reason);
   }
 
+  // -----------------------------------------------------------------------------------------------
+  // Scene slots (SPEC R5.2, R5.3)
+
+  private async sceneJob(
+    label: string,
+    fn: (conn: Conn, submit: Submit) => Promise<void>,
+  ): Promise<Outcome> {
+    const conn = this.active();
+    if (conn === undefined) return no('Hardware: disconnected.');
+    const r = await this.runJob(conn, 'look', label, async (_job, submit) => {
+      await fn(conn, submit);
+    });
+    this.emit();
+    return r.ok ? OK : no(r.reason);
+  }
+
+  /** Write a look to one slot of one driver, and check the level it reads back. */
+  async sceneWrite(address: number, slot: number, look: Look, source: Source): Promise<Outcome> {
+    if (!isPerson(source)) return no('Only a person writes a look to a driver.');
+    const drive = this.active()?.facts.get(address)?.drive;
+    if (drive === undefined) return no(`A${String(address)} has not been read yet. Scan first.`);
+    const unfit = lookFits(look, drive);
+    if (unfit !== undefined) return no(unfit);
+    return this.sceneJob(`Look "${look.name}" to A${String(address)}`, (_conn, submit) =>
+      writeSlot(submit, source, address, slot, look, drive),
+    );
+  }
+
+  async sceneRemove(address: number, slot: number, source: Source): Promise<Outcome> {
+    if (!isPerson(source)) return no('Only a person removes a look from a driver.');
+    return this.sceneJob(`Remove A${String(address)} slot ${String(slot)}`, (_conn, submit) =>
+      removeSlot(submit, source, address, slot),
+    );
+  }
+
+  /** Read a driver's sixteen slots again, for the slot map. */
+  async sceneRead(address: number, source: Source): Promise<Outcome> {
+    return this.sceneJob(`Read the slots of A${String(address)}`, (_conn, submit) =>
+      readSlots(submit, source, address),
+    );
+  }
+
+  /** Recall a slot by address, group or broadcast, with a fade set first when one is given. */
+  async sceneRecall(
+    target: Address,
+    slot: number,
+    fade: FadeSetting | undefined,
+    source: Source,
+  ): Promise<Outcome> {
+    return this.sceneJob(`Recall scene ${String(slot)}`, (_conn, submit) =>
+      recallSlot(submit, source, target, slot, fade),
+    );
+  }
+
   /**
    * Run a script as a job with the source `script` (SPEC section 7). The text is parsed whole first,
    * and nothing runs if any line has an error. Panic, Ctrl-C, a target change and the heartbeat
@@ -1851,7 +1913,7 @@ export class Engine {
   private stopConsoleFor(why: string): void {
     let any = false;
     for (const j of this.jobs)
-      if (CONSOLE_JOBS.includes(j.kind)) {
+      if (CONSOLE_JOBS.includes(j.kind) || RUN_JOBS.includes(j.kind)) {
         this.abort(j, why);
         any = true;
       }
@@ -1987,6 +2049,7 @@ export class Engine {
         ...(facts === undefined ? {} : { facts }),
         ...(groups === undefined ? {} : { groups }),
         ...(level === undefined ? {} : { level }),
+        ...(i?.scenes === undefined ? {} : { scenes: i.scenes }),
       });
     }
     return devices;
