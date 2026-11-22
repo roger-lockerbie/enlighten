@@ -63,7 +63,7 @@ SPEC R5.5 names one preset: off to 20% at 2700 K over 25 minutes. The others bui
 ### The check and the run
 
 - The check copies the bench, so it starts with no history: what the bench did in the last few seconds is not carried over. The copy's governor scans the copy first, which takes time on the copy's clock, so a fade in progress on the bench has ended by the time the plan starts on the copy. The guard still judges every row when the real run sends it.
-- The first run loop waited out every refusal that came with a retry time. That let a plan of on, off, on, off through the check by spacing it out, and made the check's answer mean little. Now the check waits for nothing, and a real run waits at most 0.5 s in all for one row. A retry time that has already passed still costs 10 ms, so the waits always add up to the limit.
+- The first run loop waited out every refusal that came with a retry time. That let a plan of on, off, on, off through the check by spacing it out, and made the check's answer mean little. The check waits for nothing, and a real run waits at most 0.5 s in all for one row. A retry time that has already passed still costs 10 ms, so the waits always add up to the limit.
 - A repeating effect is checked for the longer of 30 s and two periods. A fault that needs a longer build-up is left to the guard at run time, which stops the run.
 - Stopping a run sends nothing. A repeating effect that is stopped leaves each light where it was in its cycle. Panic turns everything off, as always.
 - On Hardware and Both a row goes through the engine's Apply, which sends a colour as its own change and reads fades back. Nothing is checked ahead there.
