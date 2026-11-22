@@ -38,6 +38,8 @@ export interface SlotEntry {
   readonly slot: number;
   readonly look: string;
   readonly arc: number;
+  /** The colour that was written with it. Absent in a map kept before this was recorded. */
+  readonly colour?: LookColour;
 }
 
 /** How a driver is driven, as the scan found it (`src/engine/inventory.ts`). */
@@ -65,7 +67,9 @@ function noChange(address: Address, drive: Drive): Command[] {
 /**
  * Store a look in a slot and read the level back. The colour goes in as the temporary colour, which
  * SET SCENE stores with the level. A look with no colour stores "no change" on colour gear, so
- * nothing left over from before is stored by accident. The last frame is QUERY SCENE LEVEL.
+ * nothing left over from before is stored by accident. QUERY SCENE LEVEL is the one frame that
+ * expects a reply. After it, in the same transaction, the temporary colour is set to "no change",
+ * so no level command from anywhere can come between and bring the stored colour in.
  */
 export function storeCommands(address: Address, slot: number, look: Look, drive: Drive): Command[] {
   const colour =
@@ -79,15 +83,8 @@ export function storeCommands(address: Address, slot: number, look: Look, drive:
     { id: 'DTR0', value: look.arc },
     { id: 'SET_SCENE', address, value: slot },
     { id: 'QUERY_SCENE_LEVEL', address, value: slot },
+    ...noChange(address, drive),
   ];
-}
-
-/**
- * After a store: leave a temporary colour that changes nothing, so the next level command does not
- * bring the stored colour in through automatic activation.
- */
-export function afterStoreCommands(address: Address, drive: Drive): Command[] {
-  return noChange(address, drive);
 }
 
 export function removeCommands(address: Address, slot: number): Command[] {
@@ -180,6 +177,13 @@ export function clearSlot(lib: Library, address: number, slot: number): Library 
   };
 }
 
+function sameLookColour(a: LookColour, b: LookColour): boolean {
+  if (a.kind === 'tc' && b.kind === 'tc') return a.mirek === b.mirek;
+  if (a.kind === 'rgbwaf' && b.kind === 'rgbwaf')
+    return a.channels.every((v, i) => v === b.channels[i]);
+  return a.kind === 'none' && b.kind === 'none';
+}
+
 export type SlotState =
   /** Not read from the driver yet. */
   | 'pending'
@@ -204,5 +208,10 @@ export function slotState(
 ): SlotState {
   if (read === undefined) return 'pending';
   if (entry === undefined) return read === 255 ? 'empty' : 'unlisted';
-  return read === entry.arc && look?.arc === entry.arc ? 'verified' : 'mismatch';
+  if (read !== entry.arc || look?.arc !== entry.arc) return 'mismatch';
+  // The colour cannot be read back, but the app knows what it wrote: a look whose colour has
+  // changed since is a known mismatch, not an assumption.
+  return entry.colour === undefined || sameLookColour(entry.colour, look.colour)
+    ? 'verified'
+    : 'mismatch';
 }

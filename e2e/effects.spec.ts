@@ -99,12 +99,17 @@ test('two-tone runs across a simulated driver beyond the bench', async ({ page }
   }
   await goTo(page, 'Effects');
   await page.getByTestId('effect-two-tone').click();
-  // All three drivers are aimed at, and each has its own cost.
+  // All three drivers are aimed at to begin with, and two-tone works on pairs.
   await expect(page.getByTestId('target-5')).toBeChecked();
+  await expect(page.getByTestId('effect-problem')).toHaveText(
+    'Two-tone works on pairs of drivers. Choose an even number.',
+  );
+  await page.getByTestId('target-1').uncheck();
   await expect(page.getByTestId('cost-5')).toContainText('frames a second');
+  // One goes up eight levels. The other gives up the same light, which is ten levels down.
   const rows = page.getByTestId('plan-rows');
   await expect(rows).toContainText('arc 158');
-  await expect(rows).toContainText('arc 142');
+  await expect(rows).toContainText('arc 140');
   await page.getByTestId('run-start').click();
   await expect(page.getByTestId('run-status')).toContainText('Running: "Two-tone"', {
     timeout: 60_000,

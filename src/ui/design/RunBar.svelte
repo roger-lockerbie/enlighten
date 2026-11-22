@@ -80,7 +80,7 @@
         download={fileName(name, 'csv')}
         href="#export-csv"
         onclick={(e) => {
-          if (plan !== undefined) fill(e.currentTarget, 'text/csv', toCsv(plan));
+          fill(e.currentTarget, 'text/csv', toCsv(plan));
         }}>Export CSV</a
       >
       <a
@@ -89,8 +89,7 @@
         download={fileName(name, 'json')}
         href="#export-json"
         onclick={(e) => {
-          if (plan !== undefined && def !== undefined)
-            fill(e.currentTarget, 'application/json', toJson(name, def.kind, plan));
+          fill(e.currentTarget, 'application/json', toJson(name, def.kind, plan));
         }}>Export JSON</a
       >
     {/if}

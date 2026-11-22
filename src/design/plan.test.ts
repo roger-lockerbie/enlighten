@@ -190,6 +190,35 @@ describe('planning a sequence', () => {
     expect(p.rows.map((r) => r.fadeMs)).toEqual([160_000, 10_000]);
   });
 
+  it('refuses a driver with a fast fade time, which would take the place of the plan’s fades', () => {
+    const r = planSequence(seq(step({ durationMs: 16 * min })), [{ ...A, fastFade: 20 }], 220);
+    expect(r).toEqual({
+      ok: false,
+      reason:
+        'A0 has a fast fade time set, which takes the place of the fades a plan uses. A plan for it would not run as shown.',
+    });
+  });
+
+  it('uses standard fades only on a driver that reports no extended fade time', () => {
+    const old: Driver = { ...A, extended: false };
+    const p = plan(seq(step({ arc: 150, durationMs: 10_000 }), step({ arc: 100 })), [old]);
+    expect(p.rows.every((r) => r.fade.kind === 'standard')).toBe(true);
+    // 10 s is 8 s and 2 s of standard fade times, and no fade is fade time 0.
+    expect(p.rows.map((r) => r.fadeMs)).toEqual([8000, 2000, 0]);
+    expect(p.rows.at(-1)?.fade).toEqual({ kind: 'standard', value: 0 });
+    expect(fadePieces(30, false)).toEqual([{ fade: { kind: 'standard', value: 0 }, ms: 0 }]);
+  });
+
+  it('plans a colour temperature outside the driver’s limits at the limit, and says so', () => {
+    const p = plan(seq(step({ colour: { kind: 'tc', mirek: 400 } })), [
+      { ...A, tc: { coolest: 154, warmest: 370 } },
+    ]);
+    expect(p.rows[0]?.colour).toEqual({ kind: 'tc', mirek: 370 });
+    expect(p.notes).toEqual([
+      'A0 takes colour temperatures from 2703 K to 6494 K: a colour outside that is planned at the limit.',
+    ]);
+  });
+
   it('runs steps one after another, or together when asked', () => {
     const p = plan(
       seq(

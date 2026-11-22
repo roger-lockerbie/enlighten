@@ -1477,13 +1477,15 @@ export class Engine {
     const going = this.extras.filter((e) => !extras.some((n) => same(e, n)));
     const coming = extras.filter((n) => !this.extras.some((e) => same(e, n)));
     if (going.length === 0 && coming.length === 0) return no('Nothing to change.');
+    const ids = going.map((e) => extraId(e.address));
+    // Against where every unit that stays is now: commissioning can have moved any of them.
     const taken = this.sim.all.find(
-      (u) =>
-        (u.id === 'A' || u.id === 'B') && coming.some((n) => n.address === u.gear.shortAddress),
+      (u) => !ids.includes(u.id) && coming.some((n) => n.address === u.gear.shortAddress),
     );
     if (taken !== undefined)
-      return no(`Unit ${taken.id} of the bench is at that address. Choose another.`);
-    const ids = going.map((e) => extraId(e.address));
+      return no(
+        `A driver is at A${String(taken.gear.shortAddress)} already. Choose another address.`,
+      );
     return this.rebuild(
       ids,
       () => undefined,

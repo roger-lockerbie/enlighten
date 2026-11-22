@@ -48,8 +48,8 @@ SPEC R5.5 names one preset: off to 20% at 2700 K over 25 minutes. The others bui
 ### Looks and slots
 
 - A look is a name, an arc level, a colour (none, a colour temperature in mirek, or six RGBWAF channel levels with 255 for "leave alone") and an optional fade. Names are unique. A look is not tied to one device: the slot map holds, for each address and slot, the look's name and the level that was written.
-- A store is one transaction: the colour loaded as the temporary colour, DTR0, SET SCENE and QUERY SCENE LEVEL. A look with no colour stores a temporary colour of MASK on colour gear, so nothing left waiting from before is stored by accident. A second transaction then leaves a temporary colour of MASK, which changes nothing when a later level command activates it. Without it, the simulator's gear brings the stored colour in at the next level command, because a store does not clear the temporary colour.
-- A slot is `verified` when the level the driver reports, the level written and the look's level all agree, `mismatch` when they do not, `unlisted` when the driver holds a level the map does not know, and `empty` or `pending` otherwise. The engine's device view carries the sixteen levels as the governor last read them.
+- A store is one transaction: the colour loaded as the temporary colour, DTR0, SET SCENE, QUERY SCENE LEVEL, and then a temporary colour of MASK, which changes nothing when a later level command activates it. A look with no colour stores a temporary colour of MASK on colour gear, so nothing left waiting from before is stored by accident. Without it, the simulator's gear brings the stored colour in at the next level command, because a store does not clear the temporary colour.
+- A slot is `verified` when the level the driver reports, the level written and the look's level all agree and the look's colour is the one written, `mismatch` when they do not, `unlisted` when the driver holds a level the map does not know, and `empty` or `pending` otherwise. The engine's device view carries the sixteen levels as the governor last read them.
 - The simulated drivers start afresh on a reload, so a slot written before a reload shows as a mismatch after it. That is the simulator being honest about what its gear holds, not a fault in the map.
 
 ### The planner
@@ -62,7 +62,7 @@ SPEC R5.5 names one preset: off to 20% at 2700 K over 25 minutes. The others bui
 
 ### The check and the run
 
-- The check copies the bench, so it starts with no history: what the bench did in the last few seconds is not carried over. The copy's governor scans the copy first, which takes time on the copy's clock, so a fade in progress on the bench has ended by the time the plan starts on the copy. The guard still judges every row when the real run sends it.
+- The check copies the bench, so it starts with no history: what the bench did in the last few seconds is not carried over. The copy's governor scans the copy first, which takes a few seconds on the copy's clock, so a short fade in progress on the bench has ended by the time the plan starts on the copy. A long one carries on in the copy. The guard still judges every row when the real run sends it.
 - The first run loop waited out every refusal that came with a retry time. That let a plan of on, off, on, off through the check by spacing it out, and made the check's answer mean little. The check waits for nothing, and a real run waits at most 0.5 s in all for one row. A retry time that has already passed still costs 10 ms, so the waits always add up to the limit.
 - A repeating effect is checked for the longer of 30 s and two periods. A fault that needs a longer build-up is left to the guard at run time, which stops the run.
 - After a late wake-up the overdue rows of a sequence go one after another, each judged as it is sent. A repeating effect that wakes a pass or more late skips the passes it missed.
@@ -83,6 +83,9 @@ The check gives way to other work whenever it has held the worker for 12 ms of r
 - Each effect is built as timed steps from its settings and the drivers it is aimed at, and planned by the same planner. A repeating effect returns to where it started, so its plan starts again each period.
 - The ranges are the research's starting points. Three values have no source and are placeholders: six channel levels for one step of colour difference in accent tint, the mix of the two whites for "about 4000 K" on RGBWAF gear, and the filament curve of warm shift (the square of the fraction dimmed, in three steps).
 - Sunrise reaches 30% by default, because the default ceiling is 39.5%.
+- Two-tone works on pairs. The second driver of a pair gives up the light the first gains, as a share of full output, so the pair's total is the same at the turn as at the start. It takes the two tapes to give the same light at full output.
+- A driver with a DT6 fast fade time set is refused by the planner, since that time takes the place of the fades a plan uses. A driver that reports no extended fade time is planned with standard fades. A colour temperature outside what a driver reports is planned at its limit.
+- Sunrise is turned away when a light it is aimed at is on.
 - Breathe is a triangle wave. The softer turns the research describes, two extra commands a cycle, are not built.
 
 ### Simulated drivers
@@ -109,6 +112,7 @@ The check gives way to other work whenever it has held the worker for 12 ms of r
 - On Hardware and Both the features are there and the holding rules of ADR 0019 refuse most of what they send. Hardware day's part 7 lists which sequences and effects run, and part 8 relaxes the rules.
 - A run depends on the bus worker staying awake (S9-T1). If the page is suspended and its clock stops, the run picks up late without knowing. If timers stop and the clock runs on, the overdue rows go one after another on waking. On hardware a suspended worker also stops sending the server its ping, so after 3 s the server ends the session and sends every driver to the safe level. The report at the end gives the wall-clock time when it differs, from a wall clock the worker passes in for that alone. Making the run follow the wall clock would change the time the rate guard works in (ADR 0010), which is the owner's decision.
 - S9-P1 is open: five transactions the governor allows and the trace checker faults, found by P-plan. Nothing in `src/safety` was changed.
+- Three things the planner assumes wait on hardware day: that DAPC 0 with a fade fades to the minimum and then goes off, that a colour follows the fade time, and the order of the RGBWAF channels (S9-D3, S9-D5, S9-D10).
 - A stored colour in a slot is never verified. The slot map says "assumed".
 - There are no console commands for looks, sequences or effects. Stage 10's switch mappings call the engine's `sceneRecall`, `runDesign` and `stopRun`.
 - The rail is full at nine pages. Stage 10 has to decide where Switches goes.

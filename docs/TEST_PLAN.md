@@ -234,6 +234,10 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Run the comparison set: `first-light`, each built-in night preset and each effect for one minute.
 - [ ] Under the holding rules of ADR 0019 most of that set is refused on hardware: a colour fade, a change to two drivers at once, and a level while another driver moves. Note which sequences and effects run, and which rule stops each of the others. This is the list to work down as part 8 relaxes the rules.
 - [ ] Write a look with a colour to a slot and recall it with no fade. Does the colour come back with the level? Then send a level alone: does the stored colour stay, or does the colour from before the store come in? This checks the "no change" temporary colour that a store leaves behind (ADR 0020).
+- [ ] A sequence that fades to off over 4 minutes: does the light fade through the last fade and then go off, or go dark at its start (`dapcZeroWithFade`, S9-D3)? And a fade from off: does it start at the minimum (`fadeFromOff`)?
+- [ ] Sunrise and colour temperature drift: does the colour move with the fade, or jump at the start of each (`colourFade`, S9-D10)?
+- [ ] Store a look with no colour in a slot, change the colour, and recall the slot: the colour should not change (S9-D12).
+- [ ] On driver B, which RGBWAF channel is which: the effects take 0 to 2 as red, green and blue, 3 as warm white and 4 as cool (S9-D5).
 - [ ] The hidden-tab check of section 7, with the 30-minute sunrise running on the tapes in Both.
 - [ ] If driver A (C2) presents colour as RGBWAF rather than Tc, `first-light` stops at its first `tc 0` step, where `tools/first_light.py` would go on to tape B. Record it, and change the built-in script to match what the drivers report (DALI review S6-D10).
 - [ ] Every divergence is either fixed in the DA5-L profile or explained in the log. No special cases for hardware in the code.

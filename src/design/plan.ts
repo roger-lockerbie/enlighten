@@ -34,6 +34,15 @@ export interface Driver {
   readonly arc: number;
   /** The colour it shows when the plan is made, when known. */
   readonly colour: LookColour;
+  /** Its colour temperature limits in mirek, as it reports them. Absent when it reports none. */
+  readonly tc?: { readonly coolest: number; readonly warmest: number };
+  /**
+   * Its DT6 fast fade time. Above 0 it overrides "no fade" and every extended fade (`dali.md`
+   * section 7), so a plan for such a driver would not run as written and is refused.
+   */
+  readonly fastFade?: number;
+  /** False when the driver reports no extended fade time: the plan then uses standard fades only. */
+  readonly extended?: boolean;
 }
 
 export interface PlanRow {
@@ -77,20 +86,26 @@ const PIECES: readonly Piece[] = [
   ...extendedFades().map((f): Piece => ({ fade: { kind: 'extended', value: f.value }, ms: f.ms })),
 ].sort((a, b) => b.ms - a.ms);
 const SHORTEST = Math.min(...PIECES.map((p) => p.ms));
+/** For gear with no extended fade time: the standard fade times, and fade time 0 for no fade. */
+const STANDARD_PIECES = PIECES.filter((p) => p.fade.kind === 'standard');
+const SHORTEST_STANDARD = Math.min(...STANDARD_PIECES.map((p) => p.ms));
+const NO_FADE_STANDARD: FadeSetting = { kind: 'standard', value: 0 };
 
 /**
  * The driver fades that make up a duration: one where one fits, or the longest that fits and then
  * the rest, and so on. A duration under half the shortest fade is no fade. What is left over at the
  * end, less than the shortest fade, is given to the nearest fade or dropped.
  */
-export function fadePieces(ms: number): Piece[] {
-  if (ms < SHORTEST / 2) return [{ fade: NO_FADE, ms: 0 }];
+export function fadePieces(ms: number, extended = true): Piece[] {
+  const pieces = extended ? PIECES : STANDARD_PIECES;
+  const shortest = extended ? SHORTEST : SHORTEST_STANDARD;
+  if (ms < shortest / 2) return [{ fade: extended ? NO_FADE : NO_FADE_STANDARD, ms: 0 }];
   const out: Piece[] = [];
   let rest = ms;
-  while (rest >= SHORTEST / 2) {
-    const fits = PIECES.find((p) => p.ms <= rest + 0.5);
+  while (rest >= shortest / 2) {
+    const fits = pieces.find((p) => p.ms <= rest + 0.5);
     // Less than the shortest fade is left: round it up to the shortest.
-    const piece = fits ?? PIECES[PIECES.length - 1];
+    const piece = fits ?? pieces[pieces.length - 1];
     if (piece === undefined) break;
     out.push(piece);
     rest -= piece.ms;
@@ -196,6 +211,10 @@ export function planTimed(
       notes.add(`No driver at A${String(s.address)}, so it is skipped.`);
       continue;
     }
+    if ((d.fastFade ?? 0) > 0)
+      return bad(
+        `A${String(d.address)} has a fast fade time set, which takes the place of the fades a plan uses. A plan for it would not run as shown.`,
+      );
     endMs = Math.max(endMs, s.atMs + s.durationMs);
     const arc = Math.min(s.arc, ceiling);
     if (arc !== s.arc) notes.add('A level above the ceiling is planned at the ceiling.');
@@ -206,7 +225,18 @@ export function planTimed(
       );
       colour = { kind: 'none' };
     }
-    const pieces = fadePieces(s.durationMs);
+    // A colour temperature outside what the driver reports is planned at its limit, as the driver
+    // would hold it there, so the preview shows what the light will do.
+    if (colour.kind === 'tc' && d.tc !== undefined) {
+      const mirek = Math.max(d.tc.coolest, Math.min(d.tc.warmest, colour.mirek));
+      if (mirek !== colour.mirek) {
+        notes.add(
+          `A${String(d.address)} takes colour temperatures from ${String(Math.round(1_000_000 / d.tc.warmest))} K to ${String(Math.round(1_000_000 / d.tc.coolest))} K: a colour outside that is planned at the limit.`,
+        );
+        colour = { kind: 'tc', mirek };
+      }
+    }
+    const pieces = fadePieces(s.durationMs, d.extended !== false);
     const total = pieces.reduce((sum, p) => sum + p.ms, 0);
     const from = { arc: st.arc, colour: st.colour };
     const to = over(from.colour, colour);

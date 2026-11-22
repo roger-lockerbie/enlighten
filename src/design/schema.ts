@@ -77,6 +77,7 @@ const slotEntry: Schema<SlotEntry> = object({
   slot: req(int(0, SLOTS - 1)),
   look: req(name),
   arc: req(int(0, 254)),
+  colour: opt(colour),
 });
 
 export const looks = uniqueBy(arrayOf(look, MAX_LOOKS), (l) => l.name, 'the look');

@@ -37,6 +37,11 @@ export function driversFrom(devices: readonly DeviceView[], light: readonly Ligh
       auto: ((f.gearFeatures ?? 0) & 1) === 1,
       arc: Math.round(l?.target ?? 0),
       colour,
+      ...(f.tcLimits?.coolest !== undefined && f.tcLimits.warmest !== undefined
+        ? { tc: { coolest: f.tcLimits.coolest, warmest: f.tcLimits.warmest } }
+        : {}),
+      ...(f.fastFade !== undefined && f.fastFade > 0 ? { fastFade: f.fastFade } : {}),
+      ...(f.extendedFade === undefined ? { extended: false } : {}),
     });
   }
   return out;

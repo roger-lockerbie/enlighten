@@ -167,7 +167,13 @@
     );
     if (ok)
       design.setLibrary(
-        setSlot(designOf(app).value, { address: at, slot, look: look.name, arc: look.arc }),
+        setSlot(designOf(app).value, {
+          address: at,
+          slot,
+          look: look.name,
+          arc: look.arc,
+          colour: look.colour,
+        }),
       );
   }
 

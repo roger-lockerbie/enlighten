@@ -5,7 +5,6 @@
  */
 import { addressText, short, type Address } from '../dali/address.ts';
 import {
-  afterStoreCommands,
   readCommands,
   recallCommands,
   recallFadeCommands,
@@ -36,10 +35,8 @@ export async function writeSlot(
 ): Promise<void> {
   const a = short(address);
   const label = `store ${where(address, slot)}`;
+  // One transaction: the store, the read-back, and the temporary colour left as "no change".
   const back = (await answers(submit, storeCommands(a, slot, look, drive), source, label)).at(-1);
-  // Whatever the read-back says, the temporary colour is left as "no change".
-  const after = afterStoreCommands(a, drive);
-  if (after.length > 0) await send(submit, after, source, `${label}: clear the temporary colour`);
   if (back !== look.arc)
     throw new StepError(
       `${where(address, slot)} reads back ${typeof back === 'number' ? String(back) : 'nothing'}, not ${String(look.arc)}.`,

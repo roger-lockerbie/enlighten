@@ -9,6 +9,7 @@ import {
   type EffectDef,
   type EffectId,
 } from './effects.ts';
+import { arcToFraction } from '../dali/curve.ts';
 import type { Driver, Plan } from './plan.ts';
 import { effect as effectSchema } from './schema.ts';
 
@@ -136,26 +137,56 @@ describe('planning an effect', () => {
     expect(why(def('breathe', [0]), [{ ...A, arc: 0 }])).toMatch(/^A0 is off\. Set a level first/);
   });
 
-  it('two-tone sends neighbours opposite ways, so their sum stays the same', () => {
-    const p = plan(def('two-tone', [0, 1, 5], { depth: 6, period: 10 }));
+  it('two-tone moves a pair opposite ways by the same amount of light, so their sum stays the same', () => {
+    const p = plan(def('two-tone', [0, 1], { depth: 6, period: 10 }));
     expect(levels(p, 0)).toEqual([
       [0, 156],
       [5000, 150],
     ]);
+    // Seven levels down gives up what six levels up gains: the curve is logarithmic.
     expect(levels(p, 1)).toEqual([
-      [0, 144],
+      [0, 143],
       [5000, 150],
     ]);
-    expect(levels(p, 5)[0]).toEqual([0, 156]);
     expect(p.periodMs).toBe(10_000);
+    const sum = (a: number, b: number) => arcToFraction(a) + arcToFraction(b);
+    expect(sum(156, 143) / sum(150, 150)).toBeCloseTo(1, 2);
+    // Drivers at different levels: the dimmer one moves further to match.
+    const uneven = plan(def('two-tone', [0, 1], { depth: 8, period: 10 }), [{ ...A, arc: 170 }, B]);
+    const down = levels(uneven, 1)[0]?.[1] ?? 0;
+    expect(down).toBeLessThan(142);
+    expect(sum(178, down) / sum(170, 150)).toBeCloseTo(1, 1);
+    // A much brighter driver gains more than a dim one has to give.
+    expect(why(def('two-tone', [0, 1]), [{ ...A, arc: 200 }, B])).toBe(
+      'A1 has no room to give up what A0 gains. Set it a little higher first.',
+    );
     expect(why(def('two-tone', [0]))).toBe('Two-tone needs at least two drivers.');
+    expect(why(def('two-tone', [0, 1, 5]))).toBe(
+      'Two-tone works on pairs of drivers. Choose an even number.',
+    );
     expect(why(def('two-tone', [0, 1]), [A, { ...B, arc: 88 }])).toBe(
-      'A1 has no room to go down by 8 levels. Set it a little higher first.',
+      'A1 has no room to give up what A0 gains. Set it a little higher first.',
     );
     expect(why(def('two-tone', [0, 1]), [{ ...A, arc: 219 }, B])).toBe(
       'A0 has no room to go up by 8 levels. Set it a little lower first.',
     );
     expect(why(def('two-tone', [0, 1]), [A, { ...B, arc: 0 }])).toMatch(/^A1 is off/);
+  });
+
+  it('keeps colour temperatures inside what the driver reports', () => {
+    const narrow: Driver = { ...A, tc: { coolest: 200, warmest: 300 } };
+    const drift = plan(def('tc-drift', [0], { step: 30, interval: 30 }), [
+      { ...narrow, colour: { kind: 'tc', mirek: 290 } },
+    ]);
+    expect(drift.rows.map((r) => (r.colour.kind === 'tc' ? r.colour.mirek : 0))).toEqual([
+      300, 290, 260, 290,
+    ]);
+    // Warm shift asked for 1800 K on a tape that stops at 300 mirek.
+    const shift = plan(def('warm-shift', [0], { warmest: 1800, curve: 0 }), [narrow]);
+    expect(shift.rows.at(-1)?.colour).toEqual({ kind: 'tc', mirek: 300 });
+    const rise = plan(def('sunrise', [0], { kelvin: 5000 }), [{ ...narrow, arc: 0 }]);
+    expect(rise.rows[0]?.colour).toEqual({ kind: 'tc', mirek: 300 });
+    expect(rise.rows.at(-1)?.colour).toEqual({ kind: 'tc', mirek: 200 });
   });
 
   it('swell rises once and settles back, and does not repeat', () => {
@@ -307,10 +338,14 @@ describe('planning an effect', () => {
 
   it('sunrise starts from off and warm, and rises to the level and colour asked for', () => {
     const p = plan(def('sunrise', [0, 1, 5], { minutes: 30, level: 30, kelvin: 4000 }), [
-      A,
-      B,
-      { ...C, drive: 'level', colour: { kind: 'none' } },
+      { ...A, arc: 0 },
+      { ...B, arc: 0 },
+      { ...C, arc: 0, drive: 'level', colour: { kind: 'none' } },
     ]);
+    // On a light that is on, its first step would switch the light off at once.
+    expect(why(def('sunrise', [0, 1]), [{ ...A, arc: 0 }, B])).toBe(
+      'A1 is on. Sunrise starts from off: switch it off first.',
+    );
     expect(p.endMs).toBe(30 * 60_000);
     const a = p.rows.filter((r) => r.address === 0);
     expect(a[0]).toMatchObject({ atMs: 0, arc: 0, colour: { kind: 'tc', mirek: 370 } });

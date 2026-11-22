@@ -7,7 +7,7 @@
  * The ranges are the research's starting points, to be tuned by eye on the bench. Nothing here is
  * measured. The rate guard judges every plan, in the check and again when it runs.
  */
-import { percentToArcNearest } from '../dali/curve.ts';
+import { arcToFraction, percentToArcNearest } from '../dali/curve.ts';
 import { kelvinToMirek } from '../dali/sequences.ts';
 import type { Channels } from '../engine/engine.ts';
 import type { Edit, LookColour } from './look.ts';
@@ -205,6 +205,9 @@ const NONE: LookColour = { kind: 'none' };
 const WARM_MIREK = 370;
 const COOLEST_MIREK = 154;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+/** A driver's colour temperature limits as it reports them, or the DA5-L's range when it does not. */
+const coolest = (d: Driver) => d.tc?.coolest ?? COOLEST_MIREK;
+const warmest = (d: Driver) => d.tc?.warmest ?? WARM_MIREK;
 
 interface Built {
   readonly steps: TimedStep[];
@@ -261,20 +264,38 @@ const twoTone: Build = (v, drivers, ceiling) => {
   const off = lit(drivers);
   if (off !== undefined) return bad(off);
   const half = (get(v, 'period') * 1000) / 2;
+  if (drivers.length % 2 === 1)
+    return bad('Two-tone works on pairs of drivers. Choose an even number.');
   const by = get(v, 'depth');
   const steps: TimedStep[] = [];
-  for (const [i, d] of drivers.entries()) {
-    // Every other driver goes the other way first.
-    const down = i % 2 === 1;
-    const first = down ? d.arc - by : d.arc + by;
-    if (first > ceiling || first < d.minArc)
+  for (let i = 0; i < drivers.length; i += 2) {
+    const up = drivers[i];
+    const down = drivers[i + 1];
+    if (up === undefined || down === undefined) break;
+    const top = up.arc + by;
+    if (top > ceiling)
       return bad(
-        `A${String(d.address)} has no room to go ${down ? 'down' : 'up'} by ${String(by)} levels. Set it a little ${down ? 'higher' : 'lower'} first.`,
+        `A${String(up.address)} has no room to go up by ${String(by)} levels. Set it a little lower first.`,
       );
-    steps.push(
-      { atMs: 0, address: d.address, arc: first, colour: NONE, durationMs: half, step: 0 },
-      { atMs: half, address: d.address, arc: d.arc, colour: NONE, durationMs: half, step: 1 },
-    );
+    // The dimming curve is logarithmic, so the same number of levels up and down is not the same
+    // amount of light. The second of a pair gives up what the first gains, as a share of full
+    // output, so the pair's total is the same at the turn as at the start. It assumes the two
+    // tapes give the same light at full output, which is not measured.
+    const gain = arcToFraction(top) - arcToFraction(up.arc);
+    const left = arcToFraction(down.arc) - gain;
+    const bottom = left <= 0 ? 0 : percentToArcNearest(left * 100);
+    if (bottom < down.minArc)
+      return bad(
+        `A${String(down.address)} has no room to give up what A${String(up.address)} gains. Set it a little higher first.`,
+      );
+    for (const [d, first] of [
+      [up, top],
+      [down, bottom],
+    ] as const)
+      steps.push(
+        { atMs: 0, address: d.address, arc: first, colour: NONE, durationMs: half, step: 0 },
+        { atMs: half, address: d.address, arc: d.arc, colour: NONE, durationMs: half, step: 1 },
+      );
   }
   return { ok: true, value: { steps, periodMs: half * 2 } };
 };
@@ -336,8 +357,8 @@ const tcDrift: Build = (v, drivers) => {
   const steps: TimedStep[] = [];
   for (const d of drivers) {
     const centre = d.colour.kind === 'tc' ? d.colour.mirek : 250;
-    const warm = clamp(centre + get(v, 'step'), COOLEST_MIREK, WARM_MIREK);
-    const cool = clamp(centre - get(v, 'step'), COOLEST_MIREK, WARM_MIREK);
+    const warm = clamp(centre + get(v, 'step'), coolest(d), warmest(d));
+    const cool = clamp(centre - get(v, 'step'), coolest(d), warmest(d));
     // Warmer, back, cooler, back: each a step of the size asked for, with a fade as long as the
     // time between steps.
     [warm, centre, cool, centre].forEach((mirek, k) => {
@@ -419,7 +440,7 @@ const warmShift: Build = (v, drivers) => {
   const wrong = only(drivers, 'tc', 'a colour temperature') ?? lit(drivers);
   if (wrong !== undefined) return bad(wrong);
   const total = get(v, 'time') * 1000;
-  const warmest = kelvinToMirek(get(v, 'warmest'));
+  const warmestAsked = kelvinToMirek(get(v, 'warmest'));
   const steps: TimedStep[] = [];
   for (const d of drivers) {
     const to = Math.max(d.minArc, percentToArcNearest(get(v, 'level')));
@@ -429,7 +450,7 @@ const warmShift: Build = (v, drivers) => {
       );
     const from = d.colour.kind === 'tc' ? d.colour.mirek : 250;
     // A warmer end than where it starts, or it stays where it is.
-    const end = Math.max(from, warmest);
+    const end = Math.max(from, clamp(warmestAsked, coolest(d), warmest(d)));
     // Linear: the colour follows the level. Filament: little change at first, most near the bottom.
     const parts = get(v, 'curve') >= 1 ? 3 : 1;
     for (let k = 1; k <= parts; k++) {
@@ -477,20 +498,24 @@ const presence: Build = (v, drivers, ceiling) => {
 };
 
 const sunrise: Build = (v, drivers) => {
+  // It starts from off. On a light that is on, its first step would switch the light off at once.
+  const on = drivers.find((d) => d.arc > 0);
+  if (on !== undefined)
+    return bad(`A${String(on.address)} is on. Sunrise starts from off: switch it off first.`);
   const total = get(v, 'minutes') * 60_000;
   const arc = percentToArcNearest(get(v, 'level'));
   const steps: TimedStep[] = [];
   for (const d of drivers) {
     const start: LookColour =
       d.drive === 'tc'
-        ? { kind: 'tc', mirek: WARM_MIREK }
+        ? { kind: 'tc', mirek: warmest(d) }
         : d.drive === 'rgbwaf'
           ? { kind: 'rgbwaf', channels: [0, 0, 0, 254, 0, 255] }
           : NONE;
     // On RGBWAF gear the end is a placeholder mix of the two whites, not a measured one.
     const end: LookColour =
       d.drive === 'tc'
-        ? { kind: 'tc', mirek: kelvinToMirek(get(v, 'kelvin')) }
+        ? { kind: 'tc', mirek: clamp(kelvinToMirek(get(v, 'kelvin')), coolest(d), warmest(d)) }
         : d.drive === 'rgbwaf'
           ? { kind: 'rgbwaf', channels: [0, 0, 0, 150, 104, 255] }
           : NONE;

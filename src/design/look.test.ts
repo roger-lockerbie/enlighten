@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { broadcast, short } from '../dali/address.ts';
 import {
-  afterStoreCommands,
   clearSlot,
   lookFits,
   MAX_LOOKS,
@@ -49,8 +48,16 @@ describe('the commands for a slot', () => {
       'DTR0',
       'SET_SCENE',
       'QUERY_SCENE_LEVEL',
+      // And the temporary colour is left as "no change", in the same transaction.
+      'DTR0',
+      'DTR1',
+      'DT8_SET_TEMPORARY_TC',
     ]);
     const cmds = storeCommands(short(0), 3, warm, 'tc');
+    expect(cmds.slice(-3, -1)).toEqual([
+      { id: 'DTR0', value: 0xff },
+      { id: 'DTR1', value: 0xff },
+    ]);
     expect(cmds[0]).toEqual({ id: 'DTR0', value: 370 & 0xff });
     expect(cmds[1]).toEqual({ id: 'DTR1', value: 370 >> 8 });
     expect(cmds[3]).toEqual({ id: 'DTR0', value: 120 });
@@ -67,7 +74,18 @@ describe('the commands for a slot', () => {
       'DTR0',
       'SET_SCENE',
       'QUERY_SCENE_LEVEL',
+      'DTR0',
+      'DTR1',
+      'DTR2',
+      'DT8_SET_TEMPORARY_RGB',
+      'DTR0',
+      'DTR1',
+      'DTR2',
+      'DT8_SET_TEMPORARY_WAF',
     ]);
+    // Only the read-back expects a reply, so it is the one answer the store gets.
+    const asks = storeCommands(short(1), 0, rose, 'rgbwaf').filter((c) => c.id.startsWith('QUERY'));
+    expect(asks).toEqual([{ id: 'QUERY_SCENE_LEVEL', address: short(1), value: 0 }]);
   });
 
   it('stores "no change" for a look with no colour on colour gear, and nothing extra on plain gear', () => {
@@ -94,16 +112,9 @@ describe('the commands for a slot', () => {
     for (const cmds of [
       storeCommands(short(0), 1, warm, 'tc'),
       storeCommands(short(1), 1, rose, 'rgbwaf'),
-      afterStoreCommands(short(0), 'tc'),
-      afterStoreCommands(short(1), 'rgbwaf'),
+      storeCommands(short(0), 1, plain, 'tc'),
     ])
       expect(ids(cmds)).not.toContain('DT8_ACTIVATE');
-    expect(afterStoreCommands(short(2), 'level')).toEqual([]);
-    expect(ids(afterStoreCommands(short(0), 'tc'))).toEqual([
-      'DTR0',
-      'DTR1',
-      'DT8_SET_TEMPORARY_TC',
-    ]);
   });
 
   it('removes, reads all sixteen, and recalls with the fade first', () => {
@@ -203,6 +214,25 @@ describe("a slot's state", () => {
     expect(slotState(undefined, undefined, 255)).toBe('empty');
     expect(slotState(undefined, undefined, 80)).toBe('unlisted');
   });
+  it('is a mismatch when the look has a different colour from the one written', () => {
+    const wrote = { ...entry, colour: warm.colour };
+    expect(slotState(wrote, warm, 120)).toBe('verified');
+    expect(slotState(wrote, { ...warm, colour: { kind: 'tc', mirek: 200 } }, 120)).toBe('mismatch');
+    expect(slotState(wrote, { ...warm, colour: { kind: 'none' } }, 120)).toBe('mismatch');
+    const channels = { ...entry, look: 'Rose', arc: 100, colour: rose.colour };
+    expect(slotState(channels, rose, 100)).toBe('verified');
+    expect(
+      slotState(
+        channels,
+        { ...rose, colour: { kind: 'rgbwaf', channels: [1, 2, 3, 4, 5, 255] } },
+        100,
+      ),
+    ).toBe('mismatch');
+    expect(
+      slotState({ ...entry, colour: { kind: 'none' } }, { ...warm, colour: { kind: 'none' } }, 120),
+    ).toBe('verified');
+  });
+
   it('is verified only when the driver, the map and the look agree', () => {
     expect(slotState(entry, warm, 120)).toBe('verified');
     expect(slotState(entry, warm, 119)).toBe('mismatch');
