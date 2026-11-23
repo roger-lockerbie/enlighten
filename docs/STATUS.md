@@ -289,7 +289,7 @@ Known gaps, all on the Hardware and Both targets, which nothing uses until the h
 
 **The closing `PROP_RUNS=1000` passes** (2026-11-22, on the closing code: only docs changed after) found nothing: `PROP_SEED=2038634064` and `PROP_SEED=334024647`.
 
-## Stage 9 (scenes, sequences and effects), built, PR open
+## Stage 9 (scenes, sequences and effects), merged
 
 Branch `stage-9-scenes`, on Fable by the owner's choice. ADR 0020 holds the plan the owner approved on 2026-11-22, the four decisions made in planning, what was built and how it differs from the plan. What is in it:
 
@@ -315,6 +315,8 @@ Stage close:
 - P-plan and P-effect ran at 120 cases each once, on a loaded machine. P-plan found S9-B1 and S9-P1. P-effect ran out of its time limit there, with no fault found in the cases it ran. A 1,000-case pass of this file takes about 3 hours and was not run.
 - V-ui baselines for the three new pages and for Devices were not written: `pnpm e2e:visual` is by hand, for the owner's machine.
 
+- CI on the Stage 9 PR ran out of the `e2e` job's 40 minutes with nothing failed: the 61 preview tests took 34.2 minutes on the runner's one worker, and the server's 18 were cut off at the ninth. The PR was merged with that job cancelled. CI now runs the end-to-end tests as two jobs at once, `e2e` for the preview tests and `e2e-server` for the server's tests and its pytest suite. The preview job has about 5 minutes to spare, so the next stage that adds preview tests has to split it again or speed the start-up scan.
+
 Open, for the owner:
 
 - **S9-P1 (open):** five transactions a person can send that the governor allows and the trace checker faults, found by P-plan. `dali-reviewer`'s analysis is that the checker follows S3.1 as written, the guard misses the leg because it reads a limited history, and the light made one swing at under 3%: not a hazard, and the fix is to the wording of S3.1 by ADR. `security-reviewer` rates it Medium. It is saved with a test that is marked as failing on purpose.
@@ -332,5 +334,5 @@ Known gaps:
 
 ## Next
 
-- Review and merge the Stage 9 PR, with the owner's decisions on S9-P1 and S9-T1 and the hidden-tab check by hand.
+- The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
 - Stage 10 (switchgear) on Sonnet, in plan mode.

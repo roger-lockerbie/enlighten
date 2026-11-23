@@ -103,6 +103,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 - Stage 9: Devices now loads when first opened, in one chunk with the Visualiser and the Stage 9 pages. The worker's checks on what the page sends moved to `src/engine/protocol-in.ts`. Both keep the first chunk within its budget.
 - The fade command builder moved from the console to `src/dali/sequences.ts`, unchanged, so the planner and the console share it.
 - The wake lock and the unload guard cover a sequence and an effect as well as a script.
+- CI runs the end-to-end tests as two jobs, `e2e` and `e2e-server`, since together they ran past the job's 40 minutes.
 
 ### Fixed
 
