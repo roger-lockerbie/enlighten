@@ -3,7 +3,7 @@
  * presentation rebuilds the simulated unit, off, and the Playground follows what it now reports.
  */
 import { expect, test } from '@playwright/test';
-import { goTo, noProblems, openApp } from './app.ts';
+import { enter, goTo, noProblems, openApp } from './app.ts';
 
 test('the inventory shows each driver, and a simulator setting rebuilds its unit', async ({
   page,
@@ -41,5 +41,39 @@ test('the inventory shows each driver, and a simulator setting rebuilds its unit
   await expect(page.getByTestId('device-0')).toContainText('Colour temperature', {
     timeout: 60_000,
   });
+  await noProblems(w);
+});
+
+test('a simulated driver is added at another address, kept across a reload, and taken away (R14.2)', async ({
+  page,
+}) => {
+  const w = await openApp(page);
+  await goTo(page, 'Devices');
+  await enter(page, 'extra-address', '7');
+  await page.getByTestId('extra-type').selectOption('C2');
+  await page.getByTestId('extra-add').click();
+  await expect(page.getByTestId('extras-message')).toHaveText('Added a driver at address 7.');
+  await expect(page.getByTestId('verified')).toHaveText('3/3 verified', { timeout: 60_000 });
+  await expect(page.getByTestId('device-7')).toContainText('Colour temperature', {
+    timeout: 60_000,
+  });
+  // The same address again is turned away on the page.
+  await page.getByTestId('extra-add').click();
+  await expect(page.getByTestId('extras-message')).toHaveText(
+    'A simulated driver is at address 7 already.',
+  );
+  // It has a panel of its own in the playground, and stays after a reload.
+  await goTo(page, 'Playground');
+  await expect(page.getByTestId('panel-7')).toContainText('Presents as colour temperature', {
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(400);
+  await page.reload();
+  await expect(page.getByTestId('verified')).toHaveText('3/3 verified', { timeout: 60_000 });
+
+  await goTo(page, 'Devices');
+  await page.getByTestId('extra-remove-7').click();
+  await expect(page.getByTestId('extras-message')).toHaveText('Removed the driver at address 7.');
+  await expect(page.getByTestId('verified')).toHaveText('2/2 verified', { timeout: 60_000 });
   await noProblems(w);
 });

@@ -107,6 +107,8 @@ Terms: **arc level** is DALI's 0 to 254 level. **Output** is light output as a f
 - S5.3 A 30-minute sequence run in a hidden tab ends within 2 seconds of its planned time, with every step sent.
 - S5.4 Plans use the drivers' own fades first, so a late wake-up delays the next step and does not distort a fade in progress.
 
+Stage 9 note on S5 (ADR 0020): a plan's rows carry absolute times from the start, and the run loop sends a late row once and keeps later rows at their own times. The wake lock and the unload guard cover a script, a sequence and an effect. E-hidden runs a 2-minute chained sequence with the page hidden as the app sees it and holds it to S5.3's 2 seconds. A test cannot make a browser treat a tab as hidden, so what a browser does to a hidden tab's timers is checked by hand (`docs/TEST_PLAN.md`, section 7). A run times itself on the bus worker's clock, which stops while a page is suspended or the computer sleeps. When a run ends, its report also gives the time by the wall clock if the two differ by more than a second (S9-T1).
+
 **S6. The UI never flashes.**
 
 - S6.1 No animation changes luminance of a large area faster than once a second. No blinking indicators.
@@ -130,6 +132,8 @@ Terms: **arc level** is DALI's 0 to 254 level. **Output** is light output as a f
 - R4.1 Built-in effects: breathe, swell and settle, colour temperature drift, hue drift, warm shift, accent tint, two-tone, notification, presence follow and sunrise, with the parameters in `docs/research/effects.md` section 3.
 - R4.2 Each effect shows its frames a second per address, and the planner refuses a setting the rate guard would refuse, saying which limit.
 - R4.3 Effects can address more devices than the bench has, for the visualiser.
+
+Stage 9 note on R4 (ADR 0020): the ten effects are in `src/design/effects.ts`, each with its settings as sliders in the ranges of the research. Breathe, colour temperature drift, hue drift and two-tone repeat until stopped. The others run once. An effect moves around the level a light is at, so a light that is off is turned away with a reason, except for sunrise, which starts from off. The page shows frames a second for each address and the share of the bus. Check runs the plan on a copy of the simulated bench with the governor's own code, and a refusal is shown in the governor's words (R4.2). An effect is aimed at any drivers there are, in the order chosen, including simulated ones beyond the bench's two (R4.3). On Hardware and Both nothing is checked ahead: the governor judges each change as it is sent, and under ADR 0019's holding rules it refuses most effects.
 
 ### 4.1 Capability map
 
@@ -164,6 +168,15 @@ Terms: **arc level** is DALI's 0 to 254 level. **Output** is light output as a f
 - R5.5 Built-in night presets include off to 20% at 2700 K over 25 minutes.
 - R5.6 A design exports as CSV and JSON: time, address, command, values, fade.
 
+Stage 9 notes on R5 (ADR 0020):
+
+- A look is a name, a level, a colour (none, a colour temperature, or RGBWAF channel levels) and an optional fade. Looks are not tied to one device: the slot map says, for each address, which look is in which slot and the level that was written (R5.1, R5.2).
+- Writing a look loads its colour as the temporary colour, stores the level with SET SCENE, reads the level back with QUERY SCENE LEVEL, and then leaves a temporary colour that changes nothing. A slot is verified when the driver's level, the level written and the look's level agree, and marked when they do not. No route to read a stored colour back is confirmed, so a stored colour is marked "assumed" (R5.2).
+- A recall sets the look's fade first, in a transaction of its own, then sends GO TO SCENE (R5.3). On Hardware and Both the holding rules of ADR 0019 allow a recall to one driver, with no fade.
+- A step has a target, a level, a colour and a duration, and may start with the step before in place of after it. The planner uses one driver fade where one fits the duration and chains fades where none does: 25 minutes is 16 and 9. The levels between chained fades are spaced evenly in arc level, which is the line one long fade would follow. A step that changes nothing sends nothing, which is how a wait is made (R5.4).
+- The built-in sequences are the night fade-in of R5.5, and three added in Stage 9: a wind-down, a night light and a sunrise.
+- The export has one row for each change. A repeating effect exports one period. A cell a spreadsheet would read as a formula has a single quote put in front (R5.6).
+
 **R7. Console** (Stage 6). ADR 0006 and section 6.
 
 - R7.1 The emacs keymap, kill ring, undo and incremental search in `docs/research/console.md` sections 1 to 5, with the departures in ADR 0006.
@@ -182,6 +195,8 @@ Terms: **arc level** is DALI's 0 to 254 level. **Output** is light output as a f
 **R10, R11, R12, R15. Visualiser** (Stages 7 and 8). ADR 0008, ADR 0017 for the engine as built, and ADR 0018 for the editors, cameras and A/B view.
 
 Stage 7 builds the light and colour engine for every mount kind, and shows one fixed hallway from one fixed camera: the defaults of R10.1, with tape A in a skirting slot on the left wall and tape B in a flush channel at 600 mm on the right, each behind a Linear Lux opal cover. The controls of R10.3 are on the page. Stage 8 adds editing the hallway and the mounts (R10.1, R11, R14.2), the cameras (R15.2), the A/B view (R12.2) and the close-up camera of R15.1.
+
+Stage 9 note on R14.2 (ADR 0020): up to four simulated drivers can be added on the Devices page, at addresses 2 to 63, each a DA5-L in C2 or C5 with the default profile settings. They exist on the Simulator target only. On Hardware and Both a mount on such an address draws unlit, and says "simulated only" beside "No driver at address N".
 
 Stage 8 note on R14.2: a mount binds to any address from 0 to 63, but the simulator has drivers only at the bench's two addresses until Stage 9. A mount bound to an address with no driver on the active connection draws unlit and says "No driver at address N", in every output mode (ADR 0018).
 
@@ -341,7 +356,7 @@ JSON, at most 2 MB, with these top-level keys and no others:
 | `version`     | An integer. Files newer than the app are refused. Older files are migrated                                                                       |
 | `ceiling`     | An arc level, 1 to 254. Applied only if lower than the present ceiling                                                                           |
 | `preferences` | History length, the leading-space rule, verify mode, reduced motion override, and the visualiser's exposure, white balance and false-colour view |
-| `devices`     | Up to 64: address, alias, light type, and the simulator profile settings                                                                         |
+| `devices`     | Up to 64: address, alias, the simulator profile settings, and the light type of a simulated driver beyond the bench's two                        |
 | `looks`       | Up to 200: name, level, colour, fade                                                                                                             |
 | `slots`       | Per address, which look is in which of the 16 slots                                                                                              |
 | `sequences`   | Up to 100: name and up to 500 steps                                                                                                              |
@@ -355,7 +370,7 @@ JSON, at most 2 MB, with these top-level keys and no others:
 
 Names are at most 60 characters. Numbers have ranges. Enumerations are closed. Validation follows ADR 0009. An import replaces the library and set-up after a confirmation that lists what will change. It sends nothing of its own. A lower ceiling in the file is applied as the ceiling control applies it (R6.2), which writes MAX LEVEL through the governor. Imported preferences cannot turn off verify mode or override reduced motion: those two apply only when they make the app more careful. Simulator profile settings in `devices` apply to the simulated bench only (R1.6).
 
-Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Version 2, from Stage 6, adds `scripts`, and `preferences` gains the history length, the leading-space rule and verify mode. A version 1 file migrates to version 2. Version 3, from Stage 8, adds `hallway`, `mounts`, `links` and `compare`, and `preferences` gains the visualiser's view settings. Older files migrate to version 3. The store checks only the shape of the set-up keys. The light core checks them in full before the confirmation is shown, and a set-up that fails is refused with its reason (ADR 0018). Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013, ADR 0014).
+Version 1, from Stage 5, carries `format`, `version`, `ceiling`, `preferences` (the playground's Live or Commit mode, and reduced motion) and `devices` (address, alias, how the simulated unit presents colour, and its settings). Version 2, from Stage 6, adds `scripts`, and `preferences` gains the history length, the leading-space rule and verify mode. A version 1 file migrates to version 2. Version 3, from Stage 8, adds `hallway`, `mounts`, `links` and `compare`, and `preferences` gains the visualiser's view settings. Older files migrate to version 3. The store checks only the shape of the set-up keys. The light core checks them in full before the confirmation is shown, and a set-up that fails is refused with its reason (ADR 0018). Version 4, from Stage 9, adds `looks`, `slots`, `sequences` and `effects`, and a device may carry `simulated`, the light type of a simulated driver beyond the bench's two. Older files migrate to version 4. A file written at version 4 lists the simulated drivers there are, so importing it adds and removes them to match. An older file says nothing about them. Each of `looks`, `slots`, `sequences` and `effects` in a file takes the place of the stored one. The store checks only that each is a list of a sensible length, and `src/design/stored.ts` checks them in full before the confirmation is shown (ADR 0020). An import writes nothing to any driver and runs nothing. Each later key arrives with the stage that builds its feature, a new version and a migration. Until then a file that carries one is refused, naming the key (ADR 0013, ADR 0014).
 
 ## 9. Server protocol
 
@@ -415,8 +430,8 @@ Test IDs are defined in `docs/TEST_PLAN.md`.
 | R1          | R1.1 to R1.8, D1 to D3      | U-sim, U-bus, U-engine, P-sched, E-modes, E-server, H                                         |
 | R2          | R2.1 to R2.4                | E-csp, U-headers, L-sinks, P-validator, E-import                                              |
 | R3          | R3.1, R3.2                  | E-csp, E-server, U-server                                                                     |
-| R4          | R4.1 to R4.3, R13 items     | U-engine, P-rate, E-effects                                                                   |
-| R5          | R5.1 to R5.6                | U-engine, P-plan, E-sequence                                                                  |
+| R4          | R4.1 to R4.3, R13 items     | U-design, U-engine, P-rate, P-effect, E-effects                                               |
+| R5          | R5.1 to R5.6                | U-design, U-engine, P-plan, E-looks, E-sequence, E-import                                     |
 | R6          | R6.1 to R6.6, section 5     | U-safety, P-ceiling, M-safety, E-ceiling, H                                                   |
 | R7          | R7.1 to R7.6, section 6     | U-console, P-history, E-console, E-keys                                                       |
 | R8          | R8.1                        | U-store, E-shell                                                                              |
@@ -425,12 +440,12 @@ Test IDs are defined in `docs/TEST_PLAN.md`.
 | R11         | R11.1 to R11.4              | U-light, P-light, V-hallway, E-visualiser                                                     |
 | R12         | R12.1, R12.2                | U-light, V-hallway, E-ab                                                                      |
 | R13         | R13.1 to R13.7, section 4.1 | E-playground, U-engine                                                                        |
-| R14         | R14.1, R14.2                | U-sim, U-light, E-playground, E-visualiser, E-modes                                           |
+| R14         | R14.1, R14.2                | U-sim, U-light, U-engine, E-playground, E-visualiser, E-modes, E-devices                      |
 | R15         | R15.1, R15.2                | U-light, P-light, V-hallway, E-visualiser                                                     |
 | R16         | R16.1 to R16.3, section 10  | U-switch, E-switch                                                                            |
 | S1          | S1.1 to S1.4                | U-safety, U-sim, E-modes, H                                                                   |
 | S2          | S2.1 to S2.4, section 5     | L-boundary, U-safety, P-ceiling, P-dtr, G-frames, M-safety                                    |
 | S3          | S3.1 to S3.10               | U-safety, P-rate, M-safety, E-playground                                                      |
 | S4          | S4.1 to S4.6                | U-safety, P-panic, E-panic, U-server, H                                                       |
-| S5          | S5.1 to S5.4                | U-engine, E-hidden                                                                            |
+| S5          | S5.1 to S5.4                | U-engine, P-plan, E-hidden, the hidden-tab check by hand                                      |
 | S6          | S6.1 to S6.3                | E-a11y, V-ui                                                                                  |

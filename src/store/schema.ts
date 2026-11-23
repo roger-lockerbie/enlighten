@@ -11,7 +11,7 @@ import { EV_MAX, EV_MIN, PRESET_EV } from '../light/colour/exposure.ts';
 import { DEFAULT_CEILING_ARC } from '../safety/governor.ts';
 import { BUILTIN_SCRIPTS } from '../script/builtin.ts';
 import { MAX_BYTES, MAX_LINES, scriptNameProblem } from '../script/parse.ts';
-import { parseUnitSetup, type UnitSetup } from '../sim/settings.ts';
+import { parseExtras, parseUnitSetup, type UnitSetup } from '../sim/settings.ts';
 import {
   arrayOf,
   bool,
@@ -40,6 +40,9 @@ export const PAGES = [
   'settings',
   'scripts',
   'visualiser',
+  'looks',
+  'sequences',
+  'effects',
 ] as const;
 export type Page = (typeof PAGES)[number];
 
@@ -57,7 +60,7 @@ export const EXPOSURES = ['night', 'evening', 'day', 'manual'] as const;
 export const BALANCES = ['scene', 'daylight', 'kelvin'] as const;
 export const FALSE_VIEWS = ['off', 'illuminance', 'luminance'] as const;
 
-const preferencesV3 = object({
+const preferencesV4 = object({
   ceilingArc: req(int(1, 254)),
   playgroundMode: req(oneOf('live', 'commit')),
   page: req(oneOf(...PAGES)),
@@ -67,6 +70,8 @@ const preferencesV3 = object({
   reducedMotion: req(oneOf('system', 'always')),
   aliases: req(uniqueBy(arrayOf(alias, 64), (a) => a.address, 'address')),
   bench: req(object({ A: opt(unitSetup), B: opt(unitSetup) })),
+  /** Simulated drivers beyond the bench's two (SPEC R14.2, ADR 0020). */
+  extras: req(custom(parseExtras)),
   /** How many console lines history keeps. */
   historyLength: req(int(HISTORY_MIN, HISTORY_MAX)),
   /** Keep lines that start with a space out of history, as zsh's HIST_IGNORE_SPACE. */
@@ -82,9 +87,9 @@ const preferencesV3 = object({
   falseColour: req(oneOf(...FALSE_VIEWS)),
 });
 
-export type Preferences = Extract<ReturnType<typeof preferencesV3>, { ok: true }>['value'];
+export type Preferences = Extract<ReturnType<typeof preferencesV4>, { ok: true }>['value'];
 
-export const PREFERENCES_VERSION = 3;
+export const PREFERENCES_VERSION = 4;
 
 export const DEFAULT_PREFERENCES: Preferences = {
   ceilingArc: DEFAULT_CEILING_ARC,
@@ -96,6 +101,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   reducedMotion: 'system',
   aliases: [],
   bench: {},
+  extras: [],
   historyLength: DEFAULT_HISTORY,
   historyIgnoreSpace: false,
   verifyMode: true,
@@ -107,7 +113,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
 };
 
 export function checkPreferences(x: unknown): Result<Preferences> {
-  return preferencesV3(x, '');
+  return preferencesV4(x, '');
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -166,11 +172,13 @@ export function checkScripts(x: unknown): Result<StoredScripts> {
 // The workspace file
 
 export const WORKSPACE_FORMAT = 'enlighten-workspace';
-export const WORKSPACE_VERSION = 3;
+export const WORKSPACE_VERSION = 4;
 
 const workspaceDevice = object({
   address: req(int(0, 63)),
   alias: opt(str(MAX_NAME)),
+  /** A simulated driver beyond the bench's two is at this address, of this light type (R14.2). */
+  simulated: opt(oneOf('C2', 'C5')),
   /** For the simulated unit at this address only (SPEC R1.6). */
   presentation: opt(oneOf('tc', 'rgbwaf')),
   settings: opt(
@@ -196,9 +204,21 @@ const setupList: Schema<readonly unknown[]> = (x, path) =>
     ? { ok: true, value: x as unknown[] }
     : { ok: false, error: `${path}: a list of at most 6.` };
 
-const workspaceV3 = object({
+/**
+ * A part of the design: looks, slots, sequences or effects. Here only that it is a list of a
+ * sensible length is checked. `src/design/stored.ts` checks it in full before an import is offered
+ * (ADR 0020), so the first page's bundle does not carry those checks.
+ */
+const designList =
+  (max: number): Schema<readonly unknown[]> =>
+  (x, path) =>
+    Array.isArray(x) && x.length <= max
+      ? { ok: true, value: x as unknown[] }
+      : { ok: false, error: `${path.replace(/^\./, '')}: a list of at most ${String(max)}.` };
+
+const workspaceV4 = object({
   format: req(oneOf(WORKSPACE_FORMAT)),
-  version: req(oneOf(3)),
+  version: req(oneOf(4)),
   ceiling: opt(int(1, 254)),
   preferences: opt(
     object({
@@ -223,10 +243,15 @@ const workspaceV3 = object({
   links: opt(setupList),
   /** Set-up B, as `{ hallway, mounts, links }`. */
   compare: opt(setupObject),
+  /** The library of looks, each driver's slots, the sequences and the saved effects (Stage 9). */
+  looks: opt(designList(200)),
+  slots: opt(designList(1024)),
+  sequences: opt(designList(100)),
+  effects: opt(designList(100)),
 });
 
-export type Workspace = Extract<ReturnType<typeof workspaceV3>, { ok: true }>['value'];
+export type Workspace = Extract<ReturnType<typeof workspaceV4>, { ok: true }>['value'];
 
 export function checkWorkspace(x: unknown): Result<Workspace> {
-  return workspaceV3(x, '');
+  return workspaceV4(x, '');
 }

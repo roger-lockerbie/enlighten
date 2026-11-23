@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 8 are merged. Stage 8b (rate guard) is built on `stage-8b-rate-guard`, on Fable as planned, with its PR open. Stage 9 is next, on Opus.
+Stages 0 to 8b are merged. Stage 9 (scenes, sequences and effects) is in progress on `stage-9-scenes`, on Fable by the owner's choice. Its plan is ADR 0020.
 
 ## Done in Stage 0
 
@@ -245,7 +245,7 @@ Known gaps:
 - The floor's finishes are placeholders, and surfaces are neutral and matte.
 - The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review: this session drove Chromium only.
 
-## Stage 8b (rate guard), built, PR open
+## Stage 8b (rate guard), merged
 
 Branch `stage-8b-rate-guard`, on Fable as planned. The owner approved ADR 0019 on 2026-11-20 and the build followed. Where it stands:
 
@@ -289,7 +289,48 @@ Known gaps, all on the Hardware and Both targets, which nothing uses until the h
 
 **The closing `PROP_RUNS=1000` passes** (2026-11-22, on the closing code: only docs changed after) found nothing: `PROP_SEED=2038634064` and `PROP_SEED=334024647`.
 
+## Stage 9 (scenes, sequences and effects), built, PR open
+
+Branch `stage-9-scenes`, on Fable by the owner's choice. ADR 0020 holds the plan the owner approved on 2026-11-22, the four decisions made in planning, what was built and how it differs from the plan. What is in it:
+
+- **Looks and slots (R5.1 to R5.3).** `src/design`, a new pure folder. A look is a level, a colour and an optional fade. The slot map records which look was written to which of a driver's 16 slots, with the level and colour written. `src/engine/scenes.ts` stores, reads, removes and recalls as jobs through the governor. A slot is verified by the level the driver reads back, and a stored colour is marked "assumed". The Looks page (Alt-7).
+- **Sequences (R5.4 to R5.6).** `src/design/plan.ts` uses one driver fade where one fits a step and chains fades where none does (25 minutes is 16 and 9). `src/engine/dryrun.ts` checks a plan on a copy of the bench with a governor of its own, and `src/engine/runner.ts` is the one run loop for the check and the run. Four built-in sequences, the preview of every change and frame, Check, Run, Stop, and the CSV and JSON export. The Sequences page (Alt-8).
+- **Effects (R4).** The ten effects of SPEC R4.1 in `src/design/effects.ts`, with settings as sliders, frames a second for each address and the share of the bus. The Effects page (Alt-9).
+- **Simulated drivers beyond the bench's two (R14.2).** Up to four, added on the Devices page, on the Simulator target only.
+- **Workspace files version 4** and preferences version 4, each with a migration.
+- **Background timing (S5).** A run holds the wake lock and the unload guard. Its report says how close to its planned end it finished, how late its latest change went out, and the time by the wall clock when the page was paused.
+- **The entry chunk** is about 239 kB of its 256,000 bytes. Devices, the Visualiser and the three new pages load in one chunk when first opened, and the worker's checks on page messages are in `src/engine/protocol-in.ts`.
+
+On Hardware and Both nothing in ADR 0019 is relaxed. The governor refuses most of what sequences and effects send there, and the pages say so.
+
+Stage close:
+
+- `pnpm verify` passes:
+  - lint and the typecheck
+  - 3,168 unit and property tests and one marked as failing on purpose (S9-P1), at 98.47% line coverage and 92.04% branch coverage on the pure core
+  - the build
+  - 61 preview e2e tests and 18 against the server's fake
+- `security-reviewer` **failed** the first build on S9-H1: a check could hold the bus worker for seconds, and Panic with it. That is fixed and tested, with its seven other findings, and its re-review **passed with follow-ups**. `dali-reviewer` **passed with follow-ups**: no path round the governor and no protocol error. Its findings on two-tone, the fast fade time, colour temperature limits, sunrise, the slot map and the store are fixed. Both reviews are in `docs/SECURITY_FINDINGS.md`.
+- `src/safety` was not changed, so `pnpm mutate` was not run.
+- P-plan and P-effect ran at 120 cases each once, on a loaded machine. P-plan found S9-B1 and S9-P1. P-effect ran out of its time limit there, with no fault found in the cases it ran. A 1,000-case pass of this file takes about 3 hours and was not run.
+- V-ui baselines for the three new pages and for Devices were not written: `pnpm e2e:visual` is by hand, for the owner's machine.
+
+Open, for the owner:
+
+- **S9-P1 (open):** five transactions a person can send that the governor allows and the trace checker faults, found by P-plan. `dali-reviewer`'s analysis is that the checker follows S3.1 as written, the guard misses the leg because it reads a limited history, and the light made one swing at under 3%: not a hazard, and the fix is to the wording of S3.1 by ADR. `security-reviewer` rates it Medium. It is saved with a test that is marked as failing on purpose.
+- **S9-T1 (open):** a run depends on the bus worker staying awake and cannot tell when it has not. In the desktop app's browser pane, hidden, a 30-minute run was 7 minutes in after 42. On hardware the server would end the session and switch the lights off. Whether a run should follow the wall clock, stop when late, or live in the server is a change to ADR 0010.
+- **The hidden-tab check by hand** (`docs/TEST_PLAN.md` section 7) in Chrome and Brave. No test can hide a tab, so S5.3 is proved only as far as the app's side.
+- S9-D3, S9-D5, S9-D10 and S9-D12 wait on hardware day: how the driver fades to off, the order of the RGBWAF channels, whether a colour follows the fade, and what a colour of 0xFFFF does.
+
+Known gaps:
+
+- No console commands for looks, sequences or effects. Stage 10's switch mappings call the engine's `sceneRecall`, `runDesign` and `stopRun`.
+- The rail is full at nine pages, so Stage 10 has to decide where Switches goes.
+- Extra simulated drivers use the default profile settings.
+- Breathe is a triangle wave. A stopped effect leaves each light where it was in its cycle.
+- The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review.
+
 ## Next
 
-- Review and merge the Stage 8b PR.
-- Stage 9 (scenes, sequences and effects) on Opus, in plan mode. Its choreography across more addresses than the bench has is where simulated drivers beyond the bench arrive.
+- Review and merge the Stage 9 PR, with the owner's decisions on S9-P1 and S9-T1 and the hidden-tab check by hand.
+- Stage 10 (switchgear) on Sonnet, in plan mode.

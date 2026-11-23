@@ -17,4 +17,4 @@ These are not questions for a person. Each is a step in the hardware-day checkli
 - How it fades up from off, whether colour changes follow the fade time, and what a new command does to a running fade.
 - The colour temperature mixing law, and how RGBWAF channel levels scale under the arc level. The ceiling's treatment of colour depends on both.
 - The hasseb's firmware version, real throughput, send-twice gap, and its HID report descriptor.
-- Whether worker timers keep time in a hidden tab well enough for S5. Stage 9's test settles this one, not the bench.
+- Whether worker timers keep time in a hidden tab well enough for S5. Stage 9 found that an automated test cannot settle it: Playwright keeps every page focused and turns the browser's background throttling off. E-hidden covers the app's side. The browser's side is the hidden-tab check by hand in `docs/TEST_PLAN.md` section 7, for the owner in Chrome and Brave at the Stage 9 review.

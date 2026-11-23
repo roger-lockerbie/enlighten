@@ -1,7 +1,8 @@
 /** The page and worker messages: the parsers never throw, and pass only what they describe. */
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { parseFromWorker, parseToWorker } from './protocol.ts';
+import { parseToWorker } from './protocol-in.ts';
+import { parseFromWorker } from './protocol.ts';
 
 const runs = Number(process.env['PROP_RUNS'] ?? 200);
 
@@ -217,6 +218,7 @@ describe('parseFromWorker', () => {
     light: [],
     feedback: [],
     bench: [],
+    extras: [],
     latched: false,
     ceilingArc: 220,
   };

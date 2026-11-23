@@ -73,6 +73,23 @@ export function rgbwafCommands(
   return out;
 }
 
+/**
+ * Set the fade a driver uses: a standard fade time 0 to 15, or the fade time set to 0 and then an
+ * extended fade byte (`dali.md` section 7).
+ */
+export function fadeCommands(
+  address: Address,
+  fade: { readonly kind: 'standard' | 'extended'; readonly value: number },
+): Command[] {
+  if (fade.kind === 'standard') return [dtr(0, fade.value), { id: 'SET_FADE_TIME', address }];
+  return [
+    dtr(0, 0),
+    { id: 'SET_FADE_TIME', address },
+    dtr(0, fade.value),
+    { id: 'SET_EXTENDED_FADE_TIME', address },
+  ];
+}
+
 /** Read a 16-bit colour value: QUERY ACTUAL LEVEL, DTR0 = selector, QUERY COLOUR VALUE, QUERY CONTENT DTR0. */
 export function queryColourValueCommands(address: Address, selector: number): Command[] {
   return [

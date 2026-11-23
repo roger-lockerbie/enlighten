@@ -16,7 +16,7 @@ import {
   type PageName,
 } from './app.ts';
 
-const PAGES: PageName[] = ['Playground', 'Devices', 'Bus monitor', 'Settings', 'Scripts'];
+const PAGES: PageName[] = ['Playground', 'Devices', 'Bus monitor', 'Settings', 'Scripts', 'Looks'];
 
 test('the button and Escape twice latch panic from every page, until Resume', async ({ page }) => {
   const w = await openApp(page);

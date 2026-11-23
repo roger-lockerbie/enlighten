@@ -41,7 +41,17 @@ const banned: [name: string, code: string, rule: string][] = [
 ];
 
 describe('the pure core boundary', () => {
-  for (const folder of ['dali', 'sim', 'bus', 'safety', 'engine', 'transport', 'light', 'store']) {
+  for (const folder of [
+    'dali',
+    'sim',
+    'bus',
+    'safety',
+    'engine',
+    'transport',
+    'light',
+    'store',
+    'design',
+  ]) {
     it.each(banned)(`catches %s in src/${folder}`, async (_name, code, rule) => {
       expect(await ruleIds(code, `src/${folder}/fixture.ts`)).toContain(rule);
     });

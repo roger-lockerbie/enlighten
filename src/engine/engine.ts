@@ -9,7 +9,7 @@
 import type { Cancel, Clock } from '../bus/clock.ts';
 import { Scheduler, type BusRecord, type Gate, type TxResult } from '../bus/scheduler.ts';
 import { withFloors, type BusTiming } from '../bus/timing.ts';
-import { short } from '../dali/address.ts';
+import { short, type Address } from '../dali/address.ts';
 import {
   commandText,
   decode,
@@ -32,6 +32,7 @@ import {
   scanAddress,
   type ProfileResult,
   type Submit,
+  type Submitted,
 } from '../safety/profile.ts';
 import {
   isPerson,
@@ -42,8 +43,15 @@ import {
 } from '../safety/types.ts';
 import { Da5l } from '../sim/gear.ts';
 import { DEFAULT_SETTINGS, type Terminal } from '../sim/profile.ts';
-import { DEFAULT_SETUP, unitProfile, type BenchUnit, type UnitSetup } from '../sim/settings.ts';
-import { Simulator } from '../sim/simulator.ts';
+import {
+  DEFAULT_SETUP,
+  extraId,
+  unitProfile,
+  type BenchUnit,
+  type ExtraUnit,
+  type UnitSetup,
+} from '../sim/settings.ts';
+import { extraUnit, Simulator } from '../sim/simulator.ts';
 import { Coalescer, type CoalescedResult } from './coalescer.ts';
 import { commission, type CommissionResult } from './commission.ts';
 import { DivergenceGate, type Divergence } from './divergence.ts';
@@ -60,7 +68,16 @@ import { ConsoleExec, fadeReadBack, type ConsoleHost, type ConsoleLine } from '.
 import { readFacts, type DriverFacts } from './inventory.ts';
 import { Router } from './router.ts';
 import { send, StepError, toSubmitted, txOf } from './submit.ts';
+import { lookFits, type Edit, type Look } from '../design/look.ts';
+import { planSequence, rowCommands, type Plan, type PlanRow } from '../design/plan.ts';
+import { planEffect, type EffectDef } from '../design/effects.ts';
+import type { Sequence } from '../design/sequence.ts';
+import { timeText } from '../design/text.ts';
 import { HARD_WINDOW_MS } from '../safety/rate/guard.ts';
+import { driversFrom } from './drivers.ts';
+import { dryRun } from './dryrun.ts';
+import { ROW_PATIENCE_MS, runPlan } from './runner.ts';
+import { readSlots, recallSlot, removeSlot, writeSlot } from './scenes.ts';
 import { TIME_MARGIN_MS } from '../safety/rate/legs.ts';
 import type { HardwareTransport, Transport } from './transport.ts';
 
@@ -134,6 +151,8 @@ export interface DeviceView {
   readonly groups?: number;
   /** The level the governor predicts now, for ordering a colour change (S6-D1). */
   readonly level?: number;
+  /** The sixteen scene levels as last read (255 is not in the scene), for the slot map. */
+  readonly scenes?: readonly (number | undefined)[];
 }
 
 export interface MonitorLine {
@@ -198,6 +217,37 @@ export interface ScriptView {
   readonly paused?: string;
 }
 
+/** What can be planned and run: a sequence today, and an effect (ADR 0020). */
+export type RunDef =
+  | { readonly kind: 'sequence'; readonly sequence: Sequence }
+  | { readonly kind: 'effect'; readonly effect: EffectDef };
+
+/** The sequence or effect running now. */
+export interface RunView {
+  readonly kind: RunDef['kind'];
+  readonly name: string;
+  /** Rows sent so far in this pass, and how many a pass has. */
+  readonly row: number;
+  readonly rows: number;
+  /** How many times a repeating plan has started again. */
+  readonly cycle: number;
+  /** The clock time it started, and how long it is planned to take. A repeating plan has no end. */
+  readonly startedAt: number;
+  readonly endMs?: number;
+  /** The latest any row has gone out after its time, in ms. */
+  readonly lateMs: number;
+  /** How long it has been running, as of this snapshot. */
+  readonly elapsedMs: number;
+}
+
+/** How the last run ended. */
+export interface RunEnded {
+  readonly kind: RunDef['kind'];
+  readonly name: string;
+  readonly outcome: 'finished' | 'stopped' | 'refused';
+  readonly text: string;
+}
+
 export interface JobView {
   readonly kind: string;
   readonly label: string;
@@ -233,6 +283,11 @@ export interface Snapshot {
   readonly feedback: readonly ControlFeedback[];
   /** The simulated bench's units and how each is set up (SPEC R1.6). */
   readonly bench: readonly { readonly unit: BenchUnit; readonly setup: UnitSetup }[];
+  /** The sequence or effect running now, and how the last one ended. */
+  readonly run?: RunView;
+  readonly lastRun?: RunEnded;
+  /** The simulated drivers beyond the bench's two (SPEC R14.2). */
+  readonly extras: readonly ExtraUnit[];
 }
 
 export interface EngineOptions {
@@ -246,8 +301,21 @@ export interface EngineOptions {
   readonly ceilingArc?: number;
   /** How the bench's units were built, when not from the defaults (SPEC R1.6). */
   readonly bench?: Partial<Record<BenchUnit, UnitSetup>>;
+  /** The extra simulated drivers the worker built into `sim` (SPEC R14.2). */
+  readonly extras?: readonly ExtraUnit[];
   /** Scan the simulated bench and write its profile at start. On by default. */
   readonly startScan?: boolean;
+  /**
+   * A simulator transport on a clock, for the dry run of a plan (ADR 0020). Without it a plan is not
+   * checked ahead.
+   */
+  readonly dryTransport?: (sim: Simulator, clock: Clock) => Transport;
+  /**
+   * The wall clock in ms, from the worker. It is used only to say, when a run ends, how long it took
+   * by the wall clock: the run's own clock stops while a page is suspended or the computer sleeps.
+   * Nothing is timed or judged by it.
+   */
+  readonly wallNow?: () => number;
 }
 
 interface Conn {
@@ -277,6 +345,20 @@ interface Job {
 
 /** Console lines and scripts are a person's or a script's work, not the engine's own (ADR 0014). */
 const CONSOLE_JOBS: readonly string[] = ['console', 'script'];
+/** A sequence or an effect that is running (ADR 0020). One at a time. */
+const RUN_JOBS: readonly string[] = ['sequence', 'effect'];
+/** Work a person started. None of it is the engine's inventory. */
+const PERSON_JOBS: readonly string[] = [...CONSOLE_JOBS, ...RUN_JOBS, 'look'];
+const RUN_LABEL: Record<RunDef['kind'], string> = { sequence: 'Sequence', effect: 'Effect' };
+/** The longest a check holds the worker before it lets other work in, in ms of real time. */
+const CHECK_SLICE_MS = 12;
+/** And the most steps of its clock, whatever the time. */
+const CHECK_SLICE_STEPS = 25;
+/** A repeating plan is checked for this long, or two periods if that is longer. */
+const DRY_EFFECT_MS = 30_000;
+
+/** A plan check's answer: what was checked, or why it would be refused. */
+export type PlanChecked = Outcome | { readonly ok: true; readonly text: string };
 
 type LiveValue = (
   | { readonly kind: 'level'; readonly arc: number; readonly live: boolean }
@@ -419,11 +501,18 @@ export class Engine {
   private consoleSeq = 0;
   private readonly consoleOut: ConsoleOut[] = [];
   private scriptView: ScriptView | undefined;
+  private runView: RunView | undefined;
+  private lastRun: RunEnded | undefined;
+  private readonly dryTransport: EngineOptions['dryTransport'];
+  private readonly wallNow: (() => number) | undefined;
+  /** A plan is being checked before its run starts. */
+  private checking = false;
   /** Continues a paused script. */
   private continueScript: (() => void) | undefined;
   /** After the bench is rebuilt, light changes on it wait until this time. */
   private benchHoldUntil = -Infinity;
   private benchSetup: Readonly<Record<BenchUnit, UnitSetup>>;
+  private extras: readonly ExtraUnit[];
   private readonly divergences: Divergence[] = [];
   private readonly monitor: MonitorLine[] = [];
   private readonly notices: string[] = [];
@@ -449,6 +538,9 @@ export class Engine {
     this.timing = withFloors(o.timing ?? {});
     this.ceiling = o.ceilingArc ?? DEFAULT_CEILING_ARC;
     this.benchSetup = { ...DEFAULT_SETUP, ...o.bench };
+    this.extras = o.extras ?? [];
+    this.dryTransport = o.dryTransport;
+    this.wallNow = o.wallNow;
     this.lastBeat = this.clock.now();
     this.simConn = this.makeConn('simulator');
     if (this.hardware !== undefined) this.standby = this.makeStandby(this.hardware);
@@ -800,7 +892,7 @@ export class Engine {
 
   private inventoryRunning(conn: Conn): boolean {
     for (const j of this.jobs)
-      if (j.conn === conn && j.kind !== 'check' && !CONSOLE_JOBS.includes(j.kind)) return true;
+      if (j.conn === conn && j.kind !== 'check' && !PERSON_JOBS.includes(j.kind)) return true;
     return false;
   }
 
@@ -836,6 +928,7 @@ export class Engine {
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
     // A scan from the console runs inside its own line. From anywhere else it stops the console.
+    this.stopRunsFor('A scan started.');
     if (source !== 'console') this.stopConsoleFor('A scan started.');
     return this.inventory(conn);
   }
@@ -845,6 +938,7 @@ export class Engine {
     if (!isPerson(source)) return no('Only a person re-applies the profile.');
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
+    this.stopRunsFor('The safety profile is being written again.');
     if (source !== 'console') this.stopConsoleFor('The safety profile is being written again.');
     const r = await this.runJob(conn, 'profile', 'Safety profile', async (job, submit) => {
       for (const n of conn.found) {
@@ -867,6 +961,7 @@ export class Engine {
     const conn = this.active();
     if (conn === undefined) return no('Hardware: disconnected.');
     if (!conn.governor.isUnlocked('reset')) return no('RESET needs the reset unlock.');
+    this.stopRunsFor('A RESET started.');
     if (source !== 'console') this.stopConsoleFor('A RESET started.');
     const r = await this.runJob(conn, 'reset', `RESET A${String(n)}`, async (job, submit) =>
       resetAndRestore(
@@ -906,7 +1001,7 @@ export class Engine {
   private background(): void {
     const hw = this.hwConn;
     if (this.target !== 'both' || hw === undefined || this.latched || this.backgroundBusy) return;
-    const busy = [...this.jobs].some((j) => !CONSOLE_JOBS.includes(j.kind));
+    const busy = [...this.jobs].some((j) => !PERSON_JOBS.includes(j.kind));
     if (hw.scheduler.queued > 0 || busy || this.coalescer.waiting() > 0) return;
     const now = this.clock.now();
     const n = [...this.pendingRescan].find(
@@ -1353,6 +1448,66 @@ export class Engine {
     };
     const early = tooHigh();
     if (early !== undefined) return early;
+    return this.rebuild(units, tooHigh, source, (now) => {
+      for (const unit of units) {
+        const next = setup[unit];
+        if (next === undefined) continue;
+        const old = this.sim.unit(unit)?.gear;
+        const gear = new Da5l(unitProfile(unit, next), {
+          shortAddress: old?.shortAddress ?? (unit === 'A' ? 0 : 1),
+          at: now,
+          ...(unit === 'B' ? { seed: 0x1234567 } : {}),
+        });
+        this.sim.replace({ id: unit, gear }, (u) => u.id === unit);
+        this.benchSetup = { ...this.benchSetup, [unit]: next };
+      }
+    });
+  }
+
+  /**
+   * Add, change or take away the simulated drivers beyond the bench's two (SPEC R14.2, ADR 0020).
+   * The list given is the whole list. A driver that goes is turned off first, as in `setBench`.
+   */
+  async setExtras(extras: readonly ExtraUnit[], source: Source): Promise<Outcome> {
+    if (!isPerson(source)) return no('Only a person changes the simulated drivers.');
+    if (this.benchHoldUntil === Infinity)
+      return no('The simulated bench is being rebuilt. Try again when it is done.');
+    const same = (a: ExtraUnit, b: ExtraUnit) =>
+      a.address === b.address && a.lightType === b.lightType;
+    const going = this.extras.filter((e) => !extras.some((n) => same(e, n)));
+    const coming = extras.filter((n) => !this.extras.some((e) => same(e, n)));
+    if (going.length === 0 && coming.length === 0) return no('Nothing to change.');
+    const ids = going.map((e) => extraId(e.address));
+    // Against where every unit that stays is now: commissioning can have moved any of them.
+    const taken = this.sim.all.find(
+      (u) => !ids.includes(u.id) && coming.some((n) => n.address === u.gear.shortAddress),
+    );
+    if (taken !== undefined)
+      return no(
+        `A driver is at A${String(taken.gear.shortAddress)} already. Choose another address.`,
+      );
+    return this.rebuild(
+      ids,
+      () => undefined,
+      source,
+      (now) => {
+        this.sim.remove((u) => ids.includes(u.id));
+        for (const n of coming) this.sim.add(extraUnit(n, now));
+        this.extras = [...extras];
+      },
+    );
+  }
+
+  /**
+   * The shared rebuild: turn the named units off through the governor, hold light changes, make the
+   * change, then scan and write the profile again.
+   */
+  private async rebuild(
+    units: readonly string[],
+    recheck: () => Outcome | undefined,
+    source: Source,
+    apply: (now: number) => void,
+  ): Promise<Outcome> {
     if (this.target === 'simulator') this.stopRunners('The simulator settings changed.');
     // The rate guard reads each unit's history from its gear, and new gear has none. So each lit
     // unit is first turned off through the governor, which judges that step and makes it wait if it
@@ -1412,24 +1567,13 @@ export class Engine {
       );
     }
     // The ceiling may have been lowered while the units were turned off (DALI review S5-D14).
-    const late = tooHigh();
+    const late = recheck();
     if (late !== undefined) {
       release();
       return late;
     }
     const now = this.clock.now();
-    for (const unit of units) {
-      const next = setup[unit];
-      if (next === undefined) continue;
-      const old = this.sim.unit(unit)?.gear;
-      const gear = new Da5l(unitProfile(unit, next), {
-        shortAddress: old?.shortAddress ?? (unit === 'A' ? 0 : 1),
-        at: now,
-        ...(unit === 'B' ? { seed: 0x1234567 } : {}),
-      });
-      this.sim.replace({ id: unit, gear }, (u) => u.id === unit);
-      this.benchSetup = { ...this.benchSetup, [unit]: next };
-    }
+    apply(now);
     // The new gear has no history for the rate guard, so light changes on the simulated bench wait
     // for the hard step window to pass (SPEC S3.3). The simulated connection keeps its governor and
     // scheduler, so no second frame can share the simulated bus with one already on it.
@@ -1469,6 +1613,7 @@ export class Engine {
     if (conn === undefined) return no('Hardware: disconnected.');
     if (!conn.governor.isUnlocked('reset')) return no('Commissioning needs the reset unlock.');
     if (typed !== 'commission') return no('Type "commission" to confirm.');
+    this.stopRunsFor('Commissioning started.');
     this.stopConsoleFor('Commissioning started.');
     const r = await this.runJob(conn, 'commission', 'Commissioning', async (job, submit) => {
       const result = await commission({
@@ -1518,6 +1663,7 @@ export class Engine {
     if (step.unlock !== undefined && !conn.governor.isUnlocked(step.unlock))
       return no(`This step needs the ${step.unlock} unlock.`);
     const run = step.run;
+    this.stopRunsFor('A hardware check step started.');
     this.stopConsoleFor('A hardware check step started.');
     const r = await this.runJob(conn, 'check', step.title, async (_job, submit) => {
       const ctx: CheckContext = {
@@ -1679,6 +1825,291 @@ export class Engine {
     return r.ok && r.value ? OK : no(r.ok ? 'The line did not finish.' : r.reason);
   }
 
+  // -----------------------------------------------------------------------------------------------
+  // Sequences and effects (SPEC R4, R5.4, S5)
+
+  private autoOf(conn: Conn): (address: number) => boolean {
+    return (n) => ((conn.facts.get(n)?.gearFeatures ?? 0) & 1) === 1;
+  }
+
+  /** The plan for a definition, for the drivers the active connection has now. */
+  private planFor(conn: Conn, def: RunDef): Edit<Plan> {
+    const drivers = driversFrom(this.deviceViews(), this.lightOf(conn));
+    return def.kind === 'sequence'
+      ? planSequence(def.sequence, drivers, this.ceiling)
+      : planEffect(def.effect, drivers, this.ceiling);
+  }
+
+  /** Run a plan on a copy of the simulated bench, and say where the governor would refuse it. */
+  private async dry(conn: Conn, plan: Plan, source: Source): Promise<string | undefined> {
+    if (this.dryTransport === undefined || conn !== this.simConn) return undefined;
+    const stops = this.stops;
+    // The check gives way to other work, a panic above all, whenever it has held the worker for
+    // `CHECK_SLICE_MS` of real time, and in any case every `CHECK_SLICE_STEPS` steps. The real time
+    // is the worker's wall clock where there is one: the engine's own clock may be a test's.
+    const real = this.wallNow ?? (() => this.clock.now());
+    let since = real();
+    let steps = 0;
+    const r = await dryRun(
+      {
+        sim: this.sim,
+        transport: this.dryTransport,
+        timing: this.timing,
+        ceilingArc: this.ceiling,
+        swingLimit: conn.governor.swingLimit,
+        now: this.clock.now(),
+        source,
+        auto: this.autoOf(conn),
+        forMs: Math.max(DRY_EFFECT_MS, 2 * (plan.periodMs ?? 0)),
+        breathe: () => {
+          const go = () => this.stops === stops && !this.latched;
+          steps += 1;
+          if (real() - since < CHECK_SLICE_MS && steps % CHECK_SLICE_STEPS !== 0) return go();
+          return this.wait(0).then(() => {
+            since = real();
+            return go();
+          });
+        },
+      },
+      plan,
+    );
+    if (r.kind === 'refused') {
+      const row = plan.rows[r.row];
+      const at = row === undefined ? '' : ` at ${timeText(row.atMs)} for A${String(row.address)}`;
+      return `The governor would refuse the change${at}. ${r.reason}`;
+    }
+    if (r.kind === 'failed') return `The plan could not be checked: ${r.reason}`;
+    if (r.kind === 'stopped') return 'The check was stopped.';
+    return undefined;
+  }
+
+  /** Check a plan without running it (SPEC R4.2, ADR 0005). */
+  async planCheck(def: RunDef, source: Source): Promise<PlanChecked> {
+    const conn = this.active();
+    if (conn === undefined) return no('Hardware: disconnected.');
+    const plan = this.planFor(conn, def);
+    if (!plan.ok) return no(plan.reason);
+    if (plan.value.rows.length === 0) return no('Nothing here would change any light.');
+    if (conn !== this.simConn || this.dryTransport === undefined)
+      return {
+        ok: true,
+        text: 'Not checked ahead on hardware. The governor judges each change as it is sent.',
+      };
+    if (this.checking) return no('A check is running. Wait for it to end.');
+    this.checking = true;
+    let refused: string | undefined;
+    try {
+      refused = await this.dry(conn, plan.value, source);
+    } finally {
+      this.checking = false;
+    }
+    return refused === undefined
+      ? {
+          ok: true,
+          text: 'Checked against the governor on a copy of the bench: nothing is refused.',
+        }
+      : no(refused);
+  }
+
+  /**
+   * Start a sequence or an effect as a job. The definition is planned here, from what the drivers
+   * are doing now, and checked on a copy of the bench first. The reply comes once it has started.
+   */
+  async runDesign(def: RunDef, source: Source): Promise<Outcome> {
+    const conn = this.active();
+    if (conn === undefined) return no('Hardware: disconnected.');
+    if (this.latched) return no('Panic is on. Resume first.');
+    if ([...this.jobs].some((j) => RUN_JOBS.includes(j.kind)))
+      return no('A sequence or an effect is running. Stop it first.');
+    if (this.checking) return no('A check is running. Wait for it to end.');
+    const made = this.planFor(conn, def);
+    if (!made.ok) return no(made.reason);
+    const plan = made.value;
+    if (plan.rows.length === 0) return no('Nothing here would change any light.');
+    this.checking = true;
+    let refused: string | undefined;
+    try {
+      refused = await this.dry(conn, plan, source);
+    } finally {
+      this.checking = false;
+    }
+    if (refused !== undefined) return no(refused);
+    if (this.active() !== conn) return no('The output target changed.');
+    // The check took time. If a light was changed meanwhile, the plan was made for a bench that is
+    // no longer there, so it is not run.
+    // Levels are compared, as planned from each driver's target. Colours are not: a colour that is
+    // still fading reads differently from one moment to the next, and the order of colour and
+    // level that matters here follows from the levels.
+    const levels = (p: Plan) =>
+      JSON.stringify(p.rows.map((r) => [r.atMs, r.address, r.arc, r.fromArc, r.fade]));
+    const again = this.planFor(conn, def);
+    if (!again.ok || levels(again.value) !== levels(plan))
+      return no('The lights changed while the plan was being checked. Run it again.');
+    const name = def.kind === 'sequence' ? def.sequence.name : def.effect.name;
+    const kind = def.kind;
+    const auto = this.autoOf(conn);
+    const label = `${RUN_LABEL[kind]} "${name}"`;
+    // Whatever ends the job, the page is not left showing a run that is not there.
+    const ended = () => {
+      if (this.runView === undefined) return;
+      this.runView = undefined;
+      this.lastRun = { kind, name, outcome: 'stopped', text: 'Stopped: it could not go on.' };
+      this.emit();
+    };
+    void this.runJob(conn, kind, label, async (job) => {
+      const submit = this.rawSubmitter(conn, job);
+      const start = this.clock.now();
+      const wallStart = this.wallNow?.();
+      const view = (row: number, cycle: number, lateMs: number): RunView => ({
+        kind,
+        name,
+        row,
+        rows: plan.rows.length,
+        cycle,
+        startedAt: start,
+        ...(plan.periodMs === undefined ? { endMs: plan.endMs } : {}),
+        lateMs,
+        elapsedMs: 0,
+      });
+      this.runView = view(0, 0, 0);
+      this.lastRun = undefined;
+      this.emit();
+      let late = 0;
+      const r = await runPlan(
+        {
+          now: () => this.clock.now(),
+          until: (time) => this.sleepIn(job, Math.max(0, time - this.clock.now())),
+          stopped: () => job.aborted,
+          patienceMs: ROW_PATIENCE_MS,
+          submitRow: (row) =>
+            conn.kind === 'simulator'
+              ? submit(txOf(rowCommands(row, auto(row.address)), source, `${kind} "${name}"`))
+              : this.sendRowOnHardware(row, source),
+          progress: (row, cycle, lateMs) => {
+            late = Math.max(late, lateMs);
+            this.runView = view(row + 1, cycle, late);
+            this.emitSoon();
+          },
+        },
+        plan,
+        start,
+      );
+      this.runView = undefined;
+      const took = this.clock.now() - start;
+      // By the wall clock, when the worker gave one. More than a second apart means the page was
+      // suspended or the computer slept part way through.
+      const paused =
+        wallStart === undefined || this.wallNow === undefined
+          ? 0
+          : this.wallNow() - wallStart - took;
+      const wall =
+        paused > 1000
+          ? ` By the wall clock it took ${timeText(took + paused)}: the page or the computer was paused for ${timeText(paused)} of that, so it ended that much late.`
+          : '';
+      this.lastRun =
+        r.kind === 'done'
+          ? {
+              kind,
+              name,
+              outcome: 'finished',
+              text: `Finished after ${timeText(took)}, ${timeText(Math.max(0, took - plan.endMs))} after its planned end. Every change was sent. The latest went out ${timeText(late)} after its time.${wall}`,
+            }
+          : r.kind === 'refused'
+            ? { kind, name, outcome: 'refused', text: `Stopped at a refusal: ${r.reason}` }
+            : { kind, name, outcome: 'stopped', text: `Stopped: ${job.why ?? 'stopped'}${wall}` };
+      if (r.kind === 'refused') this.notice(`${name}: ${r.reason}`);
+    }).then(ended, (e: unknown) => {
+      ended();
+      this.notice(`${label}: ${e instanceof Error ? e.message : 'stopped with an error'}`);
+    });
+    return OK;
+  }
+
+  /**
+   * One row on hardware goes through Apply, which sends a colour before its level and reads fades
+   * back, as the holding rules of ADR 0019 need.
+   */
+  private async sendRowOnHardware(row: PlanRow, source: Source): Promise<Submitted> {
+    const r = await this.request(
+      {
+        kind: 'apply',
+        address: row.address,
+        arc: row.arc,
+        ...(row.setFade ? { fade: row.fade } : {}),
+        ...(row.colour.kind === 'tc' ? { mirek: row.colour.mirek } : {}),
+        ...(row.colour.kind === 'rgbwaf' ? { channels: row.colour.channels } : {}),
+      },
+      source,
+    );
+    if (r.ok) return { kind: 'done', results: [] };
+    if (r.kind === 'dropped' || r.kind === 'fault') return { kind: r.kind, reason: r.reason };
+    return {
+      kind: 'refused',
+      reason: r.reason,
+      ...(r.retryAt === undefined ? {} : { retryAt: r.retryAt }),
+    };
+  }
+
+  /** Stop the running sequence or effect. Nothing is sent: the lights stay as they are. */
+  stopRun(): void {
+    for (const j of this.jobs) if (RUN_JOBS.includes(j.kind)) this.abort(j, 'Stopped by a person.');
+    this.emit();
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  // Scene slots (SPEC R5.2, R5.3)
+
+  private async sceneJob(
+    label: string,
+    fn: (conn: Conn, submit: Submit) => Promise<void>,
+  ): Promise<Outcome> {
+    const conn = this.active();
+    if (conn === undefined) return no('Hardware: disconnected.');
+    const r = await this.runJob(conn, 'look', label, async (_job, submit) => {
+      await fn(conn, submit);
+    });
+    this.emit();
+    return r.ok ? OK : no(r.reason);
+  }
+
+  /** Write a look to one slot of one driver, and check the level it reads back. */
+  async sceneWrite(address: number, slot: number, look: Look, source: Source): Promise<Outcome> {
+    if (!isPerson(source)) return no('Only a person writes a look to a driver.');
+    const drive = this.active()?.facts.get(address)?.drive;
+    if (drive === undefined) return no(`A${String(address)} has not been read yet. Scan first.`);
+    const unfit = lookFits(look, drive);
+    if (unfit !== undefined) return no(unfit);
+    return this.sceneJob(`Look "${look.name}" to A${String(address)}`, (_conn, submit) =>
+      writeSlot(submit, source, address, slot, look, drive),
+    );
+  }
+
+  async sceneRemove(address: number, slot: number, source: Source): Promise<Outcome> {
+    if (!isPerson(source)) return no('Only a person removes a look from a driver.');
+    return this.sceneJob(`Remove A${String(address)} slot ${String(slot)}`, (_conn, submit) =>
+      removeSlot(submit, source, address, slot),
+    );
+  }
+
+  /** Read a driver's sixteen slots again, for the slot map. */
+  async sceneRead(address: number, source: Source): Promise<Outcome> {
+    return this.sceneJob(`Read the slots of A${String(address)}`, (_conn, submit) =>
+      readSlots(submit, source, address),
+    );
+  }
+
+  /** Recall a slot by address, group or broadcast, with a fade set first when one is given. */
+  async sceneRecall(
+    target: Address,
+    slot: number,
+    fade: FadeSetting | undefined,
+    source: Source,
+  ): Promise<Outcome> {
+    return this.sceneJob(`Recall scene ${String(slot)}`, (_conn, submit) =>
+      recallSlot(submit, source, target, slot, fade),
+    );
+  }
+
   /**
    * Run a script as a job with the source `script` (SPEC section 7). The text is parsed whole first,
    * and nothing runs if any line has an error. Panic, Ctrl-C, a target change and the heartbeat
@@ -1798,6 +2229,20 @@ export class Engine {
     if (any) this.emit();
   }
 
+  /**
+   * Stop a running sequence or effect before the same kinds of work, whoever started it: a plan was
+   * made for the bench as it was, and a scan, a profile write or a RESET changes that.
+   */
+  private stopRunsFor(why: string): void {
+    let any = false;
+    for (const j of this.jobs)
+      if (RUN_JOBS.includes(j.kind)) {
+        this.abort(j, why);
+        any = true;
+      }
+    if (any) this.emit();
+  }
+
   // -----------------------------------------------------------------------------------------------
   // What the page sees
 
@@ -1895,11 +2340,16 @@ export class Engine {
       monitor: this.monitor.slice(-50),
       console: this.consoleOut.slice(-CONSOLE_SNAPSHOT),
       ...(this.scriptView === undefined ? {} : { script: this.scriptView }),
+      ...(this.runView === undefined
+        ? {}
+        : { run: { ...this.runView, elapsedMs: this.clock.now() - this.runView.startedAt } }),
+      ...(this.lastRun === undefined ? {} : { lastRun: this.lastRun }),
       notices: [...this.notices],
       busUse: conn?.scheduler.utilisation() ?? 0,
       light: conn === undefined ? [] : this.lightOf(conn),
       feedback: [...this.feedback.values()],
       bench: (['A', 'B'] as const).map((unit) => ({ unit, setup: this.benchSetup[unit] })),
+      extras: this.extras,
     };
   }
 
@@ -1926,6 +2376,7 @@ export class Engine {
         ...(facts === undefined ? {} : { facts }),
         ...(groups === undefined ? {} : { groups }),
         ...(level === undefined ? {} : { level }),
+        ...(i?.scenes === undefined ? {} : { scenes: i.scenes }),
       });
     }
     return devices;

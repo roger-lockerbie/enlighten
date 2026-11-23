@@ -5,6 +5,7 @@
  */
 import { mergeStored, type StoredLine } from '../console/history.ts';
 import { percentText } from '../dali/curve.ts';
+import { parseExtras, type ExtraUnit } from '../sim/settings.ts';
 import {
   HISTORY_MIGRATIONS,
   PREFERENCES_MIGRATIONS,
@@ -63,6 +64,8 @@ export const HISTORY_KEY = 'history';
 export const SCRIPTS_KEY = 'scripts';
 export const VISUALISER_KEY = 'visualiser';
 export const VISUALISER_VERSION = 1;
+export const DESIGN_KEY = 'design';
+export const DESIGN_VERSION = 1;
 export const SET_ASIDE_PREFIX = 'set-aside:';
 
 export interface Loaded<T> {
@@ -211,6 +214,25 @@ export class Store {
     return this.save(VISUALISER_KEY, VISUALISER_VERSION, check, data);
   }
 
+  /**
+   * Looks, the slot map, sequences and effects (ADR 0020). As with the Visualiser's record, the
+   * check comes from the pages that use it.
+   */
+  loadDesign<T>(check: (x: unknown) => Result<T>, defaults: T): Promise<Loaded<T>> {
+    return this.load(
+      DESIGN_KEY,
+      'looks, sequences and effects',
+      DESIGN_VERSION,
+      [],
+      check,
+      defaults,
+    );
+  }
+
+  saveDesign<T>(check: (x: unknown) => Result<T>, data: T): Promise<void> {
+    return this.save(DESIGN_KEY, DESIGN_VERSION, check, data);
+  }
+
   async setAside(): Promise<string[]> {
     return (await this.backend.keys()).filter((k) => k.startsWith(SET_ASIDE_PREFIX)).sort();
   }
@@ -256,6 +278,11 @@ export interface ImportPlan {
   readonly changes: readonly string[];
   /** The file's ceiling, only when it is lower than the present one. */
   readonly lowerCeiling?: number;
+  /**
+   * The simulated drivers beyond the bench's two, when the file was written at version 4 or later
+   * and so says which there are. An older file says nothing about them.
+   */
+  readonly extras?: readonly ExtraUnit[];
 }
 
 const pct = (arc: number) => `${percentText(arc)}%`;
@@ -266,7 +293,11 @@ const pct = (arc: number) => `${percentText(arc)}%`;
  */
 export function readWorkspace(
   text: string,
-  present: { readonly ceilingArc: number; readonly scripts?: readonly string[] },
+  present: {
+    readonly ceilingArc: number;
+    readonly scripts?: readonly string[];
+    readonly extras?: readonly ExtraUnit[];
+  },
 ): Result<ImportPlan> {
   const parsed = parseText(text);
   if (!parsed.ok) return parsed;
@@ -319,6 +350,28 @@ export function readWorkspace(
     changes.push(`Visualiser white balance: ${what}.`);
   }
   if (p?.falseColour !== undefined) changes.push(`Visualiser false colour: ${p.falseColour}.`);
+  // A file from version 4 on lists the simulated drivers there are. Their addresses are checked as
+  // the bench checks them: 2 to 63, and no more than four.
+  let extras: ExtraUnit[] | undefined;
+  if (typeof head['version'] === 'number' && head['version'] >= 4) {
+    const listed = parseExtras(
+      (w.devices ?? [])
+        .filter((d) => d.simulated !== undefined)
+        .map((d) => ({ address: d.address, lightType: d.simulated })),
+    );
+    if (typeof listed === 'string') return { ok: false, error: `devices: ${listed}` };
+    const now = present.extras ?? [];
+    const same = (a: ExtraUnit, b: ExtraUnit) =>
+      a.address === b.address && a.lightType === b.lightType;
+    for (const e of listed)
+      if (!now.some((n) => same(n, e)))
+        changes.push(`Simulated driver: a ${e.lightType} is added at A${String(e.address)}.`);
+    for (const n of now)
+      if (!listed.some((e) => same(n, e)))
+        changes.push(`Simulated driver: the ${n.lightType} at A${String(n.address)} is removed.`);
+    if (listed.length !== now.length || listed.some((e) => !now.some((n) => same(n, e))))
+      extras = listed;
+  }
   for (const d of w.devices ?? []) {
     const parts: string[] = [];
     if (d.alias !== undefined) parts.push(`name "${d.alias}"`);
@@ -345,6 +398,7 @@ export function readWorkspace(
       workspace: w,
       changes,
       ...(lowerCeiling === undefined ? {} : { lowerCeiling }),
+      ...(extras === undefined ? {} : { extras }),
     },
   };
 }

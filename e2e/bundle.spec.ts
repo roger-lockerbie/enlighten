@@ -1,7 +1,7 @@
 /**
  * The built page's chunks (ADR 0002): the entry chunk stays within a size budget and free of
- * three.js, which loads in a chunk of its own when the Visualiser is first opened, with the page
- * and the light core beside it. The set-up's checks are a chunk of their own too, shared by the
+ * three.js, which loads in a chunk of its own when the Visualiser is first opened. The pages that
+ * load later (Devices, the Visualiser and its light core) share one chunk (ADR 0020). The set-up's checks are a chunk of their own too, shared by the
  * Visualiser and Settings' workspace export and import (ADR 0018). Each worker is one file.
  */
 import { readFileSync, readdirSync } from 'node:fs';
@@ -28,7 +28,7 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   expect(named(/^bus\.worker-[\w-]+\.js$/)).toHaveLength(1);
   expect(named(/^light\.worker-[\w-]+\.js$/)).toHaveLength(1);
   const renderer = named(/^renderer-[\w-]+\.js$/);
-  const visualiser = named(/^Visualiser-[\w-]+\.js$/);
+  const visualiser = named(/^later-[\w-]+\.js$/);
   expect(renderer).toHaveLength(1);
   expect(visualiser).toHaveLength(1);
   const saved = named(/^saved-[\w-]+\.js$/);
@@ -40,7 +40,7 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   for (const c of chunks.filter((c) => c !== renderer[0])) expect(read(c)).not.toContain(marker);
   // three.js's loaders are left out: the renderer's chunk fetches nothing and makes no blob URL.
   expect(read(renderer[0] ?? '')).not.toMatch(/\bfetch\(|createObjectURL/);
-  // The entry reaches the Visualiser only by a dynamic import, and never names the renderer.
+  // The entry reaches the later pages only by a dynamic import, and never names the renderer.
   expect(js).toContain(visualiser[0] ?? 'missing');
   expect(js).not.toContain(renderer[0] ?? 'missing');
   // The set-up's checks are not in the entry: it reaches them by a dynamic import.

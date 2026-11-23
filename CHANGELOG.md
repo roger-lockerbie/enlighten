@@ -65,6 +65,15 @@ All notable changes to this project are recorded here. The format follows Keep a
 - E-visualiser's editor and camera tests, E-ab, set-ups in E-import, the prediction label in E-modes, and V-hallway pictures for each preset and each cover close up.
 - ADR 0018: the hallway, mounts, cameras and A/B view as built.
 
+- Stage 9, looks: a library of named looks (level, colour and an optional fade), each driver's 16 scene slots with a slot map that marks a slot whose stored level no longer matches, and recall by address, group or broadcast with the look's fade set first. The Looks page (Alt-7).
+- Stage 9, sequences: a planner that uses the drivers' own fades and chains them where none fits, a preview of every change and frame with its time, four built-in sequences including off to 20% at 2700 K over 25 minutes, and a check that runs a plan on a copy of the bench with the governor's own code before it runs. The Sequences page (Alt-8).
+- Stage 9, effects: the ten built-in effects with their settings as sliders, frames a second for each address and the share of the bus, across any drivers there are. The Effects page (Alt-9).
+- Export of a sequence or an effect as CSV and JSON (time, address, command, values, fade), with cells guarded against spreadsheet formulas.
+- Up to four simulated drivers beyond the bench's two, added on the Devices page, for the visualiser and for effects across addresses.
+- Workspace files version 4, with looks, slots, sequences, effects and the simulated drivers. Older files migrate.
+- `src/design`, a new pure folder, and the property tests P-plan and P-effect. ADR 0020.
+- `pnpm e2e:hidden`, the 30-minute form of the hidden-page test, and a hidden-tab check by hand in `docs/TEST_PLAN.md`.
+
 ### Changed
 
 - The plan for Stages 3, 4, 5 and 12 follows the design: the governor as ADR 0004 sets it out, a Python hardware server before any WebHID transport, and the build settings the spike proved.
@@ -91,6 +100,9 @@ All notable changes to this project are recorded here. The format follows Keep a
 - On hardware, no level command goes to DT8 gear until its colour is known, which is every DT8 driver after a connect or a scan. OFF goes, and so does a colour with ACTIVATE. The playground's Apply sends the colour first and the level after it. Lowering the ceiling switches such gear off. A scene is recalled on DT8 gear only with no fade time.
 - ADR 0019 amendments 1 and 2: on the Hardware and Both targets the shadow allows nothing until hardware day. Every light-changing command to any gear is its own leg and hard step, so one goes about every 2 s to an address plus its fade time, and 1 s after a change to another address. A light change reaches one address at a time, so group and broadcast levels are refused (OFF is not). A colour, a scene recall and a Tc step go only with no fade time. A level goes to DT8 gear only after an ACTIVATE has reached it with no temporary colour loaded, scene recalled or Tc step sent since. The addressing commands forget every address until a rescan. Fade settings count only as read back from the gear, and Apply, the console and the hardware check read them back after writing them to a short address. The ceiling counts DT8 gear on hardware as every channel full. The simulator target is not changed, except that gear which missed one presence reply still counts as a possible member of a group or broadcast. This replaces the whole-colour rule of the first build.
 - On hardware, no level command other than OFF goes to an address that has not been scanned, to gear with no short address, or to a group or broadcast while the inventory is stale. This replaces the line in ADR 0016 that let a level go to unscanned gear on its own, and is the owner's to relax (S8b-D2 in ADR 0019).
+- Stage 9: Devices now loads when first opened, in one chunk with the Visualiser and the Stage 9 pages. The worker's checks on what the page sends moved to `src/engine/protocol-in.ts`. Both keep the first chunk within its budget.
+- The fade command builder moved from the console to `src/dali/sequences.ts`, unchanged, so the planner and the console share it.
+- The wake lock and the unload guard cover a sequence and an effect as well as a script.
 
 ### Fixed
 

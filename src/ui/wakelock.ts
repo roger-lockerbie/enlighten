@@ -1,5 +1,5 @@
 /**
- * A screen wake lock while a script runs (SPEC S5.2). The browser drops the lock when the page is
+ * A screen wake lock while a script, a sequence or an effect runs (SPEC S5.2). The browser drops the lock when the page is
  * hidden, so it is asked for again when the page is shown, while it is still wanted. A refusal is
  * reported once, so the person knows the screen may sleep.
  */
@@ -34,7 +34,7 @@ export class ScreenWake {
     if (this.held !== undefined || this.taking) return;
     if (!('wakeLock' in navigator)) {
       this.refused(
-        'This browser has no screen wake lock, so the screen may sleep during a script.',
+        'This browser has no screen wake lock, so the screen may sleep while this runs.',
       );
       return;
     }
@@ -51,7 +51,7 @@ export class ScreenWake {
       });
     } catch {
       this.refused(
-        'The browser refused a screen wake lock, so the screen may sleep during a script.',
+        'The browser refused a screen wake lock, so the screen may sleep while this runs.',
       );
     } finally {
       this.taking = false;
