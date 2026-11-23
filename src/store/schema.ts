@@ -43,6 +43,7 @@ export const PAGES = [
   'looks',
   'sequences',
   'effects',
+  'switches',
 ] as const;
 export type Page = (typeof PAGES)[number];
 
@@ -172,7 +173,7 @@ export function checkScripts(x: unknown): Result<StoredScripts> {
 // The workspace file
 
 export const WORKSPACE_FORMAT = 'enlighten-workspace';
-export const WORKSPACE_VERSION = 4;
+export const WORKSPACE_VERSION = 5;
 
 const workspaceDevice = object({
   address: req(int(0, 63)),
@@ -216,9 +217,9 @@ const designList =
       ? { ok: true, value: x as unknown[] }
       : { ok: false, error: `${path.replace(/^\./, '')}: a list of at most ${String(max)}.` };
 
-const workspaceV4 = object({
+const workspaceV5 = object({
   format: req(oneOf(WORKSPACE_FORMAT)),
-  version: req(oneOf(4)),
+  version: req(oneOf(5)),
   ceiling: opt(int(1, 254)),
   preferences: opt(
     object({
@@ -248,10 +249,12 @@ const workspaceV4 = object({
   slots: opt(designList(1024)),
   sequences: opt(designList(100)),
   effects: opt(designList(100)),
+  /** The switch plates and their mappings (Stage 10). */
+  plates: opt(designList(8)),
 });
 
-export type Workspace = Extract<ReturnType<typeof workspaceV4>, { ok: true }>['value'];
+export type Workspace = Extract<ReturnType<typeof workspaceV5>, { ok: true }>['value'];
 
 export function checkWorkspace(x: unknown): Result<Workspace> {
-  return workspaceV4(x, '');
+  return workspaceV5(x, '');
 }

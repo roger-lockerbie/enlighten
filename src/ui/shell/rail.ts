@@ -1,4 +1,4 @@
-/** The pages in the rail, in order. Alt with 1 to 9 goes to the page at that position (docs/UI.md). */
+/** The pages in the rail, in order. Alt with 1 to 9 and 0 goes to the page at that position (docs/UI.md). */
 import type { Page } from '../../store/schema.ts';
 
 export const RAIL: readonly { readonly page: Page; readonly label: string }[] = [
@@ -11,4 +11,5 @@ export const RAIL: readonly { readonly page: Page; readonly label: string }[] = 
   { page: 'looks', label: 'Looks' },
   { page: 'sequences', label: 'Sequences' },
   { page: 'effects', label: 'Effects' },
+  { page: 'switches', label: 'Switches' },
 ];

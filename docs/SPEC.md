@@ -419,6 +419,8 @@ The app plays the application controller. Each button runs the part 301 event ma
 | Generic DALI-2 coupler | 1, 2, 4 buttons | One-button dimming as in section 6 of the research, with the hold direction rule as a setting                               |
 | KNX through a gateway  | 1, 2, 4 buttons | Basalte Sentido and Gira layouts as examples, labelled as KNX plates that reach DALI through a gateway                      |
 
+Timer limits: short 20 to 5100 ms, double 0 to 2000 ms, repeat 100 to 2000 ms in steps of 20, stuck 5 to 255 s, minimum pulse 40 ms by default. The default filter is 0xF4. A hold's repeats follow the repeat timer and stop on release, stuck, Panic, a latch or a change of target. Each event and action prints in the console, and the frames carry the source `switch`. See ADR 0021.
+
 A mapping ties each event on each button to an action: toggle, recall a look or slot, dim up or down while held, warmer or cooler while held, run a sequence, start or stop an effect. Actions are indirect level commands, so a plate bound to an unverified address does nothing and says why. Each plate has LED feedback modes from the research: off, on when the target is on, on when it is off, always on.
 
 ## 11. Traceability

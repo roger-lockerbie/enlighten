@@ -48,8 +48,8 @@ describe('the validator', () => {
   it('refuses nesting deeper than the limit, and forbidden keys anywhere', () => {
     const deep = (n: number): unknown => (n === 0 ? 1 : { a: deep(n - 1) });
     expect(checkTree(deep(MAX_DEPTH))).toBeUndefined();
-    expect(checkTree(deep(MAX_DEPTH + 1))).toMatch(/nested more than 8 deep/);
-    expect(checkTree([[[[[[[[[1]]]]]]]]])).toMatch(/nested/);
+    expect(checkTree(deep(MAX_DEPTH + 1))).toMatch(/nested more than 10 deep/);
+    expect(checkTree([[[[[[[[[[[1]]]]]]]]]]])).toMatch(/nested/);
     for (const k of ['__proto__', 'constructor', 'prototype'])
       expect(parseText(`{"a":[{"${k}":1}]}`)).toEqual({
         ok: false,
@@ -220,7 +220,7 @@ describe('workspace files (SPEC section 8)', () => {
     const r = readWorkspace(text, { ceilingArc: 220 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.workspace).toEqual({ format: 'enlighten-workspace', version: 4, ...content });
+    expect(r.value.workspace).toEqual({ format: 'enlighten-workspace', version: 5, ...content });
     expect(r.value.lowerCeiling).toBe(180);
     expect(r.value.changes).toEqual([
       'Ceiling: lowered from 39.5% (arc 220) to 13.3% (arc 180).',
@@ -250,10 +250,10 @@ describe('workspace files (SPEC section 8)', () => {
       ok: false,
       error: 'This is not an Enlighten workspace file.',
     });
-    expect(readWorkspace('{"format":"enlighten-workspace","version":5}', at).ok).toBe(false);
-    expect(readWorkspace('{"format":"enlighten-workspace","version":1,"plates":[]}', at)).toEqual({
+    expect(readWorkspace('{"format":"enlighten-workspace","version":6}', at).ok).toBe(false);
+    expect(readWorkspace('{"format":"enlighten-workspace","version":1,"bogus":[]}', at)).toEqual({
       ok: false,
-      error: 'The file: unknown key "plates".',
+      error: 'The file: unknown key "bogus".',
     });
     expect(readWorkspace('{"format":"enlighten-workspace","version":1,"ceiling":0}', at).ok).toBe(
       false,
@@ -469,7 +469,7 @@ describe('Stage 6 records (ADR 0014)', () => {
       '{"format":"enlighten-workspace","version":1,"ceiling":100,"preferences":{"playgroundMode":"live"}}',
       { ceilingArc: 220 },
     );
-    expect(r.ok && r.value.workspace.version).toBe(4);
+    expect(r.ok && r.value.workspace.version).toBe(5);
   });
 
   it('carries scripts and the history settings, and an import cannot turn verify mode off', () => {
@@ -522,7 +522,7 @@ describe('Stage 8 records (ADR 0018)', () => {
     const r = readWorkspace('{"format":"enlighten-workspace","version":2,"scripts":[]}', {
       ceilingArc: 220,
     });
-    expect(r.ok && r.value.workspace.version).toBe(4);
+    expect(r.ok && r.value.workspace.version).toBe(5);
   });
 
   it('carries the view settings, and lists them', () => {
@@ -562,14 +562,14 @@ describe('Stage 8 records (ADR 0018)', () => {
 
 describe('Stage 9 records (ADR 0020)', () => {
   const at = { ceilingArc: 220 };
-  const file = (o: object) => JSON.stringify({ format: 'enlighten-workspace', version: 4, ...o });
+  const file = (o: object) => JSON.stringify({ format: 'enlighten-workspace', version: 5, ...o });
 
   it('reads a version 3 workspace file, which says nothing about simulated drivers', () => {
     const r = readWorkspace(
       '{"format":"enlighten-workspace","version":3,"devices":[{"address":0,"alias":"Left"}]}',
       { ...at, extras: [{ address: 5, lightType: 'C2' }] },
     );
-    expect(r.ok && r.value.workspace.version).toBe(4);
+    expect(r.ok && r.value.workspace.version).toBe(5);
     expect(r.ok && r.value.extras).toBeUndefined();
     expect(r.ok && r.value.changes).toEqual(['A0: name "Left".']);
     expect(workspaceTo4.run('text')).toBe('text');

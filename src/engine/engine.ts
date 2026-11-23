@@ -9,7 +9,7 @@
 import type { Cancel, Clock } from '../bus/clock.ts';
 import { Scheduler, type BusRecord, type Gate, type TxResult } from '../bus/scheduler.ts';
 import { withFloors, type BusTiming } from '../bus/timing.ts';
-import { short, type Address } from '../dali/address.ts';
+import { addressText, short, type Address } from '../dali/address.ts';
 import {
   commandText,
   decode,
@@ -78,6 +78,8 @@ import { driversFrom } from './drivers.ts';
 import { dryRun } from './dryrun.ts';
 import { ROW_PATIENCE_MS, runPlan } from './runner.ts';
 import { readSlots, recallSlot, removeSlot, writeSlot } from './scenes.ts';
+import { Controller, type Host as SwitchHost, type PlateView } from '../switch/controller.ts';
+import type { Plate } from '../switch/plate.ts';
 import { TIME_MARGIN_MS } from '../safety/rate/legs.ts';
 import type { HardwareTransport, Transport } from './transport.ts';
 
@@ -288,6 +290,8 @@ export interface Snapshot {
   readonly lastRun?: RunEnded;
   /** The simulated drivers beyond the bench's two (SPEC R14.2). */
   readonly extras: readonly ExtraUnit[];
+  /** The switch plates: which buttons are down, and what each last did (SPEC R16). */
+  readonly switches: readonly PlateView[];
 }
 
 export interface EngineOptions {
@@ -529,6 +533,8 @@ export class Engine {
   private readonly startListeners = new Set<(f: TxFrame, conn: Conn | undefined) => void>();
   private emitPending: Cancel | undefined;
   private disposed = false;
+  private readonly switches: Controller;
+  private switchRuns = new Map<string, RunDef>();
 
   constructor(o: EngineOptions) {
     this.clock = o.clock;
@@ -545,6 +551,9 @@ export class Engine {
     this.simConn = this.makeConn('simulator');
     if (this.hardware !== undefined) this.standby = this.makeStandby(this.hardware);
     this.coalescer = new Coalescer(this.clock, (key, v) => this.sendLive(key, v));
+    this.switches = new Controller(this.clock, this.switchHost(), () => {
+      this.emitSoon();
+    });
     this.scheduleTick();
     if (o.startScan !== false) void this.inventory(this.simConn);
   }
@@ -555,6 +564,7 @@ export class Engine {
     this.tick?.();
     this.emitPending?.();
     this.coalescer.cancel();
+    this.switches.reset();
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -795,9 +805,14 @@ export class Engine {
     return OK;
   }
 
+  private isLatched(): boolean {
+    return this.latched;
+  }
+
   /** Stop every runner: jobs end at their next frame, and waiting live values are dropped. */
   stopRunners(why: string): void {
     this.stops++;
+    this.switches.reset();
     if (this.jobs.size > 0 || this.coalescer.waiting() > 0) this.notice(`Stopped: ${why}`);
     for (const j of this.jobs) this.abort(j, why);
     this.coalescer.cancel();
@@ -826,7 +841,11 @@ export class Engine {
 
   private onTick(): void {
     const now = this.clock.now();
-    if (this.pageVisible && now - this.lastBeat > HEARTBEAT_LIMIT_MS && this.jobs.size > 0) {
+    if (
+      this.pageVisible &&
+      now - this.lastBeat > HEARTBEAT_LIMIT_MS &&
+      (this.jobs.size > 0 || this.switches.holding())
+    ) {
       this.stopRunners('The page stopped answering, so it could not offer Panic.');
     }
     this.background();
@@ -1935,6 +1954,8 @@ export class Engine {
     }
     if (refused !== undefined) return no(refused);
     if (this.active() !== conn) return no('The output target changed.');
+    // Panic may have come while the check ran.
+    if (this.isLatched()) return no('Panic is on. Resume first.');
     // The check took time. If a light was changed meanwhile, the plan was made for a bench that is
     // no longer there, so it is not run.
     // Levels are compared, as planned from each driver's target. Colours are not: a colour that is
@@ -2054,6 +2075,79 @@ export class Engine {
   stopRun(): void {
     for (const j of this.jobs) if (RUN_JOBS.includes(j.kind)) this.abort(j, 'Stopped by a person.');
     this.emit();
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  // Switch plates (SPEC R16, section 10)
+
+  /**
+   * Replace the plates. `runs` are the sequences and effects a plate can name, resolved by the page,
+   * because the worker has no library of its own.
+   */
+  setSwitches(plates: readonly Plate[], runs: readonly RunDef[]): Outcome {
+    this.switchRuns = new Map(
+      runs.map((r) => [
+        r.kind === 'sequence' ? `sequence:${r.sequence.name}` : `effect:${r.effect.name}`,
+        r,
+      ]),
+    );
+    this.switches.setPlates(plates);
+    this.emit();
+    return OK;
+  }
+
+  /** A button went down or up. Nothing is sent from here except through the governor. */
+  switchInput(plate: string, button: number, down: boolean): Outcome {
+    this.switches.input(plate, button, down);
+    return OK;
+  }
+
+  /** Whether each address a target names is verified, and which are on. Group members come from their bits. */
+  private switchTargets(t: Address): DeviceView[] {
+    const all = this.deviceViews();
+    if (t.kind === 'short') return all.filter((d) => d.address === t.n);
+    // A driver whose groups are not read yet might be a member, so it counts.
+    if (t.kind === 'group')
+      return all.filter((d) => d.groups === undefined || (d.groups & (1 << t.n)) !== 0);
+    return all;
+  }
+
+  private switchHost(): SwitchHost {
+    const result = (r: { readonly ok: boolean; readonly reason?: string }) =>
+      r.ok ? ({ ok: true } as const) : ({ ok: false, reason: r.reason ?? 'Refused.' } as const);
+    return {
+      isOn: (t) => {
+        const levels = this.switchTargets(t).map((d) => d.level);
+        if (levels.length === 0 || levels.every((l) => l === undefined)) return undefined;
+        return levels.some((l) => l !== undefined && l > 0);
+      },
+      blocked: (t) => {
+        if (this.latched) return 'Panic is on. Resume first.';
+        if (this.active() === undefined) return 'Hardware: disconnected.';
+        const ds = this.switchTargets(t);
+        const label = addressText(t);
+        if (ds.length === 0) return `${label} has no driver the app knows of.`;
+        const bad = ds.find((d) => !d.verified);
+        return bad === undefined
+          ? undefined
+          : `A${String(bad.address)} is not verified yet, so ${label} is left alone.`;
+      },
+      send: async (commands, label) =>
+        result(await this.request({ kind: 'commands', commands, label }, 'switch')),
+      recall: async (a) => result(await this.sceneRecall(a.target, a.slot, a.fade, 'switch')),
+      run: async (a) => {
+        const def = this.switchRuns.get(`${a.what}:${a.name}`);
+        if (def === undefined)
+          return { ok: false, reason: `The ${a.what} "${a.name}" is not in the library.` };
+        return result(await this.runDesign(def, 'switch'));
+      },
+      stopRun: () => {
+        this.stopRun();
+      },
+      say: (text) => {
+        this.say({ kind: 'note', text });
+      },
+    };
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -2350,6 +2444,7 @@ export class Engine {
       feedback: [...this.feedback.values()],
       bench: (['A', 'B'] as const).map((unit) => ({ unit, setup: this.benchSetup[unit] })),
       extras: this.extras,
+      switches: this.switches.view(),
     };
   }
 

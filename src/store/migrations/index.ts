@@ -9,6 +9,7 @@ import { preferencesTo4 } from './preferences-4.ts';
 import { workspaceTo2 } from './workspace-2.ts';
 import { workspaceTo3 } from './workspace-3.ts';
 import { workspaceTo4 } from './workspace-4.ts';
+import { workspaceTo5 } from './workspace-5.ts';
 
 export const PREFERENCES_MIGRATIONS: readonly Migration[] = [
   preferencesTo2,
@@ -19,6 +20,7 @@ export const WORKSPACE_MIGRATIONS: readonly Migration[] = [
   workspaceTo2,
   workspaceTo3,
   workspaceTo4,
+  workspaceTo5,
 ];
 /** History and scripts start at version 1. */
 export const HISTORY_MIGRATIONS: readonly Migration[] = [];

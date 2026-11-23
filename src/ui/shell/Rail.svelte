@@ -4,6 +4,9 @@
   import { RAIL } from './rail.ts';
 
   let { page, onpage }: { page: Page; onpage: (p: Page) => void } = $props();
+
+  /** The tenth page is on Alt-0. */
+  const key = (i: number): string => String((i + 1) % 10);
 </script>
 
 <nav class="rail" aria-label="Pages" data-region="rail" tabindex="-1">
@@ -13,13 +16,13 @@
         <button
           type="button"
           aria-current={page === r.page ? 'page' : undefined}
-          aria-keyshortcuts={`Alt+${String(i + 1)}`}
+          aria-keyshortcuts={`Alt+${key(i)}`}
           onclick={() => {
             onpage(r.page);
           }}
         >
           <span>{r.label}</span>
-          <kbd class="muted" aria-hidden="true">Alt {i + 1}</kbd>
+          <kbd class="muted" aria-hidden="true">Alt {key(i)}</kbd>
         </button>
       </li>
     {/each}

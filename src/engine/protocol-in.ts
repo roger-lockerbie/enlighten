@@ -7,6 +7,7 @@ import { aliasProblem } from '../console/parse.ts';
 import { MAX_LINE } from '../console/history.ts';
 import type { Address } from '../dali/address.ts';
 import type { Command } from '../dali/codec.ts';
+import { parsePlates } from '../switch/schema.ts';
 import { parseLook, parseRunDef, parseTarget as parseAddress } from '../design/schema.ts';
 import { DEFAULT_CEILING_ARC } from '../safety/governor.ts';
 import { MAX_BYTES, scriptNameProblem } from '../script/parse.ts';
@@ -29,6 +30,8 @@ import {
 
 /** The most commands one request may carry. A transaction is a short group of frames. */
 export const MAX_COMMANDS = 16;
+/** The most sequences and effects a set of plates can name. */
+export const MAX_SWITCH_RUNS = 32;
 
 function parseCommand(x: unknown): Command | undefined {
   if (!isObj(x) || !isStr(x['id'], 64) || !/^[A-Z0-9_]+$/.test(x['id'])) return undefined;
@@ -236,6 +239,23 @@ function parseCall(x: unknown): Call | undefined {
     }
     case 'stopRun':
       return { op: 'stopRun' };
+    case 'switchPlates': {
+      const plates = parsePlates(x['plates']);
+      const runs = x['runs'];
+      if (!plates.ok || !Array.isArray(runs) || runs.length > MAX_SWITCH_RUNS) return undefined;
+      const defs = [];
+      for (const r of runs) {
+        const d = parseRunDef(r);
+        if (!d.ok) return undefined;
+        defs.push(d.value);
+      }
+      return { op: 'switchPlates', plates: plates.value, runs: defs };
+    }
+    case 'switchInput': {
+      const { plate, button, down } = x;
+      if (!isStr(plate, 16) || !isInt(button, 0, 3) || !isBool(down)) return undefined;
+      return { op: 'switchInput', plate, button, down };
+    }
     case 'extras': {
       const extras = parseExtras(x['extras']);
       return typeof extras === 'string' ? undefined : { op: 'extras', extras };

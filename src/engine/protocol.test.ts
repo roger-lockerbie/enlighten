@@ -120,7 +120,7 @@ describe('Stage 5 snapshots from the worker', () => {
     expect(
       parseFromWorker({
         type: 'snapshot',
-        snapshot: { ...base, light: [], feedback: [], bench: [], extras: [] },
+        snapshot: { ...base, light: [], feedback: [], bench: [], extras: [], switches: [] },
       }),
     ).toBeDefined();
     expect(parseFromWorker({ type: 'snapshot', snapshot: base })).toBeUndefined();

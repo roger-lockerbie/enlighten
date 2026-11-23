@@ -188,7 +188,8 @@
       w.looks !== undefined ||
       w.slots !== undefined ||
       w.sequences !== undefined ||
-      w.effects !== undefined
+      w.effects !== undefined ||
+      w.plates !== undefined
     ) {
       try {
         const m = await designCode();

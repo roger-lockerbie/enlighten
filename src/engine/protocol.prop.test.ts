@@ -219,6 +219,7 @@ describe('parseFromWorker', () => {
     feedback: [],
     bench: [],
     extras: [],
+    switches: [],
     latched: false,
     ceilingArc: 220,
   };

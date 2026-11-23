@@ -146,6 +146,10 @@ async function handle(e: Engine, call: Call): Promise<CallResult> {
     case 'stopRun':
       e.stopRun();
       return { ok: true };
+    case 'switchPlates':
+      return e.setSwitches(call.plates, call.runs);
+    case 'switchInput':
+      return e.switchInput(call.plate, call.button, call.down);
     case 'sceneWrite':
       return e.sceneWrite(call.address, call.slot, call.look, src);
     case 'sceneRemove':

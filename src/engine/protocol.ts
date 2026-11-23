@@ -9,6 +9,7 @@
 import type { Address } from '../dali/address.ts';
 import { parseTarget, type ParseContext } from '../console/parse.ts';
 import type { Look } from '../design/look.ts';
+import type { Plate } from '../switch/plate.ts';
 import type { Outcome } from '../safety/governor.ts';
 import type { Unlock } from '../safety/types.ts';
 import type { ExtraUnit, UnitSetup } from '../sim/settings.ts';
@@ -67,6 +68,19 @@ export type Call =
   /** Start a sequence or effect. The worker plans it again from this definition. */
   | { readonly op: 'runPlan'; readonly run: RunDef }
   | { readonly op: 'stopRun' }
+  /** Replace the switch plates, with the sequences and effects they name (SPEC R16). */
+  | {
+      readonly op: 'switchPlates';
+      readonly plates: readonly Plate[];
+      readonly runs: readonly RunDef[];
+    }
+  /** A switch button went down or up. */
+  | {
+      readonly op: 'switchInput';
+      readonly plate: string;
+      readonly button: number;
+      readonly down: boolean;
+    }
   /** Set the whole list of simulated drivers beyond the bench's two (SPEC R14.2). */
   | { readonly op: 'extras'; readonly extras: readonly ExtraUnit[] }
   /** A typed console line, with the page's aliases and `use` default. Parsed again in the worker. */
@@ -177,6 +191,7 @@ export function parseFromWorker(x: unknown): FromWorker | undefined {
         'feedback',
         'bench',
         'extras',
+        'switches',
       ])
         if (!Array.isArray(s[k])) return undefined;
       if (!isBool(s['latched']) || !isInt(s['ceilingArc'], 1, 254)) return undefined;
