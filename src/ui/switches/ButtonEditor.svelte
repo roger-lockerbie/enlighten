@@ -286,7 +286,7 @@
       >LED
       <select
         data-testid="led-mode"
-        disabled={plate.family === 'knx'}
+        disabled={plate.family !== 'zencontrol'}
         onchange={(e) => {
           onchange(setLed(plate, button, e.currentTarget.value as LedMode));
         }}
@@ -296,7 +296,9 @@
         {/each}
       </select></label
     >
-    {#if plate.family === 'knx'}
+    {#if plate.family === 'coupler'}
+      <p class="muted small">A coupler has no LEDs, so this plate shows none.</p>
+    {:else if plate.family === 'knx'}
       <p class="muted small">
         A KNX touch plate has one central LED. It is white while touched and orange for a touch of
         two surfaces at once.

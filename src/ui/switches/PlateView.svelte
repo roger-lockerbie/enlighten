@@ -127,7 +127,7 @@
       }}
     >
       <span class="name">{names[i] ?? ''}</span>
-      {#if plate.family !== 'knx'}
+      {#if plate.family === 'zencontrol'}
         <span
           class="led"
           class:lit={lit(i)}
@@ -230,6 +230,68 @@
   }
   .centre-led.multi {
     background: var(--warn);
+  }
+  /* A DALI-2 coupler behind a designer plate: a slim plate with round volt-free push buttons and no
+     LEDs, since a coupler has none (research section 4). */
+  .plate[data-family='coupler'] {
+    width: 5.5rem;
+    height: auto;
+    min-height: 10rem;
+    padding: 12px 8px;
+    gap: 12px;
+    justify-items: center;
+    align-content: space-evenly;
+    background: var(--text-muted);
+    border-color: var(--text);
+    border-radius: 10px;
+  }
+  .plate[data-family='coupler'].layout-4 {
+    width: 7.5rem;
+    grid-template: 1fr 1fr / 1fr 1fr;
+  }
+  .plate[data-family='coupler'] .pad {
+    width: 2.6rem;
+    height: 2.6rem;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--surface);
+  }
+  .plate[data-family='coupler'] .pad.pressed {
+    background: var(--line);
+    border-color: var(--accent);
+  }
+  .plate[data-family='coupler'] .name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  /* A KNX touch plate: a glass square with touch surfaces and no moving buttons, and one central LED
+     (research section 5). */
+  .plate[data-family='knx'] {
+    gap: 1px;
+    padding: 4px;
+    background: var(--viewport);
+    border-color: var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .plate[data-family='knx'] .pad {
+    background: var(--raised);
+    border: none;
+    border-radius: 0;
+    align-items: center;
+    opacity: 0.9;
+  }
+  .plate[data-family='knx'] .pad.pressed {
+    background: var(--line);
+    opacity: 1;
+  }
+  .plate[data-family='knx'] .pad.selected {
+    outline: 1px solid var(--accent);
+    outline-offset: -3px;
   }
   .events {
     list-style: none;
