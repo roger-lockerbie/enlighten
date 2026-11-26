@@ -92,6 +92,10 @@ The app is a static site under a strict Content Security Policy with Trusted Typ
 
 Enlighten is under the Apache License 2.0: see `LICENSE` and `NOTICE`. What a build carries from other projects, and under which licences, is in `THIRD_PARTY_NOTICES.md`.
 
+## Manual
+
+`docs/manual/` is the user manual: a guide to read in order, a concise reference, and tables of keys and commands. Start at `docs/manual/README.md`. Inside the app, press F1.
+
 ## Documents
 
 - `docs/BRIEF.md`: the goal and the requirements.

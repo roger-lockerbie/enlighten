@@ -15,7 +15,7 @@ import {
 import { GROUP_TITLES } from '../console/dali-help.ts';
 import { legend } from '../console/keys.ts';
 import { FRIENDLY } from '../console/parse.ts';
-import { APP_KEYS } from '../ui/shell/keys.ts';
+import { APP_KEYS, PICTURE_KEYS } from '../ui/shell/keys.ts';
 import { RAIL } from '../ui/shell/rail.ts';
 
 const NOTE =
@@ -59,6 +59,13 @@ function keysPage(): string {
     table(
       ['Key', 'Page'],
       [...RAIL.map((r, i) => [`Alt ${String((i + 1) % 10)}`, r.label]), ['F1', 'Manual']],
+    ),
+    '',
+    "## On the Visualiser's picture",
+    '',
+    table(
+      ['Keys', 'Does'],
+      PICTURE_KEYS.map(([keys, does]) => [keys, does]),
     ),
     '',
     '## In the console',

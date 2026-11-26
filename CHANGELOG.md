@@ -4,6 +4,16 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## Unreleased
 
+### Added
+
+- A user manual in `docs/manual/`: a guide of 14 chapters, a reference of 11 pages, and tables of keys, console commands and all 137 DALI commands generated from the app's own data. It is plain Markdown that reads as it is on GitHub and opens as an Obsidian vault (ADR 0024).
+- A Manual page in the app, opened with F1, from the foot of the rail, or with `manual [<page>]`. It has a contents list, search, and a "Put in console" button on each console line.
+- `pnpm manual:gen` and `pnpm manual:shots`, which write the generated pages and take the manual's pictures.
+
+### Changed
+
+- Settings shows the same list of keys the manual is built from. Its own list had gone out of date.
+
 ## 0.2.0
 
 Help and `explain` in the console, and a fix to 0.1.0. Nothing in the governor, the DALI core, the simulator or the bus changed.

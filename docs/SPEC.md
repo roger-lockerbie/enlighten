@@ -219,6 +219,13 @@ Stage 8 note on R14.2: a mount binds to any address from 0 to 63, but the simula
 - R15.1 Each mount chooses 60 LEDs/m, 120 LEDs/m or COB. A close-up camera shows dots where the diffuser and its distance would show them.
 - R15.2 Cameras: eye-level walk, orbit, and presets (down the hall, at the wall, close on the channel).
 
+**R17. Manual** (Stage 11b). ADR 0024.
+
+- R17.1 The manual is the Markdown in `docs/manual/`: a guide in order, a concise reference, and three pages generated from the app's own tables (keys, console commands, DALI commands).
+- R17.2 The app shows it on a Manual page, reached from the rail, F1 and `manual [<page>]`. It has a contents list, a search over titles and text, and previous and next. It keeps the page last read for the session.
+- R17.3 The page draws Markdown as elements and text nodes. A link goes only to a page of the manual. A picture is one the build carries. Nothing in a page is run, and the page sends nothing: "Put in console" copies a line to the console's input and no more.
+- R17.4 Every console line and script in the manual is one the app's parsers accept, and a statement about untried hardware is marked and listed in `docs/manual/hardware-ledger.md`.
+
 **R16. Switchgear** (Stage 10). Section 10.
 
 - R16.1 Plates with 1, 2 and 4 buttons, drawn generically with no logos.
@@ -315,6 +322,7 @@ An alias starts with a letter, is not a command name or keyword, and does not ma
 | `history [-c]`, `clear`                           | History, and clearing the screen                                              |
 | `help [<topic>]`, `help -k <word>`                | Help for a command of either kind or a topic, or a word looked up in all help |
 | `explain <line>`                                  | What a line would send, as commands and frames. It sends nothing              |
+| `manual [<page>]`                                 | Opens the manual, at a page named by its file, its title or part of its title |
 | `echo <text>`, `wait <time>`                      | As in scripts                                                                 |
 
 ### DALI commands
@@ -356,7 +364,7 @@ end        = "end"
 command    = any console command except those listed below
 ```
 
-Not allowed in a script: `unlock`, `lock`, `target`, `run`, `history`, `clear`, `use`, `resume`, `scripts`, and `cap` with a value above the present ceiling, which is refused when the step runs. Limits are in ADR 0007. Each step is echoed with its line number before it runs. `pause` is not echoed: it shows its message and waits for Enter. A refused step stops the script and reports the line. A script runs from the store or the built-ins, never from unsaved text in the editor. The built-in `first-light` follows `tools/first_light.py` step for step, using `level` and `tc` and `rgb` so every level is clamped.
+Not allowed in a script: `unlock`, `lock`, `target`, `run`, `history`, `clear`, `use`, `resume`, `scripts`, `explain`, `manual`, and `cap` with a value above the present ceiling, which is refused when the step runs. Limits are in ADR 0007. Each step is echoed with its line number before it runs. `pause` is not echoed: it shows its message and waits for Enter. A refused step stops the script and reports the line. A script runs from the store or the built-ins, never from unsaved text in the editor. The built-in `first-light` follows `tools/first_light.py` step for step, using `level` and `tc` and `rgb` so every level is clamped.
 
 ## 8. Workspace file
 

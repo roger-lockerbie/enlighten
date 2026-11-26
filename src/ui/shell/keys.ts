@@ -16,3 +16,12 @@ export const APP_KEYS: readonly (readonly [keys: string, does: string])[] = [
   ['Enter', 'Apply, in Commit mode'],
   ['Space, held', 'Hold a dim button'],
 ];
+
+/** Keys on the Visualiser's picture, when it has focus (docs/UI.md section 3). */
+export const PICTURE_KEYS: readonly (readonly [keys: string, does: string])[] = [
+  ['W, S', 'Walk forward or back a quarter metre, in the walk view'],
+  ['A, D', 'Step left or right a quarter metre, in the walk view'],
+  ['Shift with W, A, S, D', 'Step a metre'],
+  ['Left, Right, Up, Down', 'Move the probe by 2% of the picture, or 10% with Shift'],
+  ['Drag, and the wheel', 'Turn the view, and move in or out'],
+];

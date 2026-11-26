@@ -41,6 +41,16 @@ A single Escape keeps its usual meaning: it closes a dialog, cancels a search, o
 | Alt 0 | Switches |
 | F1 | Manual |
 
+## On the Visualiser's picture
+
+| Keys | Does |
+| --- | --- |
+| W, S | Walk forward or back a quarter metre, in the walk view |
+| A, D | Step left or right a quarter metre, in the walk view |
+| Shift with W, A, S, D | Step a metre |
+| Left, Right, Up, Down | Move the probe by 2% of the picture, or 10% with Shift |
+| Drag, and the wheel | Turn the view, and move in or out |
+
 ## In the console
 
 The console edits a line as a shell does. The last column lists keys that a browser keeps for itself in a normal tab on Windows and Linux. They work on a Mac, and in an app window anywhere.
