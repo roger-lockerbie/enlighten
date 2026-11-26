@@ -138,7 +138,7 @@ The emacs keymap in `docs/research/console.md` section 1, driven from one bindin
 | Stop a script          | Ctrl-C with no selection      |                                  |
 | Leave the console      | Escape, then Tab              |                                  |
 
-`help keys` and the legend in Settings show the table as it applies to the platform in use.
+`help keys` and the legend in Settings show the table as it applies to the platform in use. Help and `explain` print plain text lines in the console's log, with nothing drawn but text. Help wraps its own lines at 96 characters, and `explain` lines up its rows in columns (ADR 0023).
 
 The drawer holds a scrollback with the role `log`, the input, a status line and an alert region read out for refusals and panic. Each output line has a text prefix (`>`, `refused:`, `fault:`, `+` for a script step, `||` for a pause), so colour is never the only cue. Moving to the drawer by Ctrl-` or F6 puts the caret in the input.
 

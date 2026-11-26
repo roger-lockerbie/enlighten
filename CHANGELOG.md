@@ -4,6 +4,16 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## Unreleased
 
+### Added
+
+- `help <name>` for every DALI command the app supports: what it does, its frame and reply, the registers it uses, what the governor does with it, and an example. `help dali` lists all 137 by group, `help -k <word>` looks a word up, and `help hardware` states the holding rules (ADR 0023).
+- `explain <line>`: what a console line would send, as typeable commands and frames in hex, without sending anything (ADR 0023).
+- Tab completes DALI command names after `help`, and completes the line after `explain`.
+
+### Changed
+
+- The floor of the property tests' time limit is 5 minutes, up from 2, after two CI runs timed out on slow runners.
+
 ## 0.1.0
 
 The first release. Built by CI from the tag, with SHA-256 sums, two SBOMs and a build provenance attestation.

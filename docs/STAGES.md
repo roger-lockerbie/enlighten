@@ -244,6 +244,10 @@ Done when: there are no open high or critical findings, the release is published
 
 ---
 
+## Between stages: console help and explain
+
+Done on 2026-11-26, after Stage 11 and v0.1.0, at the owner's request and outside the numbered stages: help for every DALI command, `help -k`, and `explain` (ADR 0023). It was closed as a stage is: `pnpm verify`, the `security-reviewer` on the diff, the docs, a PR. `src/safety`, `src/dali`, `src/sim` and `src/bus` were not changed, so the `dali-reviewer` was not run. Stage 12 is unchanged, and its checklist gains one item for `explain`.
+
 ## Stage 12: Hardware day
 
 Run whenever the hasseb arrives, once Stage 4 is merged.
