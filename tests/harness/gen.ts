@@ -402,7 +402,11 @@ export async function play(
   return { rec, ceilings };
 }
 
-/** A test timeout that grows with the number of property runs: `perRunMs` a run, at least two minutes. */
+/**
+ * A test timeout that grows with the number of property runs: `perRunMs` a run, at least five minutes.
+ * The floor was two minutes until v0.1.0. The slowest properties take about 90 s under coverage on a
+ * usual CI runner and 150 s to 160 s on a slow one, which failed CI twice with no counterexample.
+ */
 export function timeout(runs: number, perRunMs = 1000): number {
-  return Math.max(120_000, runs * perRunMs);
+  return Math.max(300_000, runs * perRunMs);
 }

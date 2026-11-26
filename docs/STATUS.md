@@ -379,7 +379,7 @@ After the merge, on 2026-11-26:
 
 - CodeQL's first run found nothing in the TypeScript or the Python. Secret scanning has no alerts.
 - v0.1.0 is published with four files. Checked from a fresh download by the README's steps: `shasum -a 256 -c SHA256SUMS` passes, `gh attestation verify` passes for the archive and both SBOMs, and fails for a wrong tag and for a file with no attestation. The archive's `COMMIT` names `8d66815`.
-- `main`'s own CI run on `8d66815` failed once before the tag: three property tests in `ceiling.prop.test.ts` and `rate-console.prop.test.ts` hit their 120 s limit on a slow runner, with no counterexample (the test step took 434 s against about 255 s). A rerun of the job passed and the tag followed. These tests run at about 90 s each on a normal CI run, so the margin is thin and a slow runner will do this again. Not fixed.
+- `main`'s own CI run on `8d66815` failed once before the tag: three property tests in `ceiling.prop.test.ts` and `rate-console.prop.test.ts` hit their 120 s limit on a slow runner, with no counterexample (the test step took 434 s against about 255 s). A rerun of the job passed and the tag followed. These tests run at about 90 s each on a normal CI run, so the margin was thin. It happened again on the next PR, so the floor of the property tests' time limit went from 2 minutes to 5 (`tests/harness/gen.ts`). Why some runners are 1.7 times slower is not known.
 
 Not done, and why:
 
