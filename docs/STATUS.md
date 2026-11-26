@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next.
+Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next. After it, between stages, the console gained help for every DALI command and `explain` (ADR 0023), which is in review on `console-help-explain`.
 
 ## Done in Stage 0
 
@@ -390,7 +390,34 @@ Not done, and why:
 
 Open, none High: S9-P1 and S9-T1 (for the owner), S11-11, S11-13 to S11-16, S11-25, and the hardware-day items.
 
+## Between stages: console help and explain, in review
+
+Branch `console-help-explain`, on Fable, at the owner's request on 2026-11-26, after v0.1.0. It is outside the numbered stages and was closed as a stage is. Stage 12 is unchanged but for one new checklist item.
+
+What is in it:
+
+- **Help for DALI commands.** `help <name>` answers for all 137: what the command does, its frame and reply, the registers it uses, send-twice, what the governor does with it, and an example. `help dali` lists them by group, `help -k <word>` looks a word up, and `help hardware` lists the holding rules. Only the sentence saying what a command does is written by hand. The rest is built from the command table and the governor's rule table.
+- **`explain <line>`.** What a line would send, as typeable commands and frames in hex, with nothing sent. It runs the console's executor on a host that cannot act, and the engine compiles each intent in place of submitting it. It does not ask the governor. It covers `level`, `off`, `on`, `tc`, `rgb`, `fade`, `scene`, `group`, `query`, `raw` and DALI commands by name, and a script may not use it.
+- **A fix to v0.1.0 (SH-1).** `help constructor`, `query 0 constructor` and `target constructor` are turned away as unknown words.
+- **The help text is a chunk of its own**, loaded when help is first asked for, so the entry chunk stays within its budget (236 kB of 250 kB).
+
+Close:
+
+- `pnpm verify` passes: 3,264 unit and property tests with 1 expected failure (the saved S9-P1 case), 98.18% lines and 91.9% branches on the pure core, 66 preview e2e tests and 18 server e2e tests.
+- `security-reviewer` on the diff: **pass with follow-ups**. SH-1 to SH-9 are fixed and logged in `docs/SECURITY_FINDINGS.md`. The fixes, and the move of the help text to its own chunk, were made after the review and have not been reviewed again.
+- `src/safety`, `src/dali`, `src/sim` and `src/bus` were not changed, so `dali-reviewer` and `pnpm mutate` were not run.
+
+Not done, and why:
+
+- **The descriptions are not checked against IEC 62386**, which is paywalled. They are written from the public sources in `docs/research/dali.md`. 24 of the 137 describe commands those notes name without describing, and help says so on each.
+- **`explain` gives no verdict from the governor**, only the clamp to the ceiling. A verdict without side effects needs a change in `src/safety` and its own review.
+- **`explain` does not cover `scan`, `profile apply`, `cap`, `panic` or `target`**, whose frames the engine builds as it goes.
+- **Not tried on hardware.** The test plan's section 10 has an item for it.
+- **No version or tag.** The changes are under Unreleased in the changelog. A 0.2.0 is the owner's call.
+
 ## Next
+
+- The owner's review of the help and explain PR, and whether to tag a 0.2.0.
 
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
 - Stage 12 (hardware day) on Opus, whenever the hasseb arrives.
