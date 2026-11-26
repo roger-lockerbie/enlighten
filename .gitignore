@@ -19,3 +19,4 @@ server/.venv/
 .pytest_cache/
 test-results-perf/
 sbom/
+release/
