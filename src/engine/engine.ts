@@ -64,7 +64,13 @@ import {
 } from './hwcheck.ts';
 import { parseLine, type ParseContext } from '../console/parse.ts';
 import { parseScript } from '../script/parse.ts';
-import { ConsoleExec, fadeReadBack, type ConsoleHost, type ConsoleLine } from './console.ts';
+import {
+  ConsoleExec,
+  fadeReadBack,
+  type Compiled,
+  type ConsoleHost,
+  type ConsoleLine,
+} from './console.ts';
 import { readFacts, type DriverFacts } from './inventory.ts';
 import { Router } from './router.ts';
 import { send, StepError, toSubmitted, txOf } from './submit.ts';
@@ -1782,6 +1788,7 @@ export class Engine {
         if (job.aborted) return { ok: false, kind: 'dropped', reason: job.why ?? 'Stopped.' };
         return this.request(intent, source);
       },
+      compile: (intent) => this.compile(intent),
       devices: () => this.deviceViews(),
       ceilingArc: () => this.ceiling,
       dtr: () => this.active()?.governor.dtrView() ?? [],
@@ -1805,6 +1812,48 @@ export class Engine {
       sleep: (ms) => this.sleepIn(job, ms),
       stopped,
     };
+  }
+
+  /**
+   * An intent as the commands it would be sent as, for the console's `explain` (ADR 0023). It reads
+   * the active connection's facts and the shadow's present level, as a real Apply does, and sends
+   * nothing, asks the governor nothing and changes nothing.
+   */
+  compile(intent: Intent): Compiled | string {
+    const conn = this.active() ?? this.simConn;
+    switch (intent.kind) {
+      case 'commands':
+        return { commands: [...intent.commands], notes: [] };
+      case 'raw': {
+        const c = decode({ a: intent.a & 0xff, b: intent.b & 0xff });
+        return c === undefined
+          ? 'That frame is not a supported command on its own.'
+          : { commands: [c], notes: [] };
+      }
+      case 'apply': {
+        const cmds = this.compileApply(conn, intent);
+        if (typeof cmds === 'string') return cmds;
+        if (cmds.length === 0) return 'Nothing to apply.';
+        const colour = intent.mirek !== undefined || intent.channels !== undefined;
+        const { arc, ...rest } = intent;
+        const split =
+          colour &&
+          conn.governor.target === 'hardware' &&
+          conn.governor.addressInfo(intent.address)?.colourKnown === false;
+        if (!split || arc === undefined) return { commands: cmds, notes: [] };
+        // As `request` sends it: the colour with its ACTIVATE, then the level on its own.
+        const first = this.compileApply(conn, rest);
+        if (typeof first === 'string') return first;
+        return {
+          commands: [...first, { id: 'DAPC', address: short(intent.address), value: arc }],
+          notes: [
+            'On hardware the colour goes first, and the level follows on its own once the governor allows it (ADR 0019).',
+          ],
+        };
+      }
+      default:
+        return 'explain does not cover that.';
+    }
   }
 
   /** A wait that ends early when its job is stopped. */

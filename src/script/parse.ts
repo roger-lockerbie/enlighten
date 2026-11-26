@@ -33,6 +33,7 @@ export const NOT_IN_SCRIPTS: readonly CommandName[] = [
   'use',
   'resume',
   'scripts',
+  'explain',
 ];
 
 export interface Step {

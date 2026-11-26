@@ -361,7 +361,8 @@ export class ConsoleState {
         this.out = [];
         return;
       case 'help':
-        for (const l of help(c.topic, this.platform)) this.print('out', l);
+        for (const l of help(c.find === undefined ? c.topic : { find: c.find }, this.platform))
+          this.print('out', l);
         return;
       case 'use':
         if (c.to === undefined) {

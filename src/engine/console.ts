@@ -3,9 +3,12 @@
  * engine with a source, `console` for a typed line and `script` for a script step, and prints what
  * happened. Every frame goes through `Engine.request`, so through the scheduler and the governor, like
  * any other source (SPEC S2.2). Nothing here sends a frame itself.
+ *
+ * `explain` runs the same code with a host that cannot send (ADR 0023): where a real run would
+ * submit an intent, it asks the engine what the intent would be as commands and prints them.
  */
 import type { Address } from '../dali/address.ts';
-import { decode, decodeSpec, type Command } from '../dali/codec.ts';
+import { commandText, decode, decodeSpec, frameText, type Command } from '../dali/codec.ts';
 import { spec } from '../dali/commands.ts';
 import { percentText } from '../dali/curve.ts';
 import { extendedFades, fadeInUse, standardFades } from '../dali/fade.ts';
@@ -13,6 +16,7 @@ import { decodeFadeTimeRate } from '../dali/reply.ts';
 import {
   fadeCommands,
   mirekToKelvin,
+  framesFor,
   queryColourValueCommands,
   rgbwafCommands,
   tcCommands,
@@ -26,6 +30,7 @@ import type {
   UnlockName,
 } from '../console/parse.ts';
 import { COLLISION, NO_REPLY, replyText, type Answer } from '../console/replies.ts';
+import { lineOf } from '../console/unparse.ts';
 import { msText } from '../console/values.ts';
 import type { Outcome } from '../safety/governor.ts';
 import type { Source } from '../safety/types.ts';
@@ -40,9 +45,20 @@ export interface ConsoleLine {
   readonly text: string;
 }
 
+/** An intent as the commands it would be sent as, with anything worth saying about how they go. */
+export interface Compiled {
+  readonly commands: readonly Command[];
+  readonly notes: readonly string[];
+}
+
 /** The engine as the executor sees it. */
 export interface ConsoleHost {
   request(intent: Intent, source: Source): Promise<RequestResult>;
+  /**
+   * What an intent would be sent as, or why it cannot be built. It sends nothing, asks the governor
+   * nothing and changes nothing: `explain` rests on that.
+   */
+  compile(intent: Intent): Compiled | string;
   devices(): readonly DeviceView[];
   ceilingArc(): number;
   /** DTR0 to DTR2 as the governor knows them now, undefined where unknown. */
@@ -140,17 +156,128 @@ export function fadeReadBack(a: Address): Command[] {
   ];
 }
 
+const EXPLAIN_SENDS_NOTHING = 'explain sends nothing.';
+
+/**
+ * A host for `explain`: it reads what the real one reads and can do nothing else. Every method that
+ * would send a frame or change the app's state refuses, so a mistake in the executor's explain path
+ * cannot reach the bus (ADR 0023).
+ */
+export function dryHost(real: ConsoleHost): ConsoleHost {
+  const refused: Outcome = { ok: false, reason: EXPLAIN_SENDS_NOTHING };
+  return {
+    request: () => Promise.resolve({ ok: false, reason: EXPLAIN_SENDS_NOTHING, kind: 'refused' }),
+    compile: (intent) => real.compile(intent),
+    devices: () => real.devices(),
+    ceilingArc: () => real.ceilingArc(),
+    dtr: () => real.dtr(),
+    target: () => real.target(),
+    connectionText: () => real.connectionText(),
+    setCeiling: () => Promise.resolve(refused),
+    setTarget: () => Promise.resolve(refused),
+    rescan: () => Promise.resolve(refused),
+    reapplyProfile: () => Promise.resolve(refused),
+    reset: () => Promise.resolve(refused),
+    unlock: () => refused,
+    lock: () => undefined,
+    resume: () => refused,
+    panic: () => Promise.resolve(),
+    now: () => real.now(),
+    sleep: () => Promise.resolve(),
+    stopped: () => real.stopped(),
+  };
+}
+
+/** Lines `explain` prints for some commands: the line that sends each, its frames, and its name. */
+export function explainLines(cmds: readonly Command[]): string[] {
+  const rows = cmds.map((c) => {
+    const frames = framesFor(c);
+    const main = frames[frames.length - 1];
+    const s = spec(c.id);
+    const hex = frames.map((f) => frameText(f.frame)).join(', ') + (s.sendTwice ? ' x2' : '');
+    const name =
+      (s.deviceType === 0 ? '' : `ENABLE DEVICE TYPE ${String(s.deviceType)}, then `) +
+      commandText(c) +
+      (s.sendTwice ? ', sent twice' : '') +
+      (main?.expectReply === true ? ', answers' : '');
+    return { line: lineOf(c), hex, name };
+  });
+  const w1 = Math.min(44, Math.max(...rows.map((r) => r.line.length)));
+  const w2 = Math.max(...rows.map((r) => r.hex.length));
+  return rows.map((r) => `  ${r.line.padEnd(w1)}  ${r.hex.padEnd(w2)}  ${r.name}`);
+}
+
+/** Frames on the bus for some commands, a send-twice command counting twice. */
+export function frameCount(cmds: readonly Command[]): number {
+  return cmds.reduce((n, c) => n + framesFor(c).reduce((m, f) => m + (f.sendTwice ? 2 : 1), 0), 0);
+}
+
 export class ConsoleExec {
   private readonly host: ConsoleHost;
   private readonly o: ExecOptions;
+  /** True for the executor `explain` runs: it prints what would be sent and sends nothing. */
+  private readonly dry: boolean;
+  /** In an explain: the commands and frames shown so far. */
+  private shown = { commands: 0, frames: 0 };
 
-  constructor(host: ConsoleHost, o: ExecOptions) {
+  constructor(host: ConsoleHost, o: ExecOptions, dry = false) {
     this.host = host;
     this.o = o;
+    this.dry = dry;
   }
 
   private out(kind: ConsoleLineKind, text: string): void {
+    // An explain has no results to report: nothing was sent and nothing answered.
+    if (this.dry && (kind === 'out' || kind === 'reply')) return;
     this.o.out({ kind, text });
+  }
+
+  /**
+   * `explain <line>`: run the line with a host that cannot send, printing what each step would be
+   * sent as. The governor is not asked, because asking it records an approval (ADR 0023).
+   */
+  private async explain(c: Extract<ConsoleCommand, { cmd: 'explain' }>): Promise<boolean> {
+    const target = this.host.target();
+    this.o.out({
+      kind: 'out',
+      text: `explain ${c.line}: with the target ${target}, this would send:`,
+    });
+    const dry = new ConsoleExec(dryHost(this.host), this.o, true);
+    await dry.run(c.inner);
+    const { commands, frames } = dry.shown;
+    const plural = (n: number, w: string) => `${String(n)} ${w}${n === 1 ? '' : 's'}`;
+    this.o.out({
+      kind: 'out',
+      text:
+        commands === 0
+          ? 'Nothing would be sent.'
+          : `${plural(commands, 'command')}, ${plural(frames, 'frame')} on the bus. Nothing was sent.`,
+    });
+    if (commands > 0)
+      this.o.out({
+        kind: 'note',
+        text: 'The governor judges a line when it is sent, and may clamp, hold or refuse it.',
+      });
+    return true;
+  }
+
+  /** In an explain: print an intent as its commands, in place of submitting it. */
+  private show(intent: Intent): RequestResult {
+    const c = this.host.compile(intent);
+    if (typeof c === 'string') return { ok: false, reason: c, kind: 'refused' };
+    for (const l of explainLines(c.commands)) this.o.out({ kind: 'out', text: l });
+    for (const n of c.notes) this.o.out({ kind: 'note', text: n });
+    // The one thing the governor would do that can be told from here: its clamp to the ceiling.
+    const ceiling = this.host.ceilingArc();
+    for (const d of c.commands)
+      if (d.id === 'DAPC' && d.value !== undefined && d.value !== 255 && d.value > ceiling)
+        this.o.out({
+          kind: 'note',
+          text: `The ceiling is ${String(ceiling)}, so the governor would send DAPC ${String(d.value)} as ${String(ceiling)}.`,
+        });
+    this.shown.commands += c.commands.length;
+    this.shown.frames += frameCount(c.commands);
+    return { ok: true, answers: [] };
   }
 
   /** Run one command. False when it was refused, faulted or stopped, which ends a script. */
@@ -251,8 +378,11 @@ export class ConsoleExec {
         await this.host.sleep(c.ms);
         return !this.host.stopped();
       case 'help':
-        for (const l of help(c.topic, 'other')) this.out('out', l);
+        for (const l of help(c.find === undefined ? c.topic : { find: c.find }, 'other'))
+          this.out('out', l);
         return true;
+      case 'explain':
+        return this.explain(c);
       case 'pause':
         this.out('error', 'pause works only in a script.');
         return false;
@@ -294,6 +424,7 @@ export class ConsoleExec {
     first: Intent,
     again?: () => Promise<Intent | undefined>,
   ): Promise<RequestResult> {
+    if (this.dry) return this.show(first);
     const start = this.host.now();
     let said = false;
     let intent = first;
@@ -580,7 +711,18 @@ export class ConsoleExec {
       }
       return v;
     };
-    let arc = c.arc ?? (await readLevel());
+    let arc: number | undefined;
+    if (this.dry && c.arc === undefined) {
+      // Nothing answers in an explain, so the level that would be read is not known.
+      await this.ask(
+        [{ id: 'QUERY_ACTUAL_LEVEL', address: a }],
+        `level ${addressText(a)}`,
+        a,
+        many,
+      );
+      this.out('note', `${p}DTR0 then carries the level that was read. It is shown as 0 here.`);
+      arc = 0;
+    } else arc = c.arc ?? (await readLevel());
     if (arc === undefined) return false;
     const storeIntent = (v: number): Intent => ({
       kind: 'commands',
@@ -605,6 +747,7 @@ export class ConsoleExec {
         : undefined,
     );
     if (!r.ok) return this.failed(r, p);
+    if (this.dry) return true;
     const back = r.answers[0];
     if (back !== arc) {
       this.out(
@@ -737,6 +880,14 @@ export class ConsoleExec {
       'note',
       `${at} goes to full output for about 0.3 s, then OFF, then the safety profile is written again.`,
     );
+    if (this.dry) {
+      this.show({ kind: 'commands', commands: [{ id: 'RESET', address: a }] });
+      this.out(
+        'note',
+        'The OFF and the safety profile that follow are not listed. It needs the reset unlock.',
+      );
+      return true;
+    }
     const r = await this.host.reset(a.n, this.o.source);
     if (!r.ok) {
       this.out('refused', `refused: ${r.reason}`);

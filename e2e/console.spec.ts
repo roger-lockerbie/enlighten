@@ -116,3 +116,55 @@ test('an unlock needs its name typed, and a raise of the ceiling its value', asy
   await expect(page.getByTestId('ceiling')).toContainText('arc 210', { timeout: 30_000 });
   await noProblems(w);
 });
+
+test('help explains a DALI command, and explain lists frames without sending them', async ({
+  page,
+}) => {
+  const w = await openApp(page);
+  await openConsole(page);
+  const log = consoleLog(page);
+  await typeLine(page, 'help query-actual-level');
+  await expect(log).toContainText(
+    'query-actual-level <addr>     QUERY ACTUAL LEVEL, IEC 62386-102',
+  );
+  await expect(log).toContainText('Answers the present arc level.');
+  await expect(log).toContainText('Governor: Allowed. Unverified gear takes it too.');
+  await typeLine(page, 'help -k mirek');
+  await expect(log).toContainText('set-temporary-colour-temperature: ');
+  // Tab completes a DALI name after help.
+  const input = page.getByTestId('console-input');
+  await input.focus();
+  await page.keyboard.type('help recall-ma');
+  await page.keyboard.press('Tab');
+  await expect(input).toHaveValue('help recall-max-level ');
+  await page.keyboard.press('Enter');
+  await expect(log).toContainText('RECALL MAX LEVEL, IEC 62386-102');
+
+  // Explain: the frames a line would send, with the light left as it was.
+  await typeLine(page, 'level 0 100');
+  await expect(log).toContainText('A0 level 100');
+  await page.keyboard.press('Control+Backquote');
+  await page
+    .getByRole('navigation', { name: 'Pages' })
+    .getByRole('button', { name: 'Bus monitor' })
+    .click();
+  const kept = page.getByText(/\d+ frames kept/);
+  await expect(kept).toBeVisible();
+  const before = await kept.textContent();
+  await openConsole(page);
+  await typeLine(page, 'explain tc 0 3000K 30%');
+  await expect(log).toContainText(
+    'explain tc 0 3000K 30%: with the target simulator, this would send:',
+  );
+  await expect(log).toContainText('set-temporary-colour-temperature 0  C1 08, 01 E7');
+  await expect(log).toContainText('dapc 0 210');
+  await expect(log).toContainText('4 commands, 5 frames on the bus. Nothing was sent.');
+  await typeLine(page, 'explain cap 40%');
+  await expect(log).toContainText('explain covers commands that send DALI frames themselves');
+  await typeLine(page, 'query 0 level');
+  await expect(log).toContainText('actual level 100 ');
+  // One frame since: the query. The explains added none.
+  const n = (s: string | null) => Number(/(\d+) frames kept/.exec(s ?? '')?.[1]);
+  await expect.poll(async () => n(await kept.textContent())).toBe(n(before) + 1);
+  await noProblems(w);
+});

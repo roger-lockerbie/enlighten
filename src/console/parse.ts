@@ -65,7 +65,9 @@ export type ConsoleCommand =
   | { readonly cmd: 'scripts' }
   | { readonly cmd: 'history'; readonly args: readonly string[] }
   | { readonly cmd: 'clear' }
-  | { readonly cmd: 'help'; readonly topic?: string }
+  | { readonly cmd: 'help'; readonly topic?: string; readonly find?: string }
+  /** What another line would send, worked out without sending it. `line` is that line as typed. */
+  | { readonly cmd: 'explain'; readonly line: string; readonly inner: ConsoleCommand }
   | { readonly cmd: 'echo'; readonly text: string }
   | { readonly cmd: 'wait'; readonly ms: number }
   | { readonly cmd: 'pause'; readonly text?: string }
@@ -106,12 +108,33 @@ export const FRIENDLY = [
   'history',
   'clear',
   'help',
+  'explain',
   'echo',
   'wait',
   'pause',
   'use',
   'raw',
 ] as const;
+
+/**
+ * What `explain` covers: the commands that are sent as DALI frames just as written. The others act
+ * on the app, or send a sequence the engine builds as it goes (scan, profile, cap, panic).
+ */
+export const EXPLAINABLE: readonly CommandName[] = [
+  'level',
+  'off',
+  'on',
+  'tc',
+  'rgb',
+  'fade',
+  'scene',
+  'group',
+  'query',
+  'raw',
+  'dali',
+];
+const EXPLAINABLE_TEXT =
+  'level, off, on, tc, rgb, fade, scene, group, query, raw and any DALI command by name';
 
 /** Words for `query <addr> <what>`, besides any query command's name without `query-`. */
 export const QUERY_WORDS: Readonly<Record<string, QueryWhat>> = {
@@ -571,12 +594,32 @@ export function parseLine(line: string, ctx: ParseContext): ParseResult {
     case 'history':
       return ok({ cmd: 'history', args: args.map((a) => a.text) });
     case 'help':
-      if (n > 1) return fail('help takes one topic.');
+      if (word(args[0]) === '-k') {
+        const w = args[1];
+        if (w === undefined || n > 2) return fail('help -k takes one word to look for.');
+        return ok({ cmd: 'help', find: w.text.toLowerCase() });
+      }
+      if (n > 1) return fail('help takes one topic, or -k and a word to look for.');
       return ok(
         args[0] === undefined
           ? { cmd: 'help' }
           : { cmd: 'help', topic: args[0].text.toLowerCase() },
       );
+    case 'explain': {
+      const first = args[0];
+      if (first === undefined) return fail('explain takes a command, such as explain tc 0 3000K.');
+      const rest = line.slice(first.start);
+      const inner = parseLine(rest, ctx);
+      if (!inner.ok) return inner;
+      const c = inner.command;
+      if (c === undefined || !EXPLAINABLE.includes(c.cmd))
+        return fail(
+          `explain covers commands that send DALI frames themselves: ${EXPLAINABLE_TEXT}. For ${c?.cmd ?? 'that'}, see help.`,
+        );
+      // The line without a trailing comment, as the answer names it.
+      const last = lexed.tokens[lexed.tokens.length - 1] ?? first;
+      return ok({ cmd: 'explain', line: line.slice(first.start, last.end), inner: c });
+    }
     case 'echo':
       return ok({ cmd: 'echo', text: args.map((a) => a.text).join(' ') });
     case 'wait': {

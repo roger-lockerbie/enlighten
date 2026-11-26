@@ -56,7 +56,10 @@ function candidates(words: readonly string[], ctx: CompleteContext): string[] {
     case 'run':
       return at === 1 ? [...ctx.scripts] : [];
     case 'help':
-      return at === 1 ? [...HELP_TOPICS] : [];
+      return at === 1 ? [...HELP_TOPICS, ...DALI_NAMES.keys()] : [];
+    case 'explain':
+      // The rest of the line completes as the line it explains.
+      return candidates(words.slice(1), ctx);
     case 'unlock':
     case 'lock':
       return at === 1 ? [...UNLOCKS] : [];

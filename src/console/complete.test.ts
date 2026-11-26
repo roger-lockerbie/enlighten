@@ -47,6 +47,12 @@ describe('complete', () => {
     expect(at('query 0 act')?.text).toBe('actual-level ');
     expect(at('query 0 lev')?.text).toBe('level ');
     expect(at('help ke')?.text).toBe('keys ');
+    // Help takes DALI command names, and explain completes as the line it explains.
+    expect(at('help query-act')?.text).toBe('query-actual-level ');
+    expect(at('help expl')?.text).toBe('explain ');
+    expect(at('explain sce')?.text).toBe('scene ');
+    expect(at('explain scene 0 re')?.items).toEqual(['recall', 'remove']);
+    expect(at('explain help ke')?.text).toBe('keys ');
     expect(at('unlock r')?.items).toEqual(['rate', 'reset']);
     expect(at('lock e')?.text).toBe('expert ');
     expect(at('target b')?.text).toBe('both ');
@@ -139,10 +145,9 @@ describe('help', () => {
     expect(help(undefined, 'mac')[0]).toContain('Commands:');
     for (const t of HELP_TOPICS) expect(help(t, 'mac').length).toBeGreaterThan(0);
     expect(help('level', 'mac')[0]).toBe('level <addr> <value> [fade <time>]');
-    expect(help('recall-max-level', 'mac')).toEqual([
-      'recall-max-level is a DALI command. See help dali.',
-    ]);
-    expect(help('nope', 'mac')).toEqual(['No help for "nope". Type help for the list.']);
+    expect(help('recall-max-level', 'mac')[0]).toBe(
+      'recall-max-level <addr>     RECALL MAX LEVEL, IEC 62386-102',
+    );
   });
 
   it('prints the keys from the binding table, for the platform in use', () => {

@@ -54,6 +54,10 @@ class FakeHardware implements HardwareTransport {
   sendPanic(f: TxFrame): Promise<SendResult> {
     return this.inner.sendPanic(f);
   }
+  /** How many frames have been sent to the gear. */
+  frames(): number {
+    return this.inner.log.length;
+  }
   drop(): void {
     this.st = 'down';
     this.engine?.onTransportState('down', 'The connection to the server closed.');
@@ -226,6 +230,52 @@ describe('hardware and Both', () => {
     expect(s.devices).toEqual([]);
     await settle();
     expect(engine.snapshot().devices.every((d) => d.verified)).toBe(true);
+    engine.dispose();
+  });
+
+  it('explains a colour with a level as hardware takes it: colour first, then the level, and sends nothing (ADR 0023)', async () => {
+    const { engine, settle, drive, hw, simTransport } = setup();
+    await settle();
+    await drive(engine.setTarget('hardware', 'ui'));
+    await settle();
+    const text = (from: number) =>
+      engine
+        .snapshot()
+        .console.filter((l) => l.seq > from)
+        .map((l) => l.text);
+    const seq = () => engine.snapshot().console.at(-1)?.seq ?? 0;
+    const sentHw = hw?.frames() ?? 0;
+    const sentSim = simTransport.log.length;
+    let from = seq();
+    const r = await drive(engine.console('explain tc 0 3000K 30%', { aliases: new Map() }));
+    expect(r.ok).toBe(true);
+    const out = text(from);
+    expect(out[0]).toBe('explain tc 0 3000K 30%: with the target hardware, this would send:');
+    expect(out.filter((l) => l.startsWith('  ')).map((l) => l.trim().split(/ {2,}/)[0])).toEqual([
+      'dtr0 77',
+      'dtr1 1',
+      'set-temporary-colour-temperature 0',
+      'activate 0',
+      'dapc 0 210',
+    ]);
+    expect(out).toContain(
+      'On hardware the colour goes first, and the level follows on its own once the governor allows it (ADR 0019).',
+    );
+    // A fade setting is read back on hardware, and explain shows the queries.
+    from = seq();
+    await drive(engine.console('explain fade 0 rate 7', { aliases: new Map() }));
+    expect(
+      text(from)
+        .filter((l) => l.startsWith('  '))
+        .map((l) => l.trim().split(/ {2,}/)[0]),
+    ).toEqual([
+      'dtr0 7',
+      'set-fade-rate 0',
+      'query-fade-time-fade-rate 0',
+      'query-extended-fade-time 0',
+    ]);
+    expect(hw?.frames()).toBe(sentHw);
+    expect(simTransport.log.length).toBe(sentSim);
     engine.dispose();
   });
 
