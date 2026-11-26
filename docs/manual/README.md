@@ -17,11 +17,38 @@ This manual is for version 0.2.0 and later. It has two halves, written from the 
 
 ## Guide
 
-1. [The ceiling and panic](guide/02-ceiling-and-panic.md)
+Read in order. Each chapter ends with what to keep from it.
+
+1. [The bench and the app](guide/01-the-bench.md)
+2. [The ceiling and panic](guide/02-ceiling-and-panic.md)
+3. [Drivers, real and simulated](guide/03-simulated-drivers.md)
+4. [Levels and colour](guide/04-levels-and-colour.md)
+5. [Fades](guide/05-fades.md)
+6. [Looks](guide/06-looks.md)
+7. [Sequences](guide/07-sequences.md)
+8. [Effects](guide/08-effects.md)
+9. [Switches](guide/09-switches.md)
+10. [The visualiser](guide/10-visualiser.md)
+11. [The console](guide/11-console.md)
+12. [Scripts](guide/12-scripts.md)
+13. [Saving and moving work](guide/13-saving-work.md)
+14. [The first session on hardware](guide/14-hardware.md)
 
 ## Reference
 
-- [Safety](reference/safety.md)
+| Page                                                | For                                                        |
+| --------------------------------------------------- | ---------------------------------------------------------- |
+| [Quick start](reference/quick-start.md)             | Running it, and the first minute                           |
+| [Safety](reference/safety.md)                       | Panic, the rate guard, verified gear, the ceiling, unlocks |
+| [Pages](reference/pages.md)                         | Every page and its controls                                |
+| [Console](reference/console.md)                     | Syntax, addresses, values, replies, editing                |
+| [Scripts](reference/scripts.md)                     | The format, its limits, running                            |
+| [Looks, sequences and effects](reference/design.md) | Fields, states, every effect's settings                    |
+| [Switches](reference/switches.md)                   | Events, timers, mapping                                    |
+| [Visualiser](reference/visualiser.md)               | Camera, view, mounts, hallway                              |
+| [Hardware](reference/hardware.md)                   | The server, the three targets, the holding rules           |
+| [Files and storage](reference/files.md)             | The workspace file, imports, exports                       |
+| [Refusals and messages](reference/messages.md)      | What the app says, and what to do                          |
 
 ## Tables
 

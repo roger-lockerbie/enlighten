@@ -35,7 +35,8 @@ const SIZE = 22;
 async function place(callouts: readonly Callout[]): Promise<Mark[]> {
   const marks: Mark[] = [];
   for (const [i, c] of callouts.entries()) {
-    await c.at.scrollIntoViewIfNeeded();
+    // The page is not scrolled here: a scroll would move the controls already measured. A test
+    // scrolls to what it wants in the picture before it calls `shot`.
     const box = await c.at.boundingBox();
     if (box === null) throw new Error(`Callout ${String(i + 1)} points at nothing on the page.`);
     const corner = c.corner ?? 'top-left';
@@ -113,15 +114,32 @@ async function clear(page: Page): Promise<void> {
 export async function shot(
   page: Page,
   name: string,
-  o: { callouts?: readonly Callout[]; of?: Locator; margin?: number } = {},
+  o: { callouts?: readonly Callout[]; of?: Locator | readonly Locator[]; margin?: number } = {},
 ): Promise<void> {
   await page.mouse.move(0, 0);
   const marks = await place(o.callouts ?? []);
   await draw(page, marks);
   let clip: Box | undefined;
   if (o.of !== undefined) {
-    const b = await o.of.boundingBox();
-    if (b === null) throw new Error(`${name}: the part to picture is not on the page.`);
+    // Several parts make one picture: the smallest rectangle that holds them all.
+    const parts = 'boundingBox' in o.of ? [o.of] : o.of;
+    let b: Box | undefined;
+    for (const part of parts) {
+      const p = await part.boundingBox();
+      if (p === null) throw new Error(`${name}: a part to picture is not on the page.`);
+      if (b === undefined) b = p;
+      else {
+        const x = Math.min(b.x, p.x);
+        const y = Math.min(b.y, p.y);
+        b = {
+          x,
+          y,
+          width: Math.max(b.x + b.width, p.x + p.width) - x,
+          height: Math.max(b.y + b.height, p.y + p.height) - y,
+        };
+      }
+    }
+    if (b === undefined) throw new Error(`${name}: nothing to picture.`);
     const m = o.margin ?? 16;
     const view = page.viewportSize() ?? { width: 1440, height: 900 };
     const x = Math.max(0, Math.floor(b.x - m));
@@ -129,8 +147,8 @@ export async function shot(
     clip = {
       x,
       y,
-      width: Math.min(view.width - x, Math.ceil(b.width + 2 * m)),
-      height: Math.min(view.height - y, Math.ceil(b.height + 2 * m)),
+      width: Math.min(view.width - x, Math.ceil(b.x + b.width + m) - x),
+      height: Math.min(view.height - y, Math.ceil(b.y + b.height + m) - y),
     };
   }
   await page.screenshot({

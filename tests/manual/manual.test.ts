@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseLine, type ParseContext } from '../../src/console/parse.ts';
+import { parseScript } from '../../src/script/parse.ts';
 import { buildBook, resolveLink, resolvePath } from '../../src/manual/book.ts';
 import { generatedPages } from '../../src/manual/generate.ts';
 import type { Block, Inline } from '../../src/manual/markdown.ts';
@@ -116,6 +117,16 @@ describe('every page', () => {
             lines++;
           }
     expect(lines).toBeGreaterThan(0);
+  });
+
+  it('gives scripts the script parser accepts', () => {
+    const ctx: ParseContext = { aliases: new Map() };
+    for (const p of book.pages)
+      for (const b of blocksOf(p.doc.blocks))
+        if (b.t === 'code' && b.lang === 'script') {
+          const r = parseScript(b.text, ctx);
+          expect(r.ok ? [] : r.errors, p.path).toEqual([]);
+        }
   });
 
   it('marks code blocks with a kind the viewer knows', () => {
