@@ -211,7 +211,7 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 - [ ] Send twice with a frame to the other driver in between.
 - [ ] Twenty UPs at fade rate 15, querying after each.
 - [ ] Level 100, SET MIN LEVEL 150, query: does raising MIN lift the level.
-- [ ] DAPC 200, SET MAX LEVEL 150, query at once and after 2 s. Repeat during a slow fade upward.
+- [ ] DAPC 200, SET MAX LEVEL 150, query at once and after 2 s. Repeat during a slow fade upward. Poll in between: if the DA5-L fades that pull, or the lift from SET MIN LEVEL above, it is a level fade the rule of ADR 0022 does not see (S11-13).
 - [ ] GO TO LAST ACTIVE LEVEL at a known level, and query.
 - [ ] If QUERY MIN FAST FADE TIME shows support, time a fade at a count of 27 (675 or 700 ms).
 - [ ] An extended fade of 16 minutes, timed.
@@ -247,7 +247,7 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 
 On Hardware and Both the rate guard trusts nothing about the drivers that it has not sent (ADR 0019 amendments 1 and 2). That is a holding position, taken because the simulator stood in for drivers nobody had on a bench. This part finds out what the real DA5-L does. Each answer goes into `docs/research/da5-l.md` and into the simulator's profile, so the two agree, and each hardware rule it supports is then relaxed by its own ADR. Nothing here is relaxed on a guess.
 
-Run it with the tapes at a low level or covered. The steps are not built yet: the app's hardware check has steps for parts 2 to 4 only, and adding these is part of Stage 12. Most can go through the governor one at a time with the waits it asks for. A few are sequences the holding rules refuse outright, such as a colour change with a fade time, and no unlock lifts those rules. Those run from a python-dali script with the tapes covered, as IDENTIFY DEVICE does in part 5, unless Stage 12 adds a time-limited unlock for them by its own ADR. Each step below says nothing about which: decide it when the step is built.
+Run it with the tapes at a low level or covered. The steps are not built yet: the app's hardware check has steps for parts 2 to 4 only, and adding these is part of Stage 12. Most can go through the governor one at a time with the waits it asks for. Both bench drivers are colour gear, so since ADR 0022 every step that fades a level is among the ones refused, as well as the colour fades. A few are sequences the holding rules refuse outright, such as a colour change with a fade time, and no unlock lifts those rules. Those run from a python-dali script with the tapes covered, as IDENTIFY DEVICE does in part 5, unless Stage 12 adds a time-limited unlock for them by its own ADR. Each step below says nothing about which: decide it when the step is built.
 
 How to read and measure, from `dali-reviewer`'s closing pass:
 
@@ -283,6 +283,7 @@ Timing: does the driver move when and for as long as the simulator says?
 - [ ] Each fade time from 0 to 15, timed from QUERY ACTUAL LEVEL, against the DALI table. Any that runs longer (S8b-R4-6).
 - [ ] The fade-running bit in QUERY STATUS during a level fade and during a colour fade, polled every 100 ms. Whether it is set for both, and when it clears (S8b-R3-9, S8b-R4-3).
 - [ ] A colour change with the fade time at 0, watched and polled: one moment, or a short ramp (S8b-R4-6).
+- [ ] A level change with every fade setting at 0, on each tape, watched and polled: one step, or a short ramp. ADR 0022's "one moment" rests on a step. If it ramps, add a profile setting for the ramp and count it (S11-13).
 - [ ] A colour change with a fade time of 1 s and of 4 s: whether the colour fades over the fade time, and whether each channel moves one way (S8b-R3-1).
 - [ ] A faded level at a steady colour on a tape with a red channel, such as RGB 254/205/205 from 180 to 150 over 1 s (S8b-R4-D1). Since Stage 11 the app refuses this on hardware (ADR 0022: colour gear takes a level only with no fade, and never by UP, DOWN, the continuous commands or a DAPC sequence), so it is sent the way part 8 sends the other refused cases, and the answer decides how that rule is relaxed. Watching cannot settle it: SPEC S3.5 counts the 10% red-drive line by definition, and if the channel law in `dali.md` holds (channel output is the curve of the arc level times the channel over 254) the crossings are real on the driver. Two things settle it: part 6's single-channel sweeps, which confirm the law, and a colour read-back the guard can rest on. An ADR then either counts the crossings from the colour read back, or keeps level fades off gear with a red channel. Whether a smooth fade across that line should count as legs at all is the owner's to decide in SPEC S3.1a, with a measurement over time from a photodiode or high-frame-rate video. The simulator target keeps counting these legs meanwhile.
 - [ ] DAPC 0 with a fade time: when the tape switches off (S8b-R4-4).

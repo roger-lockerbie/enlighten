@@ -270,6 +270,10 @@ The third review's reproductions become fixed cases on the bench. The aimed prop
 - **No light change but OFF goes to a group, to all, or to unaddressed gear** (S8b-R4-D2). Rule 3 as first built let one through when it reached one address the scan had found. It also reached any driver the scan had not heard, with nothing counted.
 - **Rule 4's premise is wrong for gear with a red channel** (S8b-R4-D1, open). A faded level there crosses the saturated-red line, which SPEC S3.1a counts as legs. Not settled in this build.
 
+## A third holding rule (Stage 11)
+
+ADR 0022 adds one: on hardware, colour gear takes a level only in one moment. It closes S8b-R4-D1, which the closing position below left open for hardware day. Rule 4 of amendment 2 ("a level may fade") now holds only for gear with no colour.
+
 ## Closing position (owner, 2026-11-22)
 
 Four reviews each failed the stage on the Hardware target, each on less than the one before. What they found comes down to one thing: the simulator stood in for drivers that have not been on a bench, and for state the app has not read from them. The owner's position is that the answer is to find out what the hardware does and bring the simulator into line with it, not to add rules against guesses.

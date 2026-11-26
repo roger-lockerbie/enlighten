@@ -37,14 +37,20 @@ The engine's moving level control sends no DAPC sequence to such gear on hardwar
 
 `docs/TEST_PLAN.md` section 10 part 8 has the item. Two things settle it: the single-channel sweeps of part 6, which confirm or correct the channel law, and a colour read-back the guard can rest on. An ADR then either counts the red crossings from the colour read back, or keeps this rule for gear with a red channel and drops it for the rest. Whether a smooth fade across the 10% red-drive line should count as legs at all is the owner's to decide in SPEC S3.1a.
 
+## What the reviews changed
+
+Both Stage 11 reviews found that the rule's test could rest on a read-back taken from other gear: a rescan kept an earlier answer when a reply was lost, and an address move kept the fade read-backs (S11-1). On hardware a scan now starts from nothing read, a lost reply to a fade, group or colour query leaves nothing read, and SET SHORT ADDRESS and PROGRAM SHORT ADDRESS forget what was read of every address. A value not read counts as the worst case: the longest fade, every group, colour gear.
+
+Two more costs, from the DALI review (S11-12). Lowering the ceiling on lit colour gear with a fade set or unread switches it off, where it used to be held at the new ceiling. Hold-to-dim, from a switch plate or the playground, is refused on hardware colour gear, because it sends UP and DOWN.
+
+Two things the rule rests on and nobody has measured (S11-13): that the DA5-L steps a level at once when every fade setting is 0, and that SET MAX LEVEL and SET MIN LEVEL pull the level at once. Both are hardware-day checks.
+
 ## Tests
 
-- `src/safety/governor.hardware.test.ts`, "a level changes only in one moment": the review's case, each of the three fade settings, a fade setting in the same transaction, every level-moving command, the four commands that fade at the fade rate, the DAPC sequence by address, group and broadcast, and what is left alone (OFF, gear with no colour, the simulator target).
-- `tests/properties/hard-steps.test.ts`: the review's case on a simulated C3 driver the governor has never seen, checked on the light trace. It fails on the rule before, and passes when the level goes with no fade.
-- `tests/properties/rate.prop.test.ts`: the aimed generator gained fade settings read back, a DAPC sequence, DOWN and colours near saturated red, and every stream now ends with a wait so the last step's fade is in the trace.
+- `src/safety/governor.hardware.test.ts`, "a level changes only in one moment": the review's case, each of the three fade settings, a fade setting in the same transaction, every level-moving command, the commands that fade at the fade rate, the DAPC sequence by address, group and broadcast, and what is left alone (OFF, gear with no colour, the simulator target). In the same file, the rescan with replies lost and the address move.
+- `tests/properties/hard-steps.test.ts`: the review's case on a simulated C3 driver the governor has never seen, checked on the light trace. The colour is set through the app, then a rescan and a bare ACTIVATE, and the test asserts the colour and level before the DAPC. On the rule before, the trace shows more than one swing in a second. The first version of this test did not show that (S11-2): connecting leaves the profile's power-on colour waiting, and a bare ACTIVATE straight after brought it in.
+- `tests/properties/rate.prop.test.ts`, "P-rate on hardware colour gear near saturated red": one colour driver near saturated red, then a tail of fade settings with read-backs, levels, DAPC sequences, UP, DOWN, the continuous commands, steps and OFF. It fails on the rule before within 27 cases and passes 2,000 on this one. The older aimed generator also gained fade read-backs, a DAPC sequence and DOWN, and every stream there now ends with a wait so the last step's fade is in the trace.
 - `src/engine/engine.test.ts`: the live level control sends no sequence to colour gear on hardware, and the level still arrives.
-
-What the tests do not show: the widened property does not reach the review's case by chance. At 5,000 runs it passes with the rule and without it, because the case needs four particular steps in order. The fixed cases stand for it. A generator that builds such chains on purpose is a follow-up (S11 in `docs/SECURITY_FINDINGS.md`).
 
 ## Alternatives considered
 
