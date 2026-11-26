@@ -201,6 +201,8 @@ A checklist, run in order with the bench powered and both tapes unrolled. The ap
 
 ### Part 5: behaviour (`dali.md` section 16)
 
+Since ADR 0022 the app refuses a faded level on colour gear, and both bench drivers are colour gear. The items below that fade a level (a fade up from off, a new level mid-fade, DAPC 0 with a fade, the UPs, the 16 minute fade, fade time 1, the fast fade count and the repeat during a slow fade) are sent the way part 8 sends the other refused cases. Switch a driver off before moving its address: lit colour gear at a new address counts as every channel full, and the ceiling refuses the move.
+
 - [ ] Fade up from off, with a long fade, logging QUERY ACTUAL LEVEL every 100 ms.
 - [ ] A new level mid-fade, and DAPC 255 mid-fade.
 - [ ] DAPC 0 with a fade time.
@@ -261,7 +263,7 @@ How to read and measure, from `dali-reviewer`'s closing pass:
 Before the day:
 
 - [ ] Build these steps into the hardware check, and give it its read-backs and order: a fade time of 0 restored and read back before the step that lowers MAX LEVEL (S8b-R5-9).
-- [ ] Add profile settings, with sourced defaults, for each unknown here that has none: whether the fade-running bit covers a colour fade, a colour ramp at fade time 0, and fades longer than the DALI table (S8b-R3-9, S8b-R4-3, S8b-R4-6). Then "fix it in the profile" has somewhere to go.
+- [ ] Add profile settings, with sourced defaults, for each unknown here that has none: whether the fade-running bit covers a colour fade, a colour ramp at fade time 0, and fades longer than the DALI table (S8b-R3-9, S8b-R4-3, S8b-R4-6), and from Stage 11 a level ramp at fade time 0 and a faded pull from SET MAX LEVEL or SET MIN LEVEL (S11-13). Then "fix it in the profile" has somewhere to go.
 - [ ] A hardware version of `first-light`: one address at a time, with an ACTIVATE first and the fade time at 0. The built-in script's `level all 254` and its first `level 0 254` are refused by the holding rules, so part 7 cannot run it as it is (S8b-R5-10).
 - [ ] A table from each step to the rule it could relax and the evidence that would do: for example 20 of 20 fade writes read back as sent, or colour read-backs equal to what was sent at rest, after ACTIVATE and after a power cycle.
 - [ ] Merge the items parts 5 and 8 share (the 4 s colour fade, DAPC 0 with a fade, the temporary colour around ACTIVATE), and run part 8's read-backs before part 7.
@@ -283,7 +285,7 @@ Timing: does the driver move when and for as long as the simulator says?
 - [ ] Each fade time from 0 to 15, timed from QUERY ACTUAL LEVEL, against the DALI table. Any that runs longer (S8b-R4-6).
 - [ ] The fade-running bit in QUERY STATUS during a level fade and during a colour fade, polled every 100 ms. Whether it is set for both, and when it clears (S8b-R3-9, S8b-R4-3).
 - [ ] A colour change with the fade time at 0, watched and polled: one moment, or a short ramp (S8b-R4-6).
-- [ ] A level change with every fade setting at 0, on each tape, watched and polled: one step, or a short ramp. ADR 0022's "one moment" rests on a step. If it ramps, add a profile setting for the ramp and count it (S11-13).
+- [ ] A level change with every fade setting at 0, on each tape, watched with the light sensor, since a query takes 50 to 70 ms and cannot see a short ramp: one step, or a ramp. ADR 0022's "one moment" rests on a step. If it ramps, add a profile setting for the ramp and count it (S11-13).
 - [ ] A colour change with a fade time of 1 s and of 4 s: whether the colour fades over the fade time, and whether each channel moves one way (S8b-R3-1).
 - [ ] A faded level at a steady colour on a tape with a red channel, such as RGB 254/205/205 from 180 to 150 over 1 s (S8b-R4-D1). Since Stage 11 the app refuses this on hardware (ADR 0022: colour gear takes a level only with no fade, and never by UP, DOWN, the continuous commands or a DAPC sequence), so it is sent the way part 8 sends the other refused cases, and the answer decides how that rule is relaxed. Watching cannot settle it: SPEC S3.5 counts the 10% red-drive line by definition, and if the channel law in `dali.md` holds (channel output is the curve of the arc level times the channel over 254) the crossings are real on the driver. Two things settle it: part 6's single-channel sweeps, which confirm the law, and a colour read-back the guard can rest on. An ADR then either counts the crossings from the colour read back, or keeps level fades off gear with a red channel. Whether a smooth fade across that line should count as legs at all is the owner's to decide in SPEC S3.1a, with a measurement over time from a photodiode or high-frame-rate video. The simulator target keeps counting these legs meanwhile.
 - [ ] DAPC 0 with a fade time: when the tape switches off (S8b-R4-4).

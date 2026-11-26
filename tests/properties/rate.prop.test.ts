@@ -408,8 +408,8 @@ describe('P-rate on hardware the governor has never seen', () => {
  * Aimed at S8b-R4-D1 (ADR 0022), from the Stage 11 DALI review: one colour driver whose colour is
  * near saturated red, set through the app and activated, then a short tail of fade settings with
  * their read-backs, levels, a DAPC sequence, UP, DOWN, the continuous commands, steps and OFF. A
- * faded level there takes red in and out of saturation. On the rule before this fails within about
- * 40 cases.
+ * faded level there takes red in and out of saturation. On the rule before this fails within a few
+ * dozen cases.
  */
 const redTail: fc.Arbitrary<Step[]> = (() => {
   const a = short(0);

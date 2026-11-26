@@ -603,6 +603,14 @@ export class Governor {
     if (i.maxLevel !== readBack.max || i.minLevel !== readBack.min || i.linearCurve === true) {
       return no('The read-back does not match what the governor saw on the bus.');
     }
+    // On hardware the profile asks the curve only of gear whose types hold 6. With the types not
+    // read, or the curve of such gear not read, a linear curve could pass unseen (Stage 11 DALI
+    // review).
+    if (this.target === 'hardware') {
+      if (i.typesRead !== true) return no('The device types were not all read back.');
+      if ((i.deviceTypes ?? []).includes(6) && i.linearCurve !== false)
+        return no('The dimming curve was not read back.');
+    }
     i.verified = true;
     return OK;
   }
@@ -1479,13 +1487,10 @@ export class Governor {
             return `${only}, and this sets a fade setting with it: send that on its own first`;
           if (f.fadeTime === undefined || f.extendedFade === undefined || f.fastFade === undefined)
             return `${only}, and its fade settings have not all been read back`;
-          const which =
-            f.fadeTime !== 0
-              ? 'fade time'
-              : f.extendedFade !== 0
-                ? 'extended fade time'
-                : 'fast fade time';
-          return `${only}, so set its ${which} to 0 first`;
+          if (f.fadeTime !== 0) return `${only}, so set its fade time to 0 first`;
+          if (f.extendedFade !== 0) return `${only}, so set its extended fade time to 0 first`;
+          // The app never writes the fast fade time (SPEC section 5), so it cannot clear it either.
+          return `${only}, and its fast fade time is not 0, which this app never writes: it takes a RESET or another tool`;
         };
         if (id === 'ENABLE_DAPC_SEQUENCE') {
           // In a DAPC sequence every level fades over 200 ms whatever the fade time is, and a faded
@@ -1563,10 +1568,7 @@ export class Governor {
           if (id === 'GO_TO_SCENE') {
             const scenes = `${name}'s scenes hold colours the guard has not read`;
             if (refaded.has(n) || this.mayFade(n))
-              return refuse(
-                `a${String(n)}`,
-                `${scenes}, so one is recalled only with no fade time set`,
-              );
+              return refuse(`a${String(n)}`, fadeWhy(`${scenes}, so one is recalled`));
             if (moved.has(n))
               return refuse(`a${String(n)}`, `${scenes}, so one is recalled on its own`);
             if (still > p.deliverAt)
@@ -1807,6 +1809,14 @@ export class Governor {
       for (const [n, i] of this.info) {
         i.verified = false;
         i.modelled = this.target === 'simulator';
+        // The colour features and groups read at an address were the old gear's, on either target
+        // (Stage 11 DALI review). Unread, they count as the worst case until a scan.
+        i.colour = undefined;
+        i.groups = undefined;
+        i.groupsLow = undefined;
+        i.groupsHigh = undefined;
+        // An address a scan called empty may hold gear now, so it is gear nothing is known of.
+        i.empty = false;
         if (this.target !== 'hardware') continue;
         // The gear at an address may now be other gear: what was read of it is forgotten, so no
         // level goes until a rescan (ADR 0019 amendment 2, S8b-R3-7).
@@ -1881,6 +1891,11 @@ export class Governor {
             i.groups = cmd.id === 'ADD_TO_GROUP' ? i.groups | bit : i.groups & ~bit;
             i.groupsLow = i.groups & 0xff;
             i.groupsHigh = i.groups >> 8;
+          } else if ((cmd.value ?? 0) < 8) {
+            // With one half unread, the half this changes is not what was read either.
+            i.groupsLow = undefined;
+          } else {
+            i.groupsHigh = undefined;
           }
           break;
         case 'DAPC':
