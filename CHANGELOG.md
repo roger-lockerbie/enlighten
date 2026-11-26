@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## Unreleased
 
+## 0.2.0
+
+Help and `explain` in the console, and a fix to 0.1.0. Nothing in the governor, the DALI core, the simulator or the bus changed.
+
 ### Added
 
 - `help <name>` for every DALI command the app supports: what it does, its frame and reply, the registers it uses, what the governor does with it, and an example. `help dali` lists all 137 by group, `help -k <word>` looks a word up, and `help hardware` states the holding rules (ADR 0023).
