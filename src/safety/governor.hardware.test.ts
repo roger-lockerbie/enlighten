@@ -1581,15 +1581,18 @@ describe('DT8 gear whose colour is not known (ADR 0019, S5-P1)', () => {
   it('a rescan does not open the ceiling’s floor while the physical minimum is unread (Stage 11 close review L4)', () => {
     const g = bench();
     const floor = /A driver cannot go below arc level 85/;
-    const lower = () => g.setCeiling(50, 'ui');
-    expect(lower()).toMatchObject({ ok: false, reason: expect.stringMatching(floor) });
+    const lower = () => {
+      const r = g.setCeiling(50, 'ui');
+      return r.ok ? '' : r.reason;
+    };
+    expect(lower()).toMatch(floor);
     g.beginScan(0);
     expect(g.addressInfo(0)?.physicalMinimum).toBeUndefined();
-    expect(lower()).toMatchObject({ ok: false, reason: expect.stringMatching(floor) });
+    expect(lower()).toMatch(floor);
     // An address move forgets it too, and the floor still stands until the rescan.
     tell(g, c('DTR0', undefined, 3), undefined, 9000);
     tell(g, c('SET_SHORT_ADDRESS', B), undefined, 9000);
-    expect(lower()).toMatchObject({ ok: false, reason: expect.stringMatching(floor) });
+    expect(lower()).toMatch(floor);
   });
 
   it('applies to colour gear only, and only on hardware', () => {
