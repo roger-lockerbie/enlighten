@@ -1,0 +1,42 @@
+/**
+ * The names of help's own topics, for completion. They are kept apart from the help text so that the
+ * page can complete `help <topic>` without loading the text, which is in a chunk of its own
+ * (ADR 0023). A test holds this list to the topics help has.
+ */
+export const HELP_TOPICS: readonly string[] = [
+  'level',
+  'off',
+  'on',
+  'tc',
+  'rgb',
+  'fade',
+  'scene',
+  'group',
+  'query',
+  'devices',
+  'scan',
+  'profile',
+  'cap',
+  'target',
+  'trace',
+  'panic',
+  'resume',
+  'unlock',
+  'lock',
+  'run',
+  'history',
+  'clear',
+  'help',
+  'explain',
+  'echo',
+  'wait',
+  'pause',
+  'use',
+  'raw',
+  'addresses',
+  'values',
+  'hardware',
+  'scripts',
+  'dali',
+  'keys',
+];

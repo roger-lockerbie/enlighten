@@ -149,7 +149,8 @@ const TOPICS: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
-export const HELP_TOPICS: readonly string[] = [...Object.keys(TOPICS), 'dali', 'keys'];
+/** Every topic help has. `topics.ts` lists the same names for completion, and a test compares. */
+export const TOPIC_NAMES: readonly string[] = [...Object.keys(TOPICS), 'dali', 'keys'];
 
 const WIDTH = 96;
 

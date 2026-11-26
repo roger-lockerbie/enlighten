@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { BINDINGS } from './keys.ts';
 import { complete, type CompleteContext } from './complete.ts';
-import { help, HELP_TOPICS } from './help.ts';
+import { help, TOPIC_NAMES } from './help.ts';
+import { HELP_TOPICS } from './topics.ts';
 import { COLLISION, replyName, replyText } from './replies.ts';
 
 const ctx: CompleteContext = {
@@ -148,6 +149,8 @@ describe('help', () => {
   it('lists commands and explains each topic', () => {
     expect(help(undefined, 'mac')[0]).toContain('Commands:');
     for (const t of HELP_TOPICS) expect(help(t, 'mac').length).toBeGreaterThan(0);
+    // Completion's list of topics is the list help has.
+    expect([...HELP_TOPICS]).toEqual([...TOPIC_NAMES]);
     expect(help('level', 'mac')[0]).toBe('level <addr> <value> [fade <time>]');
     expect(help('recall-max-level', 'mac')[0]).toBe(
       'recall-max-level <addr>     RECALL MAX LEVEL, IEC 62386-102',

@@ -2,7 +2,8 @@
  * The built page's chunks (ADR 0002): the entry chunk stays within a size budget and free of
  * three.js, which loads in a chunk of its own when the Visualiser is first opened. The pages that
  * load later (Devices, the Visualiser and its light core) share one chunk (ADR 0020). The set-up's checks are a chunk of their own too, shared by the
- * Visualiser and Settings' workspace export and import (ADR 0018). Each worker is one file.
+ * Visualiser and Settings' workspace export and import (ADR 0018). The console's help text is a
+ * chunk too, loaded when help is first asked for (ADR 0023). Each worker is one file.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -33,7 +34,9 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   expect(visualiser).toHaveLength(1);
   const saved = named(/^saved-[\w-]+\.js$/);
   expect(saved).toHaveLength(1);
-  expect(chunks).toHaveLength(6);
+  const helpChunk = named(/^help-[\w-]+\.js$/);
+  expect(helpChunk).toHaveLength(1);
+  expect(chunks).toHaveLength(7);
   // three.js is in the renderer's chunk and nowhere else.
   const marker = 'WebGLRenderer';
   expect(read(renderer[0] ?? '')).toContain(marker);
@@ -47,6 +50,10 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   expect(js).toContain(saved[0] ?? 'missing');
   expect(read(saved[0] ?? '')).toContain('A link has a bad id.');
   expect(js).not.toContain('A link has a bad id.');
+  // Help's text is not in the entry either.
+  expect(js).toContain(helpChunk[0] ?? 'missing');
+  expect(read(helpChunk[0] ?? '')).toContain('Direct arc power control');
+  expect(js).not.toContain('Direct arc power control');
   // No chunk asks for anything from another origin.
   for (const c of chunks)
     expect(read(c)).not.toMatch(

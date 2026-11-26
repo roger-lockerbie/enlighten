@@ -51,6 +51,7 @@ Where a later frame depends on a reply, `explain` says what it cannot know. `sce
 
 ## Consequences
 
+- The help text is a chunk of its own, about 37 kB, loaded the first time help is asked for on the page. With it in the entry chunk the entry was 272 kB, over its 250 kB budget (ADR 0002). It is now 236 kB. Completion keeps a list of topic names apart from the text, and a test holds the two lists together.
 - Nothing in `src/safety`, `src/dali`, `src/sim` or `src/bus` changed. The governor is as Stage 11 left it.
 - The console imports the rule table from `src/safety` to describe it. That is a read of data, and the dependency runs from the console to the governor, not the other way.
 - `Engine.compile` mirrors how `request` splits a colour and a level on hardware. A test on each target runs `explain` and then the real line, and compares the two lists of commands, so a change to one without the other fails.

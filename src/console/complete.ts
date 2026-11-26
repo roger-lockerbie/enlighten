@@ -7,7 +7,7 @@ import type { Completion } from './editor.ts';
 import { lex } from './lex.ts';
 import { DALI_NAMES } from './names.ts';
 import { FRIENDLY, QUERY_WORDS, UNLOCKS, EXPLAINABLE, type CommandName } from './parse.ts';
-import { HELP_TOPICS } from './help.ts';
+import { HELP_TOPICS } from './topics.ts';
 
 export interface CompleteContext {
   /** Short addresses in the inventory. */

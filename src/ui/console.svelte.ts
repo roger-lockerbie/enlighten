@@ -16,7 +16,7 @@ import {
   type EditorState,
   type Effect,
 } from '../console/editor.ts';
-import { help } from '../console/help.ts';
+import type { HelpAsk } from '../console/help.ts';
 import { expand, History, historyList, type HistoryEntry } from '../console/history.ts';
 import { widgetFor, type KeyPress, type Platform } from '../console/keys.ts';
 import { aliasProblem, parseLine, type ParseContext } from '../console/parse.ts';
@@ -276,7 +276,7 @@ export class ConsoleState {
       case 'release':
         return;
       case 'help':
-        for (const l of help(e.topic, this.platform)) this.print('out', l);
+        this.showHelp(e.topic);
         return;
       case 'beep':
         this.message = 'Nothing there.';
@@ -344,6 +344,21 @@ export class ConsoleState {
         });
   }
 
+  /**
+   * Print help. The text is in a chunk of its own, loaded the first time help is asked for, so the
+   * page does not carry every DALI command's description from the start (ADR 0023).
+   */
+  private showHelp(ask: HelpAsk): void {
+    import('../console/help.ts').then(
+      ({ help }) => {
+        for (const l of help(ask, this.platform)) this.print('out', l);
+      },
+      () => {
+        this.print('error', 'Help could not be loaded.');
+      },
+    );
+  }
+
   /** Run a line: a page command here, anything else in the worker. */
   run(line: string): void {
     const p = parseLine(line, this.parseContext());
@@ -361,8 +376,7 @@ export class ConsoleState {
         this.out = [];
         return;
       case 'help':
-        for (const l of help(c.find === undefined ? c.topic : { find: c.find }, this.platform))
-          this.print('out', l);
+        this.showHelp(c.find === undefined ? c.topic : { find: c.find });
         return;
       case 'use':
         if (c.to === undefined) {
