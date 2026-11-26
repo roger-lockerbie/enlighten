@@ -32,7 +32,7 @@ Fable goes where depth of reasoning pays most: the research, the light and colou
 | 8b    | Rate guard                                              | Fable (Opus if Fable is short) | yes       |
 | 9     | Scenes, sequences and effects                           | Fable (owner's choice)         | yes       |
 | 10    | Switchgear                                              | Sonnet                         | yes       |
-| 11    | Hardening, independent review, going public             | Opus                           | yes       |
+| 11    | Hardening, independent review, going public             | Fable (owner's choice)         | yes       |
 | 12    | Hardware day, whenever the hasseb arrives after Stage 4 | Opus                           | yes       |
 
 The repo goes to GitHub as a private repo in Stage 0, so CI and backups run from the first day. It goes public in Stage 11, after the independent review and only with my yes.
@@ -236,8 +236,9 @@ Done when: e2e tests cover every event type and the stage-close checklist passes
 1. Start in a fresh session. Run the `security-reviewer` subagent over the whole repo against `docs/THREAT_MODEL.md`, not a diff, and walk the threat model yourself as well.
 2. Fix the findings, and log anything accepted with its reasons.
 3. Supply chain: audit dependencies and licences, generate a CycloneDX SBOM, and check every action pin.
-4. Release v0.1.0: a CI-built artefact with its SHA-256 and a build provenance attestation, and README steps for the client to build from source and to verify a release.
+4. Build the release for v0.1.0: a workflow that makes a CI-built artefact with its SHA-256 and a build provenance attestation, tried with a manual run, and README steps for the client to build from source and to verify a release.
 5. Ask me which licence to use (suggest Apache-2.0) and whether to make the repo public. Only after my yes: add the licence, make it public, turn on secret scanning and push protection, and add the `main` ruleset if Stage 0 couldn't.
+6. Tag v0.1.0 and let the workflow publish it. This comes after step 5 because an attestation needs a public repo on this account's plan (the owner's choice, 2026-11-26).
 
 Done when: there are no open high or critical findings, the release is published, and I've confirmed.
 

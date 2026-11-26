@@ -33,7 +33,7 @@ Assets, not packages, in `src/assets/fonts/` with their licence texts and SHA-25
 | Package                        | Version | Licence    | Why                                                                                   |
 | ------------------------------ | ------- | ---------- | ------------------------------------------------------------------------------------- |
 | typescript                     | 6.0.3   | Apache-2.0 | Strict typing. Held at 6.0.x, see ADR 0001.                                           |
-| vite                           | 8.3.6   | MIT        | Build, dev server and preview server (the preview server sets the security headers).  |
+| vite                           | 8.3.8   | MIT        | Build, dev server and preview server (the preview server sets the security headers).  |
 | svelte                         | 5.57.3  | MIT        | UI framework. Compiles away, and runs under strict CSP and Trusted Types.             |
 | @sveltejs/vite-plugin-svelte   | 7.3.1   | MIT        | Compiles Svelte in Vite.                                                              |
 | vitest                         | 5.1.0   | MIT        | Unit and property test runner.                                                        |
@@ -41,10 +41,10 @@ Assets, not packages, in `src/assets/fonts/` with their licence texts and SHA-25
 | @playwright/test               | 1.65.0  | Apache-2.0 | e2e tests in Chromium.                                                                |
 | eslint                         | 10.14.0 | MIT        | Linting, including the banned-sink rules.                                             |
 | @eslint/js                     | 10.0.1  | MIT        | ESLint's recommended rules.                                                           |
-| typescript-eslint              | 8.72.1  | MIT        | Strict, type-checked lint rules.                                                      |
-| eslint-plugin-svelte           | 3.24.0  | MIT        | Svelte lint rules, including `no-at-html-tags`.                                       |
+| typescript-eslint              | 8.72.2  | MIT        | Strict, type-checked lint rules.                                                      |
+| eslint-plugin-svelte           | 3.24.1  | MIT        | Svelte lint rules, including `no-at-html-tags`.                                       |
 | svelte-eslint-parser           | 1.10.1  | MIT        | Lets ESLint read Svelte files.                                                        |
-| prettier                       | 3.9.10  | MIT        | Formatting.                                                                           |
+| prettier                       | 3.10.1  | MIT        | Formatting.                                                                           |
 | prettier-plugin-svelte         | 4.1.1   | MIT        | Formats Svelte files.                                                                 |
 | svelte-check                   | 4.7.8   | MIT        | Type checks Svelte files.                                                             |
 | globals                        | 17.14.0 | MIT        | Global names for ESLint.                                                              |
@@ -78,6 +78,8 @@ pip has no minimum release age. Each version above was at least seven days old w
 
 `tools/golden/requirements.txt` locks python-dali 0.16 (LGPL-3.0, used as a reference and test oracle, never copied into this repo or shipped) and hidapi 0.15.0 (python-dali's hasseb driver imports it). Every file is pinned by hash. `pnpm golden` runs `tools/golden/generate.py`, which calls python-dali and writes the JSON in `tests/golden/`. CI reads only that JSON.
 
+Vite 8.3.8 (Stage 11) moves its bundler, rolldown, from 1.2.16 to 1.2.19. That release adds an optional build of rolldown for WebAssembly, `@rolldown/binding-wasm32-wasi`, with five packages under it: `@napi-rs/wasm-runtime` 1.2.6, `@emnapi/core` and `@emnapi/runtime` 2.0.0-beta.2, `@emnapi/wasi-threads` 2.2.0 and `@tybys/wasm-util` 0.10.5 (all MIT). They are in the lockfile and are installed only on a platform with no native rolldown build, which is none of ours. The two emnapi packages are beta releases, pinned by rolldown.
+
 The Stryker packages bring about 160 transitive packages, all for development. None runs an install script, and each passed the release-age and trust policies below when added.
 
 ## pnpm settings
@@ -95,12 +97,22 @@ All live in `pnpm-workspace.yaml`.
 | `savePrefix`              | `''`           | Saves exact versions, never `^` or `~`.                                                                                                           |
 | `overrides`               | `qs: 6.16.2`   | Replaces a vulnerable transitive version. See the next section.                                                                                   |
 
+## Licences across the whole tree
+
+Checked in Stage 11 with `pnpm licenses list`, which covers the packages installed on this platform: 350 versions of 330 packages. By package: MIT (266), Apache-2.0 (35), ISC (13), BSD-2-Clause (6), BSD-3-Clause (5), MPL-2.0 (2, lightningcss and its native build), 0BSD (1), BlueOak-1.0.0 (1, minimatch) and CC-BY-4.0 (1, caniuse-lite, which is data). The lockfile also names builds for other platforms, which are the same packages under the same licences. All are development tools except what reaches `dist/`: three.js, Svelte's runtime, and clsx 2.1.1, a small helper Svelte's runtime imports and the bundler inlines. All three are MIT. lightningcss is MPL-2.0 and runs at build time: none of its code is copied into `dist/`. The server's three packages are in the table above. python-dali's own metadata says LGPL-3.0-or-later.
+
+`THIRD_PARTY_NOTICES.md` at the top of the repo carries the notices for what a release ships: three.js, Svelte, clsx and the fonts.
+
+## SBOM
+
+`pnpm sbom:all` writes two CycloneDX 1.7 files into `sbom/`, which is git-ignored. `enlighten-app.cdx.json` comes from pnpm's own `pnpm sbom` and lists every npm package installed on the build's platform, development tools included, because Svelte is a development dependency whose runtime ships. `enlighten-server.cdx.json` comes from `tools/sbom/server.py`, which reads `server/requirements.txt` and uses the standard library only, so the SBOM tooling adds no package. The release workflow attaches both to a release.
+
 ## Advisories on transitive packages
 
-All three are in development tools. None of the affected code is in `dist/` or the hardware server.
+All three are in development tools. None of the affected code is in `dist/` or the hardware server. Rechecked in Stage 11 on 26 November 2026: `pnpm audit` reports minimatch only.
 
 - **qs, overridden to 6.16.2.** typed-rest-client 2.3.1, which Stryker uses for its dashboard reporter, pins qs 6.15.1 exactly. That version has four moderate advisories, all fixed by 6.16.2, a patch release in the same line. We don't use the dashboard reporter, so the risk was low, but the fix was cheap. Remove the override when typed-rest-client moves past 6.15.
 - **minimatch 10.2.6, open.** It has one moderate advisory, GHSA-g3hv-75wg-m249 (a slow glob), fixed only in 11.0.1. ESLint, typescript-eslint and Stryker all ask for 10.x, and forcing a major version under them could break linting or mutation runs. Its patterns come from our own config files, never from outside input. It will be picked up when those tools move to 11.
-- **deepmerge 4.3.1, open.** It has one low advisory, GHSA-gcqx-w48m-w2h4 (prototype poisoning in the merged object), and no fixed release yet. vite-plugin-svelte uses it at build time to merge our own Svelte config. It will be updated when a fix is released.
+- **deepmerge 4.3.1.** `pnpm audit` no longer reports it (26 November 2026), and the version is unchanged. It had one low advisory, GHSA-gcqx-w48m-w2h4 (prototype poisoning in the merged object), and no fixed release yet. vite-plugin-svelte uses it at build time to merge our own Svelte config. It will be updated when a fix is released.
 
 CI and the setup steps in the README use `pnpm install --frozen-lockfile`, which fails if `package.json` and the lockfile disagree.

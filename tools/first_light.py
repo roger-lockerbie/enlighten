@@ -7,7 +7,17 @@ Runs through the hasseb USB DALI Master. Before running it:
 Install once:   py -m pip install python-dali hidapi      (macOS: python3 -m pip ...)
 Run:            py dali_first_light.py                     (macOS: python3 dali_first_light.py)
 Each step prints what you should see, then waits for Enter.
+
+WARNING: this script talks to the hasseb directly. It goes round the app, so nothing here has the
+safety governor, the rate guard, the brightness ceiling or Panic. It sends both tapes to full output
+and switches them on and off. Its only limit is the 2 second pause between steps below, so that
+holding Enter cannot flash the tapes. Don't run it near anyone who is sensitive to flashing light.
+The app's built-in `first-light` script does the same steps through the governor and under the
+ceiling: prefer that once the app is connected. The install line above takes the newest releases
+from PyPI. To use the versions this repo pins by hash, run it with `server/.venv` (server/README.md).
 """
+import time
+
 from dali.address import GearBroadcast, GearShort
 from dali.driver.hasseb import SyncHassebDALIUSBDriver
 from dali.gear.colour import Activate, SetTemporaryRGBDimLevel, SetTemporaryWAFDimLevel
@@ -18,8 +28,17 @@ FULL = 254          # DALI's top level
 A, B = GearShort(0), GearShort(1)
 
 
+MIN_STEP_S = 2.0    # never less than this between two changes of the light
+_last = time.monotonic()
+
+
 def step(text):
+    global _last
     input(f"\n{text}\n    Press Enter for the next step... ")
+    wait = MIN_STEP_S - (time.monotonic() - _last)
+    if wait > 0:
+        time.sleep(wait)
+    _last = time.monotonic()
 
 
 def rgbwaf(address, r, g, b, w, a, f):

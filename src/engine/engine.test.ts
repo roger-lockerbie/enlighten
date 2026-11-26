@@ -3,6 +3,7 @@
  * simulator behind a transport the test controls. Covers SPEC R1.1, R1.1a, R1.3, R1.5, R1.8, D1 to D3,
  * S1.1, S4 and S4.6.
  */
+import { decode } from '../dali/codec.ts';
 import { describe, expect, it } from 'vitest';
 import { flushMicrotasks, VirtualClock } from '../bus/clock.ts';
 import { withFloors } from '../bus/timing.ts';
@@ -434,6 +435,21 @@ describe('Apply to gear whose colour the governor does not know (ADR 0019)', () 
     engine.dispose();
   });
 
+  it('does not send the level after Ctrl-C or Stop ends a job (Stage 11 review N3)', async () => {
+    // Stop on a run and Ctrl-C on a console line stop jobs one by one and raise no general stop.
+    // A level may be waiting for the job that was stopped, so any job stopped ends the wait.
+    const { engine, drive, apply, hwSim, before, clock } = await waiting();
+    const line = engine.console('wait 30s', { aliases: new Map() });
+    await clock.advance(50);
+    expect(engine.snapshot().jobs.length).toBeGreaterThan(0);
+    engine.stopConsole();
+    expect(await drive(apply)).toMatchObject({ ok: false, kind: 'dropped' });
+    await drive(line);
+    await clock.advance(6000);
+    expect(levelOf(hwSim, 0)).toBe(before);
+    engine.dispose();
+  });
+
   it('does not send the level after panic and resume', async () => {
     const { engine, drive, apply, hwSim, clock } = await waiting();
     await drive(engine.panic());
@@ -464,6 +480,30 @@ describe('Apply to gear whose colour the governor does not know (ADR 0019)', () 
     const r = await drive(engine.request({ kind: 'apply', address: 0, arc: 120 }, 'ui'));
     expect(r).toMatchObject({ ok: false });
     expect(r.ok ? '' : r.reason).toMatch(/set its colour before its level/);
+    engine.dispose();
+  });
+
+  it('a moving level control starts no DAPC sequence on colour gear, which fades whatever the fade time (ADR 0022)', async () => {
+    const { engine, drive, settle, clock, hw, hwSim } = setup();
+    if (hw === undefined) throw new Error('hardware');
+    await settle();
+    await drive(engine.setTarget('hardware', 'ui'));
+    await settle();
+    engine.answerCanSee(true, 'ui');
+    await clock.advance(3000);
+    const on = await drive(
+      engine.request({ kind: 'apply', address: 0, mirek: 300, arc: 120 }, 'ui'),
+    );
+    expect(on.ok).toBe(true);
+    await clock.advance(5000);
+    const from = hw.inner.log.length;
+    await drive(engine.request({ kind: 'level', address: 0, arc: 130, live: true }, 'ui'));
+    await settle();
+    await clock.advance(1000);
+    const sent = hw.inner.log.slice(from).map((l) => decode(l.frame.frame)?.id);
+    expect(sent).toContain('DAPC');
+    expect(sent).not.toContain('ENABLE_DAPC_SEQUENCE');
+    expect(levelOf(hwSim, 0)).toBe(130);
     engine.dispose();
   });
 });

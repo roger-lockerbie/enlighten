@@ -4,7 +4,20 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## Unreleased
 
+## 0.1.0
+
+The first release. Built by CI from the tag, with SHA-256 sums, two SBOMs and a build provenance attestation.
+
+### Changed
+
+- On Hardware and Both, colour gear takes a level only in one moment (ADR 0022, closing S8b-R4-D1): with every fade setting read back as 0, never by UP, DOWN or the continuous commands, and never in a DAPC sequence. The Simulator target is unchanged.
+- vite 8.3.8, typescript-eslint 8.72.2, prettier 3.10.1 and eslint-plugin-svelte 3.24.1.
+- The README is rewritten for a first-time reader: what works, what has not been tried on hardware, building from source and verifying a release.
+
 ### Added
+
+- Stage 11: the release workflow (`.github/workflows/release.yml`) and `tools/release/pack.sh`; `pnpm sbom:all`, which writes CycloneDX SBOMs for the app and the server; `THIRD_PARTY_NOTICES.md`.
+- The licence: Apache-2.0, the owner's choice on 2026-11-26, in `LICENSE` and `NOTICE`.
 
 - Stage 10 switchgear (ADR 0021): `src/switch` with the part 301 button event machine, presets for zencontrol, generic coupler and KNX-through-gateway plates, the mapping and the controller; the Switches page (Alt-0) with 1, 2 and 4 button plates, LED feedback, a mapping editor and timers; plates in the workspace file (version 5). Actions go through the engine and governor with the source `switch` and show in the console. CI runs the preview e2e tests as two shards.
 - Stored and imported trees may nest 10 deep, up from 8.

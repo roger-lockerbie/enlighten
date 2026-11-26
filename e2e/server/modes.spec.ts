@@ -6,7 +6,7 @@
 import { expect, test } from '@playwright/test';
 import { defaultSaved, exportSetups } from '../../src/light/saved.ts';
 import { applyPreset, defaultSetup } from '../../src/light/setup.ts';
-import { openConsole, typeLine } from '../app.ts';
+import { consoleLog, openConsole, typeLine } from '../app.ts';
 import { watch } from '../harness.ts';
 import { connect, goTo } from './connect.ts';
 import { startServer, type Server } from './fixture.ts';
@@ -196,6 +196,11 @@ for (const target of ['Hardware', 'Both'] as const) {
     await expect(page.getByTestId('mount-0-flux')).toHaveText('0.00');
     await openConsole(page);
     await typeLine(page, 'tc 0 3000K 30%');
+    // The console's answer first: if the level is refused or dropped, the failure shows the reason
+    // the console gave. On hardware the level follows the colour by about 2 s (ADR 0019).
+    await expect(consoleLog(page)).toContainText('A0 3003K (333 mirek), level 210', {
+      timeout: 30_000,
+    });
     await page.keyboard.press('Control+Backquote');
     await expect(page.getByTestId('mount-0-flux')).not.toHaveText('0.00', { timeout: 15_000 });
     // A mount on an address with no driver on this bus is drawn unlit and says so.

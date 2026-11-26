@@ -117,3 +117,20 @@ test('the built page carries the meta fallback', async ({ request }) => {
   );
   expect(html).toContain('name="referrer" content="no-referrer"');
 });
+
+test('answers another local origin with no CORS header (THREAT_MODEL 3.2)', async ({ request }) => {
+  // Vite's default allows localhost and 127.0.0.1 on any port. The config turns that off.
+  for (const origin of ['http://localhost:3000', 'http://127.0.0.1:5173', 'https://evil.example']) {
+    for (const path of ['/', '/headers.json']) {
+      const r = await request.get(path, { headers: { Origin: origin } });
+      expect(r.status(), `${origin} ${path}`).toBe(200);
+      const names = Object.keys(r.headers()).filter((k) => k.startsWith('access-control-'));
+      expect(names, `${origin} ${path}`).toEqual([]);
+    }
+    const pre = await request.fetch('/', {
+      method: 'OPTIONS',
+      headers: { Origin: origin, 'Access-Control-Request-Method': 'GET' },
+    });
+    expect(Object.keys(pre.headers()).filter((k) => k.startsWith('access-control-'))).toEqual([]);
+  }
+});

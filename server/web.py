@@ -99,7 +99,8 @@ class Site:
 
     def process_request(self, connection: ServerConnection, request: Request) -> Response | None:
         """Answer every HTTP request but a good /bus upgrade, which goes on to the WebSocket."""
-        if request.headers.get("Host") != self.host:
+        # `get_all`, because `get` raises on a header sent twice, and two Hosts are never right.
+        if request.headers.get_all("Host") != [self.host]:
             return self._text(HTTPStatus.MISDIRECTED_REQUEST, "Wrong host.\n")
         if request.method != "GET":
             return self._text(HTTPStatus.METHOD_NOT_ALLOWED, "GET only.\n", {"Allow": "GET"})
@@ -107,9 +108,9 @@ class Site:
             return self._text(HTTPStatus.NOT_FOUND, "Not found.\n", {"Clear-Site-Data": CLEAR_SITE_DATA})
         path = request.path.split("?", 1)[0]
         if path == BUS_PATH:
-            if request.headers.get("Origin") != self.origin:
+            if request.headers.get_all("Origin") != [self.origin]:
                 return self._text(HTTPStatus.FORBIDDEN, "Wrong origin.\n")
-            if request.headers.get("Upgrade", "").lower() != "websocket":
+            if [u.lower() for u in request.headers.get_all("Upgrade")] != ["websocket"]:
                 return self._text(HTTPStatus.UPGRADE_REQUIRED, "WebSocket only.\n")
             return None
         found = self.files.get(path)

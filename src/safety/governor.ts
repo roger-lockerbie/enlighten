@@ -144,6 +144,28 @@ const FADE_SETTINGS: ReadonlySet<string> = new Set([
  */
 const UNFOUND = -1;
 
+/**
+ * Forget what a scan reads of an address, but its device types and whether it answered. A value not
+ * read counts as the worst case wherever the guard uses it: the longest fade, every group, colour gear.
+ */
+function forgetReadBacks(i: AddressInfo): void {
+  i.fadeReadBack = false;
+  i.fadeTime = undefined;
+  i.fadeRate = undefined;
+  i.extendedFade = undefined;
+  i.fastFade = undefined;
+  i.groups = undefined;
+  i.groupsLow = undefined;
+  i.groupsHigh = undefined;
+  i.colour = undefined;
+  i.physicalMinimum = undefined;
+  i.minLevel = undefined;
+  i.maxLevel = undefined;
+  i.linearCurve = undefined;
+  i.level = undefined;
+  i.scenes = undefined;
+}
+
 function addressOfScope(scope: string): number | undefined {
   if (scope === PHANTOM) return UNFOUND;
   const m = /^a(\d+)$/.exec(scope);
@@ -158,6 +180,8 @@ export interface AddressInfo {
   present?: boolean | undefined;
   verified: boolean;
   physicalMinimum?: number | undefined;
+  /** The highest physical minimum read at this address this session. A scan does not forget it. */
+  floorSeen?: number | undefined;
   minLevel?: number | undefined;
   maxLevel?: number | undefined;
   linearCurve?: boolean | undefined;
@@ -168,6 +192,9 @@ export interface AddressInfo {
   typesOpen?: boolean | undefined;
   colour?: ColourFacts | undefined;
   groups?: number | undefined;
+  /** The two halves of the group membership as last asked. `groups` is set only when both were heard. */
+  groupsLow?: number | undefined;
+  groupsHigh?: number | undefined;
   /** The fade time and rate have been read back this session (SPEC S3.7). */
   fadeReadBack: boolean;
   /** A scan asked as often as it asks and heard nothing. One lost reply does not set it. */
@@ -280,6 +307,17 @@ const LEVEL_MOVING: ReadonlySet<string> = new Set([
   'CONTINUOUS_UP',
   'CONTINUOUS_DOWN',
   'GO_TO_SCENE',
+]);
+
+/**
+ * Level commands that fade whatever the fade time is: UP and DOWN run for 200 ms at the fade rate, and
+ * the continuous commands run at the fade rate until stopped.
+ */
+const FADES_AT_RATE: ReadonlySet<string> = new Set([
+  'UP',
+  'DOWN',
+  'CONTINUOUS_UP',
+  'CONTINUOUS_DOWN',
 ]);
 
 /**
@@ -463,7 +501,11 @@ export class Governor {
     }
     const floor = Math.max(
       0,
-      ...[...this.info.values()].map((i) => (i.present === true ? (i.physicalMinimum ?? 0) : 0)),
+      // While a rescan has the physical minimum forgotten, the last one read still sets the floor
+      // (Stage 11 close review L4).
+      ...[...this.info.values()].map((i) =>
+        i.present === true ? (i.physicalMinimum ?? i.floorSeen ?? 0) : 0,
+      ),
     );
     if (arc < floor) {
       const pct = (arcToFraction(floor) * 100).toFixed(2);
@@ -560,6 +602,14 @@ export class Governor {
       return no(`SYSTEM FAILURE LEVEL reads ${String(readBack.systemFailure)}, not 255.`);
     if (i.maxLevel !== readBack.max || i.minLevel !== readBack.min || i.linearCurve === true) {
       return no('The read-back does not match what the governor saw on the bus.');
+    }
+    // On hardware the profile asks the curve only of gear whose types hold 6. With the types not
+    // read, or the curve of such gear not read, a linear curve could pass unseen (Stage 11 DALI
+    // review).
+    if (this.target === 'hardware') {
+      if (i.typesRead !== true) return no('The device types were not all read back.');
+      if ((i.deviceTypes ?? []).includes(6) && i.linearCurve !== false)
+        return no('The dimming curve was not read back.');
     }
     i.verified = true;
     return OK;
@@ -1136,6 +1186,9 @@ export class Governor {
     const i = this.addr(n);
     i.dirty = false;
     i.fading = undefined;
+    // What an earlier scan read may be other gear's by now, and a reply lost in this scan must not
+    // leave that answer standing (Stage 11 review N1). The device types have their own handling.
+    if (this.target === 'hardware') forgetReadBacks(i);
   }
 
   modelAddress(n: number): Outcome {
@@ -1366,7 +1419,9 @@ export class Governor {
    * colour can be waiting in the gear, since automatic activation would bring it in: after an
    * ACTIVATE that reached the gear for sure, with no colour loaded, scene recalled or Tc step sent
    * since. A colour change (ACTIVATE, a Tc step, a scene recall) goes only when the gear has no fade
-   * of any kind and its level is steady (amendments 1 and 2).
+   * of any kind and its level is steady (amendments 1 and 2). A level changes only with no fade of
+   * any kind either, and never by a command that fades at the fade rate or in a DAPC sequence
+   * (ADR 0022, S8b-R4-D1).
    */
   private colourRule(planned: readonly Planned[], first: number): Violation | undefined {
     if (this.target !== 'hardware') return undefined;
@@ -1424,26 +1479,34 @@ export class Governor {
           this.unsureMoving.get(n) ?? -Infinity,
         );
         const name = gearName(n);
-        if (LOADS_TEMPORARY.has(id)) {
+        /** Why a change that needs no fade is refused, naming what stands in its way. */
+        const fadeWhy = (what: string): string => {
+          const f = this.fades(n);
+          const only = `${what} only with no fade`;
+          if (refaded.has(n))
+            return `${only}, and this sets a fade setting with it: send that on its own first`;
+          if (f.fadeTime === undefined || f.extendedFade === undefined || f.fastFade === undefined)
+            return `${only}, and its fade settings have not all been read back`;
+          if (f.fadeTime !== 0) return `${only}, so set its fade time to 0 first`;
+          if (f.extendedFade !== 0) return `${only}, so set its extended fade time to 0 first`;
+          // The app never writes the fast fade time (SPEC section 5), so it cannot clear it either.
+          return `${only}, and its fast fade time is not 0, which this app never writes: it takes a RESET or another tool`;
+        };
+        if (id === 'ENABLE_DAPC_SEQUENCE') {
+          // In a DAPC sequence every level fades over 200 ms whatever the fade time is, and a faded
+          // level on colour gear is more than one leg (ADR 0022, S8b-R4-D1).
+          return refuse(
+            `a${String(n)}`,
+            `${name} may be colour gear, so its level changes only in one step, and a DAPC sequence fades it`,
+          );
+        } else if (LOADS_TEMPORARY.has(id)) {
           // A temporary colour may now wait in the gear, and any level command brings it in.
           clear.set(n, false);
         } else if (COLOUR_ONLY.has(id)) {
           // A colour fade can turn a channel more than once, which one leg does not cover, so a
           // colour changes only in one moment (ADR 0019 amendment 2, S8b-R3-1).
-          if (refaded.has(n) || this.mayFade(n)) {
-            const f = this.fades(n);
-            const unread =
-              !refaded.has(n) &&
-              (f.fadeTime === undefined ||
-                f.extendedFade === undefined ||
-                f.fastFade === undefined);
-            return refuse(
-              `a${String(n)}`,
-              unread
-                ? `${name}'s colour changes only with no fade, and its fade settings have not been read back since they were set`
-                : `${name}'s colour changes only with no fade, so set its fade time to 0 first`,
-            );
-          }
+          if (refaded.has(n) || this.mayFade(n))
+            return refuse(`a${String(n)}`, fadeWhy(`${name}'s colour changes`));
           if (moved.has(n))
             return refuse(
               `a${String(n)}`,
@@ -1480,6 +1543,24 @@ export class Governor {
           if (settling.has(n)) return refuse(`a${String(n)}`, fading);
           const until = this.colourSettling.get(n) ?? -Infinity;
           if (p.deliverAt < until) return refuse(`a${String(n)}`, fading, until);
+          // A faded level at a steady colour is not one leg on colour gear: each channel follows the
+          // level, and a channel crossing a line the rule counts (red entering or leaving
+          // saturation, SPEC S3.1a) is a leg of its own. Three legs in a third of a second went
+          // through on gear with a red channel (S8b-R4-D1). The colour is never known on hardware,
+          // so the rule holds for all colour gear: its level changes only in one moment (ADR 0022).
+          // A scene recall has the same rule below, in its own words.
+          if (id !== 'GO_TO_SCENE') {
+            if (FADES_AT_RATE.has(id))
+              return refuse(
+                `a${String(n)}`,
+                `${name} is colour gear, so its level changes only in one step, and ${id.replaceAll('_', ' ')} is a fade`,
+              );
+            if (refaded.has(n) || this.mayFade(n))
+              return refuse(
+                `a${String(n)}`,
+                fadeWhy(`${name} is colour gear, so its level changes`),
+              );
+          }
           // A scene's level is read in the scan and its colour is not, so a recall fades the level
           // and a colour the guard does not know together. With no fade both change in one moment,
           // which counts as one leg and one hard step. A scene can change the colour with its level
@@ -1487,10 +1568,7 @@ export class Governor {
           if (id === 'GO_TO_SCENE') {
             const scenes = `${name}'s scenes hold colours the guard has not read`;
             if (refaded.has(n) || this.mayFade(n))
-              return refuse(
-                `a${String(n)}`,
-                `${scenes}, so one is recalled only with no fade time set`,
-              );
+              return refuse(`a${String(n)}`, fadeWhy(`${scenes}, so one is recalled`));
             if (moved.has(n))
               return refuse(`a${String(n)}`, `${scenes}, so one is recalled on its own`);
             if (still > p.deliverAt)
@@ -1731,12 +1809,21 @@ export class Governor {
       for (const [n, i] of this.info) {
         i.verified = false;
         i.modelled = this.target === 'simulator';
+        // The colour features and groups read at an address were the old gear's, on either target
+        // (Stage 11 DALI review). Unread, they count as the worst case until a scan.
+        i.colour = undefined;
+        i.groups = undefined;
+        i.groupsLow = undefined;
+        i.groupsHigh = undefined;
+        // An address a scan called empty may hold gear now, so it is gear nothing is known of.
+        i.empty = false;
         if (this.target !== 'hardware') continue;
         // The gear at an address may now be other gear: what was read of it is forgotten, so no
         // level goes until a rescan (ADR 0019 amendment 2, S8b-R3-7).
         i.typesRead = false;
         i.deviceTypes = undefined;
         i.levelKnown = false;
+        forgetReadBacks(i);
         this.tempClear.delete(n);
       }
     }
@@ -1770,6 +1857,8 @@ export class Governor {
           i.minLevel = i.physicalMinimum;
           i.linearCurve = false;
           i.groups = 0;
+          i.groupsLow = 0;
+          i.groupsHigh = 0;
           i.fadeReadBack = false;
           break;
         case 'DT6_SELECT_DIMMING_CURVE':
@@ -1796,10 +1885,18 @@ export class Governor {
           if (i.scenes !== undefined) i.scenes[cmd.value ?? 0] = undefined;
           break;
         case 'ADD_TO_GROUP':
-          if (i.groups !== undefined) i.groups |= 1 << (cmd.value ?? 0);
-          break;
         case 'REMOVE_FROM_GROUP':
-          if (i.groups !== undefined) i.groups &= ~(1 << (cmd.value ?? 0));
+          if (i.groups !== undefined) {
+            const bit = 1 << (cmd.value ?? 0);
+            i.groups = cmd.id === 'ADD_TO_GROUP' ? i.groups | bit : i.groups & ~bit;
+            i.groupsLow = i.groups & 0xff;
+            i.groupsHigh = i.groups >> 8;
+          } else if ((cmd.value ?? 0) < 8) {
+            // With one half unread, the half this changes is not what was read either.
+            i.groupsLow = undefined;
+          } else {
+            i.groupsHigh = undefined;
+          }
           break;
         case 'DAPC':
           if (!fault && cmd.value !== 255) i.levelKnown = true;
@@ -1853,6 +1950,7 @@ export class Governor {
         break;
       case 'QUERY_PHYSICAL_MINIMUM':
         i.physicalMinimum = v;
+        if (v !== undefined) i.floorSeen = Math.max(i.floorSeen ?? 0, v);
         break;
       case 'QUERY_MIN_LEVEL':
         i.minLevel = v;
@@ -1878,17 +1976,16 @@ export class Governor {
         else if (v === 254 && i.typesOpen === true) i.typesRead = true;
         break;
       case 'DT8_QUERY_COLOUR_TYPE_FEATURES':
-        if (v !== undefined) i.colour = { tc: (v & 2) !== 0, channels: (v >> 5) & 7 };
+        // A lost reply leaves nothing read: an older answer may be other gear's (review N1).
+        i.colour = v === undefined ? undefined : { tc: (v & 2) !== 0, channels: (v >> 5) & 7 };
         break;
       case 'QUERY_FADE_TIME_FADE_RATE':
-        if (v !== undefined) {
-          i.fadeReadBack = true;
-          i.fadeTime = (v >> 4) & 0x0f;
-          i.fadeRate = v & 0x0f;
-        }
+        i.fadeReadBack = v !== undefined;
+        i.fadeTime = v === undefined ? undefined : (v >> 4) & 0x0f;
+        i.fadeRate = v === undefined ? undefined : v & 0x0f;
         break;
       case 'QUERY_EXTENDED_FADE_TIME':
-        if (v !== undefined) i.extendedFade = v;
+        i.extendedFade = v;
         break;
       case 'DT6_QUERY_FAST_FADE_TIME':
         i.fastFade = v;
@@ -1903,10 +2000,15 @@ export class Governor {
         break;
       }
       case 'QUERY_GROUPS_0_7':
-        if (v !== undefined) i.groups = ((i.groups ?? 0) & 0xff00) | v;
-        break;
       case 'QUERY_GROUPS_8_15':
-        if (v !== undefined) i.groups = ((i.groups ?? 0) & 0x00ff) | (v << 8);
+        // Each half as last asked. With either half not heard, the groups are not known, and the
+        // gear counts as a possible member of every group (review N1).
+        if (cmd.id === 'QUERY_GROUPS_0_7') i.groupsLow = v;
+        else i.groupsHigh = v;
+        i.groups =
+          i.groupsLow === undefined || i.groupsHigh === undefined
+            ? undefined
+            : i.groupsLow | (i.groupsHigh << 8);
         break;
       case 'QUERY_ACTUAL_LEVEL':
         // A level read back seeds the model. Once the model runs, the shadow is the prediction and a

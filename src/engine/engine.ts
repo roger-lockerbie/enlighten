@@ -487,6 +487,8 @@ export class Engine {
   private latched = false;
   /** Counts every stop, so work that waits outside a job can tell one came (S8b-M3). */
   private stops = 0;
+  /** Counts every job stopped, for a level that waits on behalf of a run or a console line. */
+  private aborts = 0;
   /** Counts the level requests for each address, so a waiting level gives way to a newer one. */
   private readonly levelAsked = new Map<number, number>();
   private askCanSee = false;
@@ -819,7 +821,10 @@ export class Engine {
   }
 
   private abort(j: Job, why: string): void {
-    if (!j.aborted) j.why = why;
+    if (!j.aborted) {
+      j.why = why;
+      this.aborts++;
+    }
     j.aborted = true;
     for (const w of j.wakers ?? []) w();
     j.wakers?.clear();
@@ -1231,15 +1236,20 @@ export class Engine {
         const { arc, ...rest } = intent;
         const first = this.compileApply(conn, rest);
         if (typeof first === 'string') return { ok: false, reason: first };
+        // Taken before the colour goes, so a stop while the colour waits in the queue counts too.
+        const stops = this.stops;
+        const aborts = this.aborts;
+        const stopped = () =>
+          this.stops !== stops || this.aborts !== aborts || this.latched || this.active() !== conn;
         const set = await conn.scheduler.submit(txOf(first, source, 'apply: colour'));
         if (set.kind !== 'done') return fromTx(set);
+        if (stopped()) return { ok: false, kind: 'dropped', reason: 'Stopped.' };
         const level = txOf(
           [{ id: 'DAPC', address: short(intent.address), value: arc }],
           source,
           'apply: level',
         );
         const deadline = this.clock.now() + APPLY_PATIENCE_MS;
-        const stops = this.stops;
         const asked = this.askLevel(intent.address);
         for (;;) {
           const r = await conn.scheduler.submit(level);
@@ -1248,8 +1258,9 @@ export class Engine {
           await this.wait(Math.max(1, r.retryAt - this.clock.now()));
           // A stop, a panic or a newer level for this address while it waited ends it: the level is
           // not sent later.
-          if (this.stops !== stops || this.latched || this.active() !== conn)
-            return { ok: false, kind: 'dropped', reason: 'Stopped.' };
+          // Stop on a run and Ctrl-C on a console line stop jobs one by one, and the level may be
+          // waiting for one of them (Stage 11 review N3). Any job stopped ends the wait.
+          if (stopped()) return { ok: false, kind: 'dropped', reason: 'Stopped.' };
           if (this.levelAsked.get(intent.address) !== asked)
             return { ok: false, kind: 'dropped', reason: 'A newer level replaced this one.' };
         }
@@ -1363,6 +1374,13 @@ export class Engine {
     return cmds;
   }
 
+  /** Hardware gear that is, or may be, colour gear: the governor refuses it a DAPC sequence. */
+  private stepOnly(conn: Conn, address: number): boolean {
+    if (conn.governor.target !== 'hardware') return false;
+    const i = conn.governor.addressInfo(address);
+    return i?.typesRead !== true || (i.deviceTypes ?? []).includes(8);
+  }
+
   private async sendLive(key: string, v: LiveValue): Promise<CoalescedResult> {
     const conn = this.active();
     if (conn === undefined) return { ok: false };
@@ -1385,8 +1403,10 @@ export class Engine {
         // A moving control keeps a DAPC sequence going: the gear fades over 200 ms between them.
         // The time is taken when the last DAPC finished, which is later than the gear heard it, so a
         // margin keeps a sequence going only while it surely is (DALI review S5-D4).
+        // On hardware, colour gear takes a level only in one step (ADR 0022), so no sequence there.
         if (
           v.live &&
+          !this.stepOnly(conn, v.address) &&
           now - (this.lastLiveDapc.get(v.address) ?? -Infinity) >
             DAPC_SEQUENCE_MS - SEQUENCE_MARGIN_MS
         )

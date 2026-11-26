@@ -189,7 +189,12 @@ async function unseen(cfg: Saved[0], stream: readonly Step[], unlock = false): P
   // The trace is checked from the connect: what the gear did before is not the app's doing.
   await b.ready();
   if (unlock) b.governor.unlock('reset', 'console', true);
-  const { rec } = await play(b, [...extra, ...stream]);
+  // The wait at the end puts the last step's fade in the trace.
+  const { rec } = await play(b, [
+    ...extra,
+    ...stream,
+    { kind: 'tx', dt: 6000, source: 'ui', cmds: [] },
+  ]);
   expect(rateProblems(rec, 1)).toEqual([]);
 }
 
@@ -197,7 +202,8 @@ async function unseen(cfg: Saved[0], stream: readonly Step[], unlock = false): P
  * Steps aimed at what a scan cannot read (S8b-R2-D1, S8b-R2-D2): colours, parts of colours, levels,
  * recalls and switch-offs to two addresses, from 0 to 3 s apart and often close together. And what
  * the third review added (S8b-R3-8): queries, rescans, groups and broadcast, steps, fade settings and,
- * under the reset unlock, gear moved from one address onto the other.
+ * under the reset unlock, gear moved from one address onto the other. Stage 11 added fade settings
+ * read back, DAPC sequences and DOWN (S8b-R4-D1).
  */
 const aimed: fc.Arbitrary<Step[]> = fc.array(
   fc
@@ -208,6 +214,9 @@ const aimed: fc.Arbitrary<Step[]> = fc.array(
         ...(['rgb', 'red', 'tc', 'act', 'level', 'level', 'last', 'off', 'both'] as const),
         ...(['query', 'rescan', 'group', 'all', 'alloff', 'scene', 'up', 'down'] as const),
         ...(['cooler', 'fade0', 'fade0', 'fade2', 'move'] as const),
+        // Stage 11 (S8b-R4-D1, ADR 0022): fade settings read back, so a level can meet a fade the
+        // guard knows of, and the level commands that fade whatever the fade time is.
+        ...(['read', 'read', 'fade2read', 'sequence', 'dim', 'pink', 'pink'] as const),
       ),
       fc.array(fc.integer({ min: 0, max: 254 }), { minLength: 6, maxLength: 6 }),
       fc.integer({ min: 60, max: 900 }),
@@ -233,6 +242,27 @@ const aimed: fc.Arbitrary<Step[]> = fc.array(
           { id: 'DTR0', value: 2 },
           { id: 'SET_FADE_TIME', address: a },
         ],
+        read: [
+          { id: 'QUERY_FADE_TIME_FADE_RATE', address: a },
+          { id: 'QUERY_EXTENDED_FADE_TIME', address: a },
+        ],
+        fade2read: [
+          { id: 'DTR0', value: 2 },
+          { id: 'SET_FADE_TIME', address: a },
+          { id: 'QUERY_FADE_TIME_FADE_RATE', address: a },
+          { id: 'QUERY_EXTENDED_FADE_TIME', address: a },
+        ],
+        sequence: [{ id: 'ENABLE_DAPC_SEQUENCE', address: a }, level],
+        dim: [{ id: 'DOWN', address: a }],
+        // Red full and the others near it: a level fade then takes red in and out of saturation.
+        pink: rgbwafCommands(a, [
+          254,
+          180 + ((mix[1] ?? 0) % 60),
+          180 + ((mix[2] ?? 0) % 60),
+          0,
+          0,
+          0,
+        ]),
         // Under the reset unlock: the gear at one address moves onto the other.
         move: [
           { id: 'DTR0', value: ((1 - n) << 1) | 1 },
@@ -366,6 +396,121 @@ describe('P-rate on hardware the governor has never seen', () => {
         fc.asyncProperty(realBench, aimed, async (given, stream) => {
           // Two addresses, so the aimed steps reach gear that is there.
           await unseen({ ...given, units: [0, 1] }, stream, given.unlocked);
+        }),
+        { numRuns: RUNS },
+      );
+    },
+    timeout(RUNS),
+  );
+});
+
+/**
+ * Aimed at S8b-R4-D1 (ADR 0022), from the Stage 11 DALI review: one colour driver whose colour is
+ * near saturated red, set through the app and activated, then a short tail of fade settings with
+ * their read-backs, levels, a DAPC sequence, UP, DOWN, the continuous commands, steps and OFF. A
+ * faded level there takes red in and out of saturation. On the rule before this fails within a few
+ * dozen cases.
+ */
+const redTail: fc.Arbitrary<Step[]> = (() => {
+  const a = short(0);
+  const read: Command[] = [
+    { id: 'QUERY_FADE_TIME_FADE_RATE', address: a },
+    { id: 'QUERY_EXTENDED_FADE_TIME', address: a },
+  ];
+  const fadeTime = (t: number): Command[] => [
+    { id: 'DTR0', value: t },
+    { id: 'SET_FADE_TIME', address: a },
+  ];
+  const extended = (v: number): Command[] => [
+    { id: 'DTR0', value: v },
+    { id: 'SET_EXTENDED_FADE_TIME', address: a },
+  ];
+  return fc.array(
+    fc
+      .tuple(
+        fc.oneof(fc.integer({ min: 0, max: 700 }), fc.integer({ min: 2000, max: 4500 })),
+        fc.constantFrom(
+          ...(['fade', 'fade', 'ext', 'zero', 'read', 'level', 'level', 'level'] as const),
+          ...(['sequence', 'dim', 'up', 'cup', 'cdown', 'last', 'step', 'off', 'act'] as const),
+        ),
+        fc.integer({ min: 1, max: 254 }),
+        fc.integer({ min: 1, max: 6 }),
+      )
+      .map(([dt, what, v, f]): Step => {
+        const level: Command = { id: 'DAPC', address: a, value: v };
+        const table: Record<typeof what, Command[]> = {
+          fade: [...fadeTime(f), ...read],
+          zero: [...fadeTime(0), ...extended(0), ...read],
+          ext: [...fadeTime(0), ...extended(0x10 | f), ...read],
+          read,
+          level: [level],
+          sequence: [{ id: 'ENABLE_DAPC_SEQUENCE', address: a }, level],
+          dim: [{ id: 'DOWN', address: a }],
+          up: [{ id: 'UP', address: a }],
+          cup: [{ id: 'CONTINUOUS_UP', address: a }],
+          cdown: [{ id: 'CONTINUOUS_DOWN', address: a }],
+          last: [{ id: 'GO_TO_LAST_ACTIVE_LEVEL', address: a }],
+          step: [{ id: 'STEP_DOWN', address: a }],
+          off: [{ id: 'OFF', address: a }],
+          act: [{ id: 'DT8_ACTIVATE', address: a }],
+        };
+        return { kind: 'tx', dt, source: 'console', cmds: table[what] };
+      }),
+    { minLength: 1, maxLength: 6 },
+  );
+})();
+const redBench = fc.record({
+  tape: fc.constantFrom<'C3' | 'C4' | 'C5'>('C3', 'C4', 'C5'),
+  green: fc.integer({ min: 150, max: 254 }),
+  blue: fc.integer({ min: 150, max: 254 }),
+  level: fc.integer({ min: 150, max: 220 }),
+  fade: fc.integer({ min: 0, max: 4 }),
+});
+
+describe('P-rate on hardware colour gear near saturated red (ADR 0022)', () => {
+  it(
+    'holds for levels, fades, sequences and dims after the colour is activated',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(redBench, redTail, async (cfg, stream) => {
+          const a = short(0);
+          const mix: Mix = [254, cfg.green, cfg.blue, 0, 0, 0];
+          const real = Simulator.of([
+            {
+              id: 'R0',
+              profile: da5l(cfg.tape, 'rgbwaf', { physicalMinimum: 1 }),
+              opts: { shortAddress: 0 },
+            },
+          ]);
+          const r = new Rig(real, 0);
+          r.run(rgbwafCommands(a, mix));
+          r.set('SET_FADE_TIME', 0, cfg.fade);
+          r.to('DAPC', 0, cfg.level);
+          r.wait(20_000);
+          const b = makeBench({ sim: real, target: 'hardware', start: r.t + 100, ceilingArc: 254 });
+          await b.ready();
+          const tx = (dt: number, cmds: Command[]): Step => ({
+            kind: 'tx',
+            dt,
+            source: 'console',
+            cmds,
+          });
+          // The colour goes through the app with no fade, then a rescan and a bare ACTIVATE, so
+          // nothing waits in the gear and the governor takes a level (see hard-steps.test.ts).
+          const { rec } = await play(b, [
+            tx(4000, [
+              { id: 'DTR0', value: 0 },
+              { id: 'SET_FADE_TIME', address: a },
+              { id: 'QUERY_FADE_TIME_FADE_RATE', address: a },
+              { id: 'QUERY_EXTENDED_FADE_TIME', address: a },
+            ]),
+            tx(4000, rgbwafCommands(a, mix)),
+            { kind: 'rescan', dt: 4000 },
+            tx(1000, [{ id: 'DT8_ACTIVATE', address: a }]),
+            ...stream,
+            tx(8000, []),
+          ]);
+          expect(rateProblems(rec, 1)).toEqual([]);
         }),
         { numRuns: RUNS },
       );
