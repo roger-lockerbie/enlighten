@@ -7,6 +7,17 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
+  # The hardware server's and the golden tool's hash-pinned requirements. A proposed pin is still
+  # read by hand before it is merged: pip has no release-age rule of its own.
+  - package-ecosystem: pip
+    directories:
+      - /server
+      - /tools/golden
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: /
     schedule:
