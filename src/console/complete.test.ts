@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { BINDINGS } from './keys.ts';
 import { complete, type CompleteContext } from './complete.ts';
-import { help, HELP_TOPICS } from './help.ts';
+import { help, TOPIC_NAMES } from './help.ts';
+import { HELP_TOPICS } from './topics.ts';
 import { COLLISION, replyName, replyText } from './replies.ts';
 
 const ctx: CompleteContext = {
@@ -47,6 +48,16 @@ describe('complete', () => {
     expect(at('query 0 act')?.text).toBe('actual-level ');
     expect(at('query 0 lev')?.text).toBe('level ');
     expect(at('help ke')?.text).toBe('keys ');
+    // Help takes DALI command names, and explain completes as the line it explains.
+    expect(at('help query-act')?.text).toBe('query-actual-level ');
+    expect(at('help expl')?.text).toBe('explain ');
+    expect(at('explain sce')?.text).toBe('scene ');
+    expect(at('explain scene 0 re')?.items).toEqual(['recall', 'remove']);
+    // Only what explain covers is offered after it.
+    expect(at('explain help ke')).toBeUndefined();
+    expect(at('explain pa')).toBeUndefined();
+    expect(at('explain expl')).toBeUndefined();
+    expect(at('explain query-act')?.text).toBe('query-actual-level ');
     expect(at('unlock r')?.items).toEqual(['rate', 'reset']);
     expect(at('lock e')?.text).toBe('expert ');
     expect(at('target b')?.text).toBe('both ');
@@ -138,11 +149,12 @@ describe('help', () => {
   it('lists commands and explains each topic', () => {
     expect(help(undefined, 'mac')[0]).toContain('Commands:');
     for (const t of HELP_TOPICS) expect(help(t, 'mac').length).toBeGreaterThan(0);
+    // Completion's list of topics is the list help has.
+    expect([...HELP_TOPICS]).toEqual([...TOPIC_NAMES]);
     expect(help('level', 'mac')[0]).toBe('level <addr> <value> [fade <time>]');
-    expect(help('recall-max-level', 'mac')).toEqual([
-      'recall-max-level is a DALI command. See help dali.',
-    ]);
-    expect(help('nope', 'mac')).toEqual(['No help for "nope". Type help for the list.']);
+    expect(help('recall-max-level', 'mac')[0]).toBe(
+      'recall-max-level <addr>     RECALL MAX LEVEL, IEC 62386-102',
+    );
   });
 
   it('prints the keys from the binding table, for the platform in use', () => {

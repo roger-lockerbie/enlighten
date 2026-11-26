@@ -316,6 +316,39 @@ describe('friendly commands', () => {
     expect(err('trace maybe')).toBe('trace takes on or off.');
   });
 
+  it('reads only its own words from its tables (SH-1)', () => {
+    for (const w of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
+      expect(err(`target ${w}`), w).toBe('target takes sim, hw or both.');
+      expect(err(`query 0 ${w}`), w).toMatch(/is not something query can ask/);
+      expect(err(`explain query 0 ${w}`), w).toMatch(/is not something query can ask/);
+    }
+  });
+
+  it('explain takes one line that sends DALI frames itself', () => {
+    expect(cmd('explain tc 0 3000K 30%')).toEqual({
+      cmd: 'explain',
+      line: 'tc 0 3000K 30%',
+      inner: cmd('tc 0 3000K 30%'),
+    });
+    expect(cmd('explain   dapc 0 128   # why')).toEqual({
+      cmd: 'explain',
+      line: 'dapc 0 128',
+      inner: { cmd: 'dali', id: 'DAPC', to: [short(0)], value: 128 },
+    });
+    expect(cmd('explain raw a3 4d')).toMatchObject({ inner: { cmd: 'raw', a: 0xa3, b: 0x4d } });
+    expect(cmd('EXPLAIN off all')).toMatchObject({ inner: { cmd: 'off', to: [broadcast] } });
+    // The inner line's own errors come back as they are.
+    expect(err('explain level 0')).toBe(err('level 0'));
+    expect(err('explain frob')).toBe(err('frob'));
+    expect(err('explain')).toBe('explain takes a command, such as explain tc 0 3000K.');
+    const not =
+      'explain covers commands that send DALI frames themselves: level, off, on, tc, rgb, fade, scene, group, query, raw and any DALI command by name.';
+    for (const c of ['cap 40%', 'scan', 'panic', 'unlock reset', 'target hw', 'wait 2s', 'help'])
+      expect(err(`explain ${c}`)).toBe(`${not} For ${c.split(' ')[0] ?? ''}, see help.`);
+    expect(err('explain explain off 0')).toBe(`${not} For explain, see help.`);
+    expect(err('explain # nothing')).toBe('explain takes a command, such as explain tc 0 3000K.');
+  });
+
   it('unlock, lock, run, history, help, echo, wait, pause, use, raw', () => {
     expect(cmd('unlock reset')).toEqual({ cmd: 'unlock', name: 'reset' });
     expect(err('unlock')).toBe('unlock takes rate, reset or expert.');
@@ -328,7 +361,10 @@ describe('friendly commands', () => {
     expect(cmd('history -c')).toEqual({ cmd: 'history', args: ['-c'] });
     expect(cmd('help')).toEqual({ cmd: 'help' });
     expect(cmd('help Keys')).toEqual({ cmd: 'help', topic: 'keys' });
-    expect(err('help a b')).toBe('help takes one topic.');
+    expect(err('help a b')).toBe('help takes one topic, or -k and a word to look for.');
+    expect(cmd('help -k Fade')).toEqual({ cmd: 'help', find: 'fade' });
+    expect(err('help -k')).toBe('help -k takes one word to look for.');
+    expect(err('help -k a b')).toBe('help -k takes one word to look for.');
     expect(cmd('echo "hello  there" you')).toEqual({ cmd: 'echo', text: 'hello  there you' });
     expect(cmd('wait 2s')).toEqual({ cmd: 'wait', ms: 2000 });
     expect(err('wait')).toBe('wait takes one time, such as 2s.');

@@ -6,8 +6,8 @@
 import type { Completion } from './editor.ts';
 import { lex } from './lex.ts';
 import { DALI_NAMES } from './names.ts';
-import { FRIENDLY, QUERY_WORDS, UNLOCKS } from './parse.ts';
-import { HELP_TOPICS } from './help.ts';
+import { FRIENDLY, QUERY_WORDS, UNLOCKS, EXPLAINABLE, type CommandName } from './parse.ts';
+import { HELP_TOPICS } from './topics.ts';
 
 export interface CompleteContext {
   /** Short addresses in the inventory. */
@@ -46,6 +46,13 @@ function commonPrefix(items: readonly string[]): string {
   return first.slice(0, n);
 }
 
+/** The kind of command a first word starts: one of the console's own, or a DALI command by name. */
+function wordCommand(w: string | undefined): CommandName {
+  const head = (w ?? '').toLowerCase();
+  const own = FRIENDLY.find((f) => f === head);
+  return own ?? (DALI_NAMES.has(head) ? 'dali' : 'help');
+}
+
 /** Every word that may come next after the words already typed. */
 function candidates(words: readonly string[], ctx: CompleteContext): string[] {
   const head = words[0]?.toLowerCase();
@@ -56,7 +63,14 @@ function candidates(words: readonly string[], ctx: CompleteContext): string[] {
     case 'run':
       return at === 1 ? [...ctx.scripts] : [];
     case 'help':
-      return at === 1 ? [...HELP_TOPICS] : [];
+      return at === 1 ? [...HELP_TOPICS, ...DALI_NAMES.keys()] : [];
+    case 'explain':
+      // The rest of the line completes as the line it explains, from the commands explain covers.
+      return at === 1
+        ? [...EXPLAINABLE.filter((c) => c !== 'dali'), ...DALI_NAMES.keys()]
+        : EXPLAINABLE.includes(wordCommand(words[1]))
+          ? candidates(words.slice(1), ctx)
+          : [];
     case 'unlock':
     case 'lock':
       return at === 1 ? [...UNLOCKS] : [];

@@ -312,7 +312,9 @@ An alias starts with a letter, is not a command name or keyword, and does not ma
 | `panic`, `resume`                                 | Panic, and release of the latch                                               |
 | `unlock <name>`, `lock [<name>]`                  | Session unlocks                                                               |
 | `run <script>`, `scripts`                         | Runs a script, or lists them                                                  |
-| `history [-c]`, `clear`, `help [<topic>]`         | History, clearing the screen, and help. `help keys` shows the binding table   |
+| `history [-c]`, `clear`                           | History, and clearing the screen                                              |
+| `help [<topic>]`, `help -k <word>`                | Help for a command of either kind or a topic, or a word looked up in all help |
+| `explain <line>`                                  | What a line would send, as commands and frames. It sends nothing              |
 | `echo <text>`, `wait <time>`                      | As in scripts                                                                 |
 
 ### DALI commands
@@ -324,6 +326,16 @@ Every device type command also answers to its name with a `dt6-` or `dt8-` prefi
 `raw <hex> <hex> [x2]` sends one 16-bit frame as given. It is judged like any other frame. A send-twice command is always sent twice, and the console says so. `x2` is accepted only on a send-twice command, and refused on any other frame. A RESET, by its DALI name or as `raw`, goes to one short address at a time and runs the full RESET sequence in section 5: RESET, OFF 350 ms later, then the safety profile written and verified again. The console says first that the driver goes to full output for about 0.3 s (ADR 0015).
 
 A step the rate guard holds with a retry time waits for it, up to 10 s, and prints `waiting` with the time and the reason. Ctrl-C ends the wait. Any other refusal ends the line.
+
+### Help and explain
+
+ADR 0023 has the reasons.
+
+`help` alone lists the console's commands. `help <name>` explains one of them, a topic (`keys`, `addresses`, `values`, `dali`, `hardware`, `scripts`), or any DALI command by a name the console accepts. For a DALI command it gives the syntax, the name in the standard and its part, what the command does, its frame and reply, the registers it reads or sets, whether it is sent twice, what the governor does with it, the console's own command for the same job where there is one, and an example with its frames. `help dali` lists every DALI command by group. `help -k <word>` lists the topics and commands whose name or text has the word, 30 at most.
+
+What a DALI command does is written in the app's own words from the public sources in `docs/research/dali.md`, not taken from IEC 62386. Where those sources do not describe a command, help says so. The rest of an entry is built from the command table and the governor's rule table.
+
+`explain <line>` prints what the line would send, and sends nothing. Each row is the console line that sends one DALI command, its frames in hex, and its name in the standard. `x2` marks a command sent twice, and ENABLE DEVICE TYPE is shown where it is added. The last lines give the number of commands and frames, and say that the governor judges a line when it is sent. `explain` covers `level`, `off`, `on`, `tc`, `rgb`, `fade`, `scene`, `group`, `query`, `raw` and any DALI command by name. For any other command it says that it does not cover it. It reads the target and what the app knows of the driver, as the line would, so it can differ between the simulator and hardware. It does not ask the governor. It does say when a DAPC is above the ceiling and would be clamped. A script may not use `explain`.
 
 ### Replies
 

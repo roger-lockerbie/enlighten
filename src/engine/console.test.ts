@@ -14,6 +14,10 @@ import { Simulator } from '../sim/simulator.ts';
 import { SimTransport } from '../transport/sim.ts';
 import {
   ConsoleExec,
+  dryHost,
+  EXPLAIN_MAX_LINES,
+  explainLines,
+  frameCount,
   nearestFade,
   RATE_WAIT_LIMIT_MS,
   type ConsoleHost,
@@ -506,6 +510,294 @@ describe('scripts', () => {
   });
 });
 
+describe('explain (ADR 0023)', () => {
+  /** The typeable line in each row explain printed: two spaces, the line, two spaces or more. */
+  const rows = (out: string[]) =>
+    out.filter((l) => l.startsWith('  ')).map((l) => l.trim().split(/ {2,}/)[0] ?? '');
+  /** The commands those lines send, parsed as the console would parse them. */
+  const listed = (out: string[]) =>
+    rows(out).map((line) => {
+      const p = parseLine(line, ctx);
+      if (!p.ok || p.command === undefined) throw new Error(line);
+      const c = p.command;
+      if (c.cmd === 'off') return { id: 'OFF', address: c.to[0] };
+      if (c.cmd !== 'dali') throw new Error(line);
+      return {
+        id: c.id,
+        ...(c.to?.[0] === undefined ? {} : { address: c.to[0] }),
+        ...(c.value === undefined ? {} : { value: c.value }),
+      };
+    });
+
+  it('prints the commands, the frames and the names, and sends nothing', async () => {
+    const t = setup();
+    await t.settle();
+    await t.type('level 0 100');
+    const frames = t.simTransport.log.length;
+    // The snapshot carries the monitor's last lines only, so its length says nothing: the last
+    // line's number does.
+    const monitor = t.engine.snapshot().monitor.at(-1)?.seq;
+    expect(monitor).toBeGreaterThan(0);
+    const { r, out } = await t.type('explain tc 0 3000K 30%');
+    expect(r.ok).toBe(true);
+    expect(out).toEqual([
+      'explain tc 0 3000K 30%: with the target simulator, this would send:',
+      '  dtr0 77                             A3 4D         DTR0 77',
+      '  dtr1 1                              C3 01         DTR1 1',
+      '  set-temporary-colour-temperature 0  C1 08, 01 E7  ENABLE DEVICE TYPE 8, then SET TEMPORARY COLOUR TEMPERATURE Tc A0',
+      '  dapc 0 210                          00 D2         DAPC A0 210',
+      '4 commands, 5 frames on the bus. Nothing was sent.',
+      'The governor judges a line when it is sent, and may clamp, hold or refuse it.',
+    ]);
+    expect(t.simTransport.log.length).toBe(frames);
+    expect(t.engine.snapshot().monitor.at(-1)?.seq).toBe(monitor);
+    // The driver is where it was.
+    const { out: level } = await t.type('query 0 level');
+    expect(level[0]).toMatch(/^actual level 100 /);
+  });
+
+  it('lists exactly what the line then sends, for each kind of command', async () => {
+    const lines = [
+      'level 0 40%',
+      'level 0 128 fade 2s',
+      'level 1 10% fade 300ms',
+      'off 1',
+      'on 0',
+      'tc 0 2700K',
+      'tc 0 4000K 60%',
+      'rgb 1 200 10 0',
+      'rgb 1 #204060 w 30',
+      'fade 0 4s',
+      'fade 0 rate 7',
+      'fade 1',
+      'scene 0 store 3 90',
+      'scene 0 recall 3',
+      'scene 0 remove 3',
+      'scene 1 list',
+      'group 0 add 2',
+      'group 0 remove 2',
+      'query 0',
+      'query 1 tc',
+      'query 0 groups',
+      'dapc 0 77',
+      'recall-min-level 1',
+      'dtr0 12',
+      'query-status 0',
+      `${nameOf('DT8_QUERY_COLOUR_TYPE_FEATURES')} 1`,
+      'raw 01 a0',
+      'level g2 20%',
+      'off all',
+    ];
+    // With the ceiling at the top, so the governor clamps nothing. The clamp has its own test.
+    const t = setup({ ceilingArc: 254 });
+    await t.settle();
+    for (const line of lines) {
+      // Let the rate guard's window pass, so the real line is not held or refused.
+      await t.clock.advance(5000);
+      await t.settle();
+      const before = t.simTransport.log.length;
+      const explained = await t.type(`explain ${line}`);
+      expect(t.simTransport.log.length, line).toBe(before);
+      const from = t.simTransport.log.length;
+      const real = await t.type(line);
+      expect(real.r.ok, `${line}: ${real.out.join(' / ')}`).toBe(true);
+      const heard = t.heard(from).filter((c) => c.id !== 'ENABLE_DEVICE_TYPE');
+      expect(listed(explained.out), line).toEqual(heard);
+    }
+  });
+
+  it('shows a send-twice command once, marked, and counts both frames', async () => {
+    const t = setup();
+    await t.settle();
+    const { out } = await t.type('explain fade 0 rate 7');
+    expect(out).toEqual([
+      'explain fade 0 rate 7: with the target simulator, this would send:',
+      '  dtr0 7           A3 07     DTR0 7',
+      '  set-fade-rate 0  01 2F x2  SET FADE RATE A0, sent twice',
+      '2 commands, 3 frames on the bus. Nothing was sent.',
+      'The governor judges a line when it is sent, and may clamp, hold or refuse it.',
+    ]);
+  });
+
+  it('marks a query, and goes through each address of a list', async () => {
+    const t = setup();
+    await t.settle();
+    const { out } = await t.type('explain query 0,1 level');
+    expect(out.slice(1, 3)).toEqual([
+      '  query-actual-level 0  01 A0  QUERY ACTUAL LEVEL A0, answers',
+      '  query-actual-level 1  03 A0  QUERY ACTUAL LEVEL A1, answers',
+    ]);
+    expect(out[3]).toBe('2 commands, 2 frames on the bus. Nothing was sent.');
+  });
+
+  it('says what it cannot know: the level a scene store would read', async () => {
+    const t = setup();
+    await t.settle();
+    const { r, out } = await t.type('explain scene 0 store 5');
+    expect(r.ok).toBe(true);
+    expect(rows(out)).toEqual([
+      'query-actual-level 0',
+      'dtr0 0',
+      'set-scene 0 5',
+      'query-scene-level 0 5',
+    ]);
+    expect(out).toContain('DTR0 then carries the level that was read. It is shown as 0 here.');
+  });
+
+  it('explains RESET without the reset unlock, and resets nothing', async () => {
+    const t = setup();
+    await t.settle();
+    await t.type('level 0 100');
+    const frames = t.simTransport.log.length;
+    const { r, out } = await t.type('explain reset 0');
+    expect(r.ok).toBe(true);
+    expect(rows(out)).toEqual(['reset 0']);
+    expect(out.join('\n')).toContain('It needs the reset unlock.');
+    expect(t.simTransport.log.length).toBe(frames);
+    expect((await t.type('query 0 level')).out[0]).toMatch(/^actual level 100 /);
+  });
+
+  it("gives the console's own refusals, and the engine's reasons, without sending", async () => {
+    const t = setup();
+    await t.settle();
+    const frames = t.simTransport.log.length;
+    // A0 is tunable white: it has no RGBWAF channels, which the engine says when it builds the line.
+    const rgb = await t.type('explain rgb 0 10 20 30');
+    expect(rgb.out.some((l) => l.startsWith('refused: '))).toBe(true);
+    expect(rgb.out.at(-1)).toBe('Nothing would be sent.');
+    const raw = await t.type('explain raw 01 e7');
+    expect(raw.out.join(' ')).toContain('is not a supported command on its own');
+    const twice = await t.type('explain raw 01 a0 x2');
+    expect(twice.out.join(' ')).toContain('not a send-twice command');
+    expect(t.simTransport.log.length).toBe(frames);
+  });
+
+  it('says when the governor would clamp a level to the ceiling', async () => {
+    const t = setup({ ceilingArc: 200 });
+    await t.settle();
+    const { out } = await t.type('explain level 0 254');
+    expect(out).toContain('The ceiling is 200, so the governor would send DAPC 254 as 200.');
+    // And that is what it does.
+    const from = t.simTransport.log.length;
+    await t.type('level 0 254');
+    expect(t.heard(from).filter((c) => c.id === 'DAPC')).toEqual([
+      { id: 'DAPC', address: { kind: 'short', n: 0 }, value: 200 },
+    ]);
+    expect((await t.type('explain dapc 0 mask')).out.join(' ')).not.toContain('The ceiling is');
+  });
+
+  it('cuts a long list short, keeping the header and saying how many lines are left out', async () => {
+    const t = setup();
+    await t.settle();
+    const { r, out } = await t.type('explain query 0..16');
+    expect(r.ok).toBe(true);
+    expect(out[0]).toBe('explain query 0..16: with the target simulator, this would send:');
+    expect(out[1]).toMatch(/^ {2}query-status 0 /);
+    // 17 addresses of 12 queries: 204 rows, of which 150 are printed.
+    expect(out.filter((l) => l.startsWith('  ')).length).toBe(EXPLAIN_MAX_LINES);
+    expect(out).toContain(
+      '54 more lines are not shown. Explain fewer addresses at a time to see them.',
+    );
+    expect(out).toContain('204 commands, 204 frames on the bus. Nothing was sent.');
+    // The whole answer fits in what a snapshot carries.
+    expect(out.length).toBeLessThan(200);
+  });
+
+  it('turns away a word that is not in its tables, as the real line does (SH-1)', async () => {
+    const t = setup();
+    await t.settle();
+    for (const w of ['constructor', '__proto__', 'toString']) {
+      const a = await t.type(`explain query 0 ${w}`);
+      expect(a.r.ok, w).toBe(false);
+      expect(a.out.join(' '), w).toContain('is not something query can ask');
+      expect((await t.type(`target ${w}`)).out.join(' '), w).toContain(
+        'target takes sim, hw or both.',
+      );
+      expect((await t.type(`help ${w}`)).out.join(' '), w).toMatch(/^No help for "/);
+    }
+    expect(t.engine.snapshot().target).toBe('simulator');
+    // A script that asks for help on such a word runs to its end.
+    const r = await t.drive(t.engine.runScript('x', 'help constructor\necho done', ctx));
+    expect(r.ok).toBe(true);
+    expect(t.engine.snapshot().script).toBeUndefined();
+  });
+
+  it('says which DTR a command would read', async () => {
+    const t = setup();
+    await t.settle();
+    await t.type('dtr0 200');
+    const { out } = await t.type('explain set-max-level 0');
+    expect(out[1]).toBe('uses DTR0 = 200');
+    expect(rows(out)).toEqual(['set-max-level 0']);
+  });
+
+  it('runs nowhere but the console: a script may not use it', async () => {
+    const t = setup();
+    await t.settle();
+    const r = await t.drive(t.engine.runScript('x', 'explain off 0', ctx));
+    expect(r.ok).toBe(false);
+    expect(t.lines().join('\n')).toContain('explain cannot be used in a script.');
+  });
+});
+
+describe('the host explain runs on', () => {
+  it('reads through, and refuses everything that would send or change the app', async () => {
+    const f = fakeHost([]);
+    const calls: string[] = [];
+    const real: ConsoleHost = {
+      ...f.host,
+      request: (i) => {
+        calls.push('request');
+        return f.host.request(i, 'console');
+      },
+      setCeiling: () => (calls.push('setCeiling'), Promise.resolve({ ok: true })),
+      setTarget: () => (calls.push('setTarget'), Promise.resolve({ ok: true })),
+      rescan: () => (calls.push('rescan'), Promise.resolve({ ok: true })),
+      reapplyProfile: () => (calls.push('reapplyProfile'), Promise.resolve({ ok: true })),
+      reset: () => (calls.push('reset'), Promise.resolve({ ok: true })),
+      unlock: () => (calls.push('unlock'), { ok: true }),
+      lock: () => void calls.push('lock'),
+      resume: () => (calls.push('resume'), { ok: true }),
+      panic: () => (calls.push('panic'), Promise.resolve()),
+      sleep: () => (calls.push('sleep'), Promise.resolve()),
+    };
+    const dry = dryHost(real);
+    const no = { ok: false, reason: 'explain sends nothing.' };
+    expect(await dry.request({ kind: 'raw', a: 1, b: 0 }, 'console')).toMatchObject(no);
+    expect(await dry.setCeiling(254, 'console', true)).toEqual(no);
+    expect(await dry.setTarget('hardware', 'console')).toEqual(no);
+    expect(await dry.rescan('console')).toEqual(no);
+    expect(await dry.reapplyProfile('console')).toEqual(no);
+    expect(await dry.reset(0, 'console')).toEqual(no);
+    expect(dry.unlock('reset', 'console', true)).toEqual(no);
+    expect(dry.resume('console')).toEqual(no);
+    dry.lock();
+    await dry.panic();
+    await dry.sleep(1000);
+    expect(calls).toEqual([]);
+    expect(dry.ceilingArc()).toBe(200);
+    expect(dry.dtr()).toEqual([220, undefined, undefined]);
+    expect(dry.target()).toBe('simulator');
+    expect(dry.devices()).toEqual([]);
+    expect(dry.connectionText()).toBe('The simulated bench is in use.');
+    expect(dry.stopped()).toBe(false);
+    expect(dry.now()).toBe(0);
+    expect(dry.compile({ kind: 'commands', commands: [{ id: 'TERMINATE' }] })).toEqual({
+      commands: [{ id: 'TERMINATE' }],
+      notes: [],
+    });
+  });
+
+  it('formats rows in columns, and counts a send-twice frame twice', () => {
+    expect(
+      explainLines([{ id: 'TERMINATE' }, { id: 'RESET', address: { kind: 'broadcast' } }]),
+    ).toEqual(['  terminate  A1 00     TERMINATE', '  reset all  FF 20 x2  RESET BC, sent twice']);
+    expect(frameCount([{ id: 'TERMINATE' }, { id: 'RESET', address: { kind: 'broadcast' } }])).toBe(
+      3,
+    );
+  });
+});
+
 /** A host whose requests answer from a list, for the paths the bench does not reach. */
 function fakeHost(results: RequestResult[], devices: DeviceView[] = []) {
   let now = 0;
@@ -515,6 +807,10 @@ function fakeHost(results: RequestResult[], devices: DeviceView[] = []) {
       sent.push(intent);
       return Promise.resolve(results.shift() ?? { ok: true, answers: [] });
     },
+    compile: (intent) =>
+      intent.kind === 'commands'
+        ? { commands: [...intent.commands], notes: [] }
+        : 'not built by this fake',
     devices: () => devices,
     ceilingArc: () => 200,
     dtr: () => [220, undefined, undefined],
