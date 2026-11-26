@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 8b are merged. Stage 9 is merged. Stage 10 (switchgear) is in review on `stage-10-switchgear`. Its plan is ADR 0021.
+Stages 0 to 10 are merged. Stage 11 (hardening, independent review, going public) is in review on `stage-11-hardening`, up to its gate: the owner's answer on the licence and on making the repo public. The release tag comes after that.
 
 ## Done in Stage 0
 
@@ -279,7 +279,7 @@ Built:
 Known gaps, all on the Hardware and Both targets, which nothing uses until the hasseb arrives:
 
 - The holding rules refuse too much: no colour fades, no group or broadcast levels, one change about every 2 s to an address, and the ceiling counts colour gear as every channel full.
-- S8b-R4-D1 (High, open): a faded level on gear with a red channel can make three legs where the guard counts one.
+- S8b-R4-D1 (High): a faded level on gear with a red channel can make three legs where the guard counts one. Closed in Stage 11 by one more holding rule (ADR 0022).
 - S8b-R4-3 and S8b-R3-9 (Medium, open): a scan ends a range on the fade-running bit, which the DA5-L may not set.
 - S8b-R4-4 (Low, open): DAPC 0 with a fade time is refused for good on hardware. OFF works.
 - S8b-2 (Low, open): out-of-step grids.
@@ -332,7 +332,7 @@ Known gaps:
 - Breathe is a triangle wave. A stopped effect leaves each light where it was in its cycle.
 - The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review.
 
-## Stage 10 (switchgear), in review
+## Stage 10 (switchgear), merged
 
 Branch `stage-10-switchgear`. ADR 0021 records the design. What is in it:
 
@@ -350,7 +350,39 @@ Stage close:
 
 Known gaps: no console commands for plates; zencontrol's own timings and first-hold direction are unconfirmed; the stored tree nesting limit is now 10.
 
+## Stage 11 (hardening, independent review, going public), in review
+
+Branch `stage-11-hardening`, on Fable by the owner's choice (the plan said Opus), reviewers included. Three decisions the owner made in planning on 2026-11-26: close S8b-R4-D1 with a holding rule, run the reviewers on Fable, and make the repo public before tagging v0.1.0, because a build provenance attestation needs a public repo on this account's plan.
+
+What is in it:
+
+- **ADR 0022.** On Hardware and Both, colour gear takes a level only in one moment: with every fade setting read back as 0, never by UP, DOWN or the continuous commands, and never in a DAPC sequence. It closes S8b-R4-D1, the last High finding. The Simulator target changes in one way only: after an address move it forgets the colour features and groups read of that address until a rescan (S11-29, from the DALI close review).
+- **Read-backs (S11-1).** On hardware a scan starts from nothing read, a lost reply leaves nothing read, and an address move forgets what was read of every address. Found by both reviewers.
+- **The whole-repo review** against the threat model, and the threat model walked row by row. Both are in `docs/SECURITY_FINDINGS.md` under Stage 11 (S11-1 to S11-32).
+- **Fixes from it:** no CORS headers from the preview and dev servers, a repeated Host or Origin refused cleanly, a stop that could not reach the hasseb sent when it is back, Stop and Ctrl-C ending an Apply's wait, clearer refusal words, a warning and a 2 s pace in `tools/first_light.py`.
+- **Supply chain.** Four development tools updated (vite 8.3.8, typescript-eslint 8.72.2, prettier 3.10.1, eslint-plugin-svelte 3.24.1). `pnpm audit` reports minimatch only, as before. Licences checked across all 350 packages. All nine action pins checked against their tags. `pnpm sbom:all` writes CycloneDX SBOMs for the app and the server with no new dependency. `THIRD_PARTY_NOTICES.md`. Dependabot watches the Python pins, and CodeQL has a Python leg.
+- **The release.** `.github/workflows/release.yml` and `tools/release/pack.sh`: a `v*` tag builds the archive, the SBOMs and `SHA256SUMS`, attests each file and publishes. The publish job skips while the repo is private. Version 0.1.0 in `package.json`. The README is rewritten, with steps to build from source and to verify a release.
+- **The history.** Every commit on every branch on GitHub uses a noreply address, and no secret, machine path or personal detail was found in `git log -p --all`. S0-L7 is closed.
+
+Stage close:
+
+- `pnpm verify` passes at `7509a9d`: 3,224 unit and property tests with 1 expected failure (the saved S9-P1 case), 98.1% lines and 91.65% branches on the pure core, 65 preview e2e tests and 18 server e2e tests. The server's pytest suite: 1,394 passed, 4 skipped.
+- `PROP_RUNS=1000 pnpm test:prop` passes on the finished tree with seed 734157876 (72 properties in 24 files, `design.prop.test.ts` left out as in earlier stages).
+- `security-reviewer` on the whole repo: **pass with follow-ups**. `dali-reviewer` on the governor change: **pass with follow-ups**. Both ran again on the fixes and both ended on **pass with follow-ups**. Every finding is fixed or logged, and no High or Critical is open.
+- The last governor fixes (`7509a9d`, from the DALI close review) have had no further independent review. Each makes the governor stricter and each has a test.
+
+Not done, and why:
+
+- **The release workflow has not run on GitHub.** The pack script runs locally. A manual run (build only) is the first thing to try once the branch is pushed.
+- **The tag, the licence, the public switch, secret scanning, push protection and the `main` ruleset** wait for the owner's yes (step 5 of the stage).
+- **The workflow lockfile** (S11-14) needs the `gh actions-lock` extension installed, which is the owner's call.
+- **A byte-for-byte match** between a local build and CI's archive has not been shown. The local machine has no GNU tar.
+- `pnpm mutate` was not run in this stage, though `src/safety` changed. It is the first thing owed on the governor's new lines.
+
+Open, none High: S9-P1 and S9-T1 (for the owner), S11-11, S11-13 to S11-16, S11-25, and the hardware-day items.
+
 ## Next
 
+- The owner's answer on the licence (Apache-2.0 suggested) and on making the repo public. Then: the licence file, public, secret scanning and push protection, the `main` and tag rulesets, CodeQL's first run, and the v0.1.0 tag.
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
-- Stage 11 (hardening and review) on Opus, in a fresh session.
+- Stage 12 (hardware day) on Opus, whenever the hasseb arrives.
