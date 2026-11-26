@@ -32,6 +32,24 @@ def check_headers(h: dict[str, str]) -> None:
     for k, v in HEADERS.items():
         assert h.get(k) == v, k
     assert "Server" not in h
+    assert not any(k.lower().startswith("access-control-") for k in h)
+
+
+def get_twice(port: int, path: str, name: str, values: tuple[str, str], headers: dict[str, str] | None = None):
+    """A GET with one header sent twice."""
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    c.putrequest("GET", path, skip_host=True)
+    if name != "Host":
+        c.putheader("Host", f"127.0.0.1:{port}")
+    for v in values:
+        c.putheader(name, v)
+    for k, v in (headers or {}).items():
+        c.putheader(k, v)
+    c.endheaders()
+    r = c.getresponse()
+    body = r.read()
+    c.close()
+    return r.status, dict(r.getheaders()), body
 
 
 async def in_thread(fn, *args, **kw):
@@ -73,6 +91,30 @@ def test_refuses_a_wrong_host(dist: Path, host: str) -> None:
             status, h, _ = await in_thread(get, s.port, "/", host.format(p=s.port))
             assert status == 421
             check_headers(h)
+
+    asyncio.run(go())
+
+
+def test_refuses_a_header_sent_twice(dist: Path) -> None:
+    """Two Hosts or two Origins are refused as wrong, not answered with a 500 (Stage 11 review N5)."""
+
+    async def go() -> None:
+        async with server(dist) as s:
+            good = f"127.0.0.1:{s.port}"
+            for values in [(good, good), (good, "evil.example"), ("evil.example", good)]:
+                status, h, _ = await in_thread(get_twice, s.port, "/", "Host", values)
+                assert status == 421, values
+                check_headers(h)
+            upgrade = {"Upgrade": "websocket", "Connection": "Upgrade"}
+            for values in [(s.origin, s.origin), (s.origin, "http://evil.example"), ("http://evil.example", s.origin)]:
+                status, h, _ = await in_thread(get_twice, s.port, "/bus", "Origin", values, upgrade)
+                assert status == 403, values
+                check_headers(h)
+            status, h, _ = await in_thread(
+                get_twice, s.port, "/bus", "Upgrade", ("websocket", "h2c"), {"Origin": s.origin}
+            )
+            assert status == 426
+            assert s.frames() == []
 
     asyncio.run(go())
 

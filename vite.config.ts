@@ -39,6 +39,8 @@ export default defineConfig({
     port: DEV_PORT,
     strictPort: true,
     allowedHosts: [HOST],
+    // Vite's default answers other local origins with CORS headers. This app has no use for them.
+    cors: false,
     headers: securityHeaders('dev'),
   },
   preview: {
@@ -46,6 +48,7 @@ export default defineConfig({
     port: PREVIEW_PORT,
     strictPort: true,
     allowedHosts: [HOST],
+    cors: false,
     headers: securityHeaders('strict'),
   },
   build: {
