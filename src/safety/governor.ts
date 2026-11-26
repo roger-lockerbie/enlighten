@@ -144,6 +144,28 @@ const FADE_SETTINGS: ReadonlySet<string> = new Set([
  */
 const UNFOUND = -1;
 
+/**
+ * Forget what a scan reads of an address, but its device types and whether it answered. A value not
+ * read counts as the worst case wherever the guard uses it: the longest fade, every group, colour gear.
+ */
+function forgetReadBacks(i: AddressInfo): void {
+  i.fadeReadBack = false;
+  i.fadeTime = undefined;
+  i.fadeRate = undefined;
+  i.extendedFade = undefined;
+  i.fastFade = undefined;
+  i.groups = undefined;
+  i.groupsLow = undefined;
+  i.groupsHigh = undefined;
+  i.colour = undefined;
+  i.physicalMinimum = undefined;
+  i.minLevel = undefined;
+  i.maxLevel = undefined;
+  i.linearCurve = undefined;
+  i.level = undefined;
+  i.scenes = undefined;
+}
+
 function addressOfScope(scope: string): number | undefined {
   if (scope === PHANTOM) return UNFOUND;
   const m = /^a(\d+)$/.exec(scope);
@@ -168,6 +190,9 @@ export interface AddressInfo {
   typesOpen?: boolean | undefined;
   colour?: ColourFacts | undefined;
   groups?: number | undefined;
+  /** The two halves of the group membership as last asked. `groups` is set only when both were heard. */
+  groupsLow?: number | undefined;
+  groupsHigh?: number | undefined;
   /** The fade time and rate have been read back this session (SPEC S3.7). */
   fadeReadBack: boolean;
   /** A scan asked as often as it asks and heard nothing. One lost reply does not set it. */
@@ -1147,6 +1172,9 @@ export class Governor {
     const i = this.addr(n);
     i.dirty = false;
     i.fading = undefined;
+    // What an earlier scan read may be other gear's by now, and a reply lost in this scan must not
+    // leave that answer standing (Stage 11 review N1). The device types have their own handling.
+    if (this.target === 'hardware') forgetReadBacks(i);
   }
 
   modelAddress(n: number): Outcome {
@@ -1773,6 +1801,7 @@ export class Governor {
         i.typesRead = false;
         i.deviceTypes = undefined;
         i.levelKnown = false;
+        forgetReadBacks(i);
         this.tempClear.delete(n);
       }
     }
@@ -1806,6 +1835,8 @@ export class Governor {
           i.minLevel = i.physicalMinimum;
           i.linearCurve = false;
           i.groups = 0;
+          i.groupsLow = 0;
+          i.groupsHigh = 0;
           i.fadeReadBack = false;
           break;
         case 'DT6_SELECT_DIMMING_CURVE':
@@ -1832,10 +1863,13 @@ export class Governor {
           if (i.scenes !== undefined) i.scenes[cmd.value ?? 0] = undefined;
           break;
         case 'ADD_TO_GROUP':
-          if (i.groups !== undefined) i.groups |= 1 << (cmd.value ?? 0);
-          break;
         case 'REMOVE_FROM_GROUP':
-          if (i.groups !== undefined) i.groups &= ~(1 << (cmd.value ?? 0));
+          if (i.groups !== undefined) {
+            const bit = 1 << (cmd.value ?? 0);
+            i.groups = cmd.id === 'ADD_TO_GROUP' ? i.groups | bit : i.groups & ~bit;
+            i.groupsLow = i.groups & 0xff;
+            i.groupsHigh = i.groups >> 8;
+          }
           break;
         case 'DAPC':
           if (!fault && cmd.value !== 255) i.levelKnown = true;
@@ -1914,17 +1948,16 @@ export class Governor {
         else if (v === 254 && i.typesOpen === true) i.typesRead = true;
         break;
       case 'DT8_QUERY_COLOUR_TYPE_FEATURES':
-        if (v !== undefined) i.colour = { tc: (v & 2) !== 0, channels: (v >> 5) & 7 };
+        // A lost reply leaves nothing read: an older answer may be other gear's (review N1).
+        i.colour = v === undefined ? undefined : { tc: (v & 2) !== 0, channels: (v >> 5) & 7 };
         break;
       case 'QUERY_FADE_TIME_FADE_RATE':
-        if (v !== undefined) {
-          i.fadeReadBack = true;
-          i.fadeTime = (v >> 4) & 0x0f;
-          i.fadeRate = v & 0x0f;
-        }
+        i.fadeReadBack = v !== undefined;
+        i.fadeTime = v === undefined ? undefined : (v >> 4) & 0x0f;
+        i.fadeRate = v === undefined ? undefined : v & 0x0f;
         break;
       case 'QUERY_EXTENDED_FADE_TIME':
-        if (v !== undefined) i.extendedFade = v;
+        i.extendedFade = v;
         break;
       case 'DT6_QUERY_FAST_FADE_TIME':
         i.fastFade = v;
@@ -1939,10 +1972,15 @@ export class Governor {
         break;
       }
       case 'QUERY_GROUPS_0_7':
-        if (v !== undefined) i.groups = ((i.groups ?? 0) & 0xff00) | v;
-        break;
       case 'QUERY_GROUPS_8_15':
-        if (v !== undefined) i.groups = ((i.groups ?? 0) & 0x00ff) | (v << 8);
+        // Each half as last asked. With either half not heard, the groups are not known, and the
+        // gear counts as a possible member of every group (review N1).
+        if (cmd.id === 'QUERY_GROUPS_0_7') i.groupsLow = v;
+        else i.groupsHigh = v;
+        i.groups =
+          i.groupsLow === undefined || i.groupsHigh === undefined
+            ? undefined
+            : i.groupsLow | (i.groupsHigh << 8);
         break;
       case 'QUERY_ACTUAL_LEVEL':
         // A level read back seeds the model. Once the model runs, the shadow is the prediction and a

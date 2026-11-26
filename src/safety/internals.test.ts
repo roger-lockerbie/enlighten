@@ -390,9 +390,18 @@ describe('facts that arrive in odd orders', () => {
     expect(g.addressInfo(0)?.groups).toBeUndefined();
     tell(g, c('QUERY_GROUPS_0_7', A), { kind: 'reply', byte: 0 });
     tell(g, c('QUERY_GROUPS_8_15', A), { kind: 'no-reply' });
+    // One half was not heard, so the groups are not known, and a change to them leaves that so
+    // (Stage 11 review N1).
     tell(g, c('ADD_TO_GROUP', A, 9), { kind: 'sent' });
+    expect(g.addressInfo(0)?.groups).toBeUndefined();
+    tell(g, c('QUERY_GROUPS_8_15', A), { kind: 'reply', byte: 0 });
+    tell(g, c('ADD_TO_GROUP', A, 9), { kind: 'sent' });
+    tell(g, c('ADD_TO_GROUP', A, 0), { kind: 'sent' });
     tell(g, c('REMOVE_FROM_GROUP', A, 0), { kind: 'sent' });
     expect(g.addressInfo(0)?.groups).toBe(1 << 9);
+    // A half asked again alone joins the other half as it now stands.
+    tell(g, c('QUERY_GROUPS_0_7', A), { kind: 'reply', byte: 4 });
+    expect(g.addressInfo(0)?.groups).toBe((1 << 9) | 4);
     tell(g, c('QUERY_NEXT_DEVICE_TYPE', B), { kind: 'reply', byte: 6 });
     expect(g.addressInfo(1)?.deviceTypes).toEqual([6]);
     tell(g, c('OFF', A), { kind: 'fault', reason: 'gone' });

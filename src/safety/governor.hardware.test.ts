@@ -579,7 +579,7 @@ describe('what the governor learns from replies', () => {
     tell(h, c('QUERY_NEXT_DEVICE_TYPE', A), reply(254));
     expect(h.addressInfo(0)?.deviceTypes).toEqual([6]);
   });
-  it('a reply that does not come leaves what was read before', () => {
+  it('a reply that does not come leaves nothing read, but the fading bit (Stage 11 review N1)', () => {
     const g = hw();
     tell(g, c('QUERY_EXTENDED_FADE_TIME', A), reply(5));
     tell(g, c('QUERY_STATUS', A), reply(0x10));
@@ -593,7 +593,8 @@ describe('what the governor learns from replies', () => {
     ])
       tell(g, c(id, A), NONE);
     const i = g.addressInfo(0);
-    expect([i?.extendedFade, i?.fading, i?.groups]).toEqual([5, true, 0x0201]);
+    // An older answer may be other gear's, so a lost reply does not leave it standing.
+    expect([i?.extendedFade, i?.fading, i?.groups]).toEqual([undefined, true, undefined]);
     tell(g, c('QUERY_FADE_TIME_FADE_RATE', A), reply(0x47));
     expect([g.addressInfo(0)?.fadeReadBack, g.addressInfo(0)?.fadeTime]).toEqual([true, 4]);
     tell(g, c('QUERY_SCENE_LEVEL', A, 3), reply(9));
@@ -654,6 +655,12 @@ describe('building the shadow from a scan', () => {
     tell(g, c('SET_SCENE', A, 4));
     g.beginScan(0);
     tell(g, c('QUERY_STATUS', A), reply(0));
+    // A new scan starts from nothing read (Stage 11 review N1).
+    expect(g.modelAddress(0)).toEqual(no('A value the model needs was not read back.'));
+    // One scene level whose reply was lost.
+    g = hw();
+    scanInto(g, 0);
+    tell(g, c('QUERY_SCENE_LEVEL', A, 4), NONE);
     expect(g.modelAddress(0)).toEqual(no('The scene levels were not read back.'));
     tell(g, c('DAPC', A, 5));
     expect(g.modelAddress(0)).toEqual(
@@ -1497,6 +1504,68 @@ describe('DT8 gear whose colour is not known (ADR 0019, S5-P1)', () => {
     });
   });
 
+  it('a rescan with replies lost does not rest on what was read of the gear before (Stage 11 review N1)', () => {
+    /** Every read-back of a scan but the ones named, whose replies are lost. */
+    const rescan = (g: Governor, lost: string[], fade: number) => {
+      const r = (id: string, v: number, value?: number) => {
+        tell(g, c(id, A, value), lost.includes(id) ? NONE : reply(v), 30_000);
+      };
+      g.beginScan(0);
+      r('QUERY_CONTROL_GEAR_PRESENT', 255);
+      r('QUERY_DEVICE_TYPE', 255);
+      for (const t of [6, 8, 254]) r('QUERY_NEXT_DEVICE_TYPE', t);
+      r('QUERY_PHYSICAL_MINIMUM', 85);
+      r('QUERY_MIN_LEVEL', 85);
+      r('QUERY_MAX_LEVEL', 220);
+      r('QUERY_GROUPS_0_7', 1);
+      r('QUERY_GROUPS_8_15', 0);
+      r('QUERY_FADE_TIME_FADE_RATE', fade);
+      r('QUERY_EXTENDED_FADE_TIME', 0);
+      r('QUERY_ACTUAL_LEVEL', 100);
+      r('DT6_QUERY_DIMMING_CURVE', 0);
+      r('DT6_QUERY_FAST_FADE_TIME', 0);
+      r('DT8_QUERY_COLOUR_TYPE_FEATURES', 0x60);
+      for (let k = 0; k < 16; k++) r('QUERY_SCENE_LEVEL', 255, k);
+      r('QUERY_STATUS', 0);
+      return g.modelAddress(0);
+    };
+    // A0 scanned with no fade. Other gear, with fade time 5, is moved onto A0 under the reset
+    // unlock, and the rescan loses the two fade replies. The old answers must not stand.
+    for (const lost of [
+      ['QUERY_FADE_TIME_FADE_RATE'],
+      ['QUERY_EXTENDED_FADE_TIME'],
+      ['QUERY_FADE_TIME_FADE_RATE', 'QUERY_EXTENDED_FADE_TIME'],
+    ]) {
+      const g = bench();
+      expect(g.addressInfo(0)?.fadeTime).toBe(0);
+      expect(rescan(g, lost, 0x57).ok, lost.join()).toBe(false);
+      const i = g.addressInfo(0);
+      if (lost.includes('QUERY_FADE_TIME_FADE_RATE')) expect(i?.fadeTime).toBeUndefined();
+      if (lost.includes('QUERY_EXTENDED_FADE_TIME')) expect(i?.extendedFade).toBeUndefined();
+      // Whatever else happens, a colour or a level with these settings unread is refused.
+      tell(g, c('DT8_ACTIVATE', A), undefined, 40_000);
+      const v = g.judge(tx([c('DAPC', A, 150)]), 40_000 + 20 * 60_000);
+      expect(v.kind, lost.join()).toBe('refuse');
+    }
+    // The same scan with every reply heard reads the new fade time, and says so.
+    const heard = bench();
+    expect(rescan(heard, [], 0x57).ok).toBe(true);
+    expect(heard.addressInfo(0)?.fadeTime).toBe(5);
+    // Lost group and colour replies leave those unread too.
+    const g = bench();
+    rescan(g, ['QUERY_GROUPS_8_15', 'DT8_QUERY_COLOUR_TYPE_FEATURES'], 0x07);
+    expect(g.addressInfo(0)?.groups).toBeUndefined();
+    expect(g.colourFacts(0)).toBeUndefined();
+    // Re-addressing forgets the fade read-backs of every address at once, before any rescan.
+    const moved = bench();
+    expect(verify(moved).ok).toBe(true);
+    tell(moved, c('DT8_ACTIVATE', A), undefined, 5000);
+    tell(moved, c('DTR0', undefined, 3), undefined, 9000);
+    tell(moved, c('SET_SHORT_ADDRESS', B), undefined, 9000);
+    expect(moved.addressInfo(0)?.fadeTime).toBeUndefined();
+    expect(moved.addressInfo(0)?.groups).toBeUndefined();
+  });
+
   it('applies to colour gear only, and only on hardware', () => {
     const g = hw();
     expect(scanInto(g, 0, { level: 100 }).ok).toBe(true);
@@ -1612,9 +1681,11 @@ describe('the colour rule, at the corners mutation testing found unpinned (Stage
     expect(g.modelAddress(0).ok).toBe(false);
     expect(clearIn(g)).toBe(false);
     expect(g.addressInfo(0)?.colourKnown).toBe(false);
-    expect(reason(g.judge(tx([...tcCommands(A, 200, false), c('DAPC', A, 200)]), 20_000))).toMatch(
-      UNKNOWN,
+    // The failed scan read no colour features, so a Tc command is refused for that first.
+    expect(reason(g.judge(tx([...tcCommands(A, 200, false), c('DAPC', A, 200)]), 20_000))).toBe(
+      'SET TEMPORARY COLOUR TEMPERATURE Tc: the gear does not report Tc.',
     );
+    expect(reason(g.judge(tx([c('DAPC', A, 200)]), 20_000))).toMatch(UNKNOWN);
   });
 
   it('fade settings count only as read back since they were last written (S8b-R4-1)', () => {

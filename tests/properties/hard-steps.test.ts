@@ -1115,9 +1115,14 @@ describe('what the gear did not take, or did not answer (S8b-R4, ADR 0019 amendm
   });
 
   it('a faded level at a steady colour is more than one leg on gear with a red channel (S8b-R4-D1, ADR 0022)', async () => {
-    // RGB 254/205/205 at 180 with no fade. A bare ACTIVATE, then fade time 2 set and read back, then
-    // DAPC 150: the level, and red entering and leaving saturation, three legs in 330 ms. The level
-    // is refused now, and with no fade it goes in one moment.
+    // RGB 254/205/205 at 180 with no fade, sent through the app, then a rescan and a bare ACTIVATE.
+    // Fade time 2 set and read back, then DAPC 150: the level, and red entering and leaving
+    // saturation, three legs in 330 ms. The level is refused now.
+    //
+    // The colour goes through the app because connecting writes the safety profile, which leaves
+    // the power-on colour waiting in the gear. A bare ACTIVATE straight after the connect would
+    // bring that in, and the case would then be about another colour (Stage 11 DALI review).
+    const PINK = [254, 205, 205, 0, 0, 0] as const;
     const readBack = [
       { id: 'QUERY_FADE_TIME_FADE_RATE', address: a0 },
       { id: 'QUERY_EXTENDED_FADE_TIME', address: a0 },
@@ -1128,24 +1133,35 @@ describe('what the gear did not take, or did not answer (S8b-R4, ADR 0019 amendm
       ...readBack,
     ];
     const { real, b } = await bench('C3', (r) => {
-      r.run(rgbwafCommands(short(0), [254, 205, 205, 0, 0, 0]));
+      r.run(rgbwafCommands(short(0), [...PINK]));
       r.to('DAPC', 0, 180);
     });
-    const { rec } = await play(b, [
-      tx(20_000, [{ id: 'DT8_ACTIVATE', address: a0 }]),
+    const gear = real.unit('R0')?.gear;
+    const first = await play(b, [
+      tx(4000, rgbwafCommands(short(0), [...PINK])),
+      { kind: 'rescan', dt: 4000 },
+      tx(4000, [{ id: 'DT8_ACTIVATE', address: a0 }]),
       tx(4000, setFade(2)),
+    ]);
+    // The case is only the case if the gear shows this colour at this level when the DAPC is sent.
+    expect(gear?.colourAt(b.clock.now()).ch).toEqual([...PINK]);
+    expect(gear?.levelAt(b.clock.now())).toBe(180);
+    const faded = await play(b, [
       tx(4000, [{ id: 'DAPC', address: a0, value: 150 }]),
       tx(6000, []),
     ]);
-    expect(rateProblems(rec, 1)).toEqual([]);
-    expect(real.unit('R0')?.gear.levelAt(b.clock.now())).toBe(180);
+    // On the rule before, the DAPC went and the trace showed more than one swing in a second.
+    expect([...rateProblems(first.rec, 1), ...rateProblems(faded.rec, 1)]).toEqual([]);
+    expect(gear?.levelAt(b.clock.now())).toBe(180);
+    // With no fade the level goes, in one moment.
     const again = await play(b, [
       tx(4000, setFade(0)),
       tx(4000, [{ id: 'DAPC', address: a0, value: 150 }]),
       tx(6000, []),
     ]);
     expect(rateProblems(again.rec, 1)).toEqual([]);
-    expect(real.unit('R0')?.gear.levelAt(b.clock.now())).toBe(150);
+    expect(gear?.levelAt(b.clock.now())).toBe(150);
+    expect(gear?.colourAt(b.clock.now()).ch).toEqual([...PINK]);
   });
 
   it('a fade time read back as 0 lets a colour go', async () => {
