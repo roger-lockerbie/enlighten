@@ -279,7 +279,7 @@
 <style>
   .manual {
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 210px minmax(0, 1fr);
     gap: var(--space-5);
     height: 100%;
   }
