@@ -94,6 +94,7 @@ Use Node 26.13.1 (`.nvmrc`) and pnpm 12.18.0 through corepack. The dev server ru
 | `pnpm lint`       | ESLint (banned sinks, pure-core boundary) and Prettier check.    |
 | `pnpm format`     | Prettier write.                                                  |
 | `pnpm typecheck`  | svelte-check over TypeScript and Svelte.                         |
+| `pnpm sbom:all`   | CycloneDX SBOMs for the app and the server, into `sbom/`.        |
 | `pnpm verify`     | lint, typecheck, coverage, build and e2e.                        |
 
 First time on a machine: `pnpm install --frozen-lockfile`, then `pnpm exec playwright install chromium`. Node 26 has no bundled corepack, so run `npm install --global corepack` and `corepack enable` first.
