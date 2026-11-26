@@ -487,6 +487,8 @@ export class Engine {
   private latched = false;
   /** Counts every stop, so work that waits outside a job can tell one came (S8b-M3). */
   private stops = 0;
+  /** Counts every job stopped, for a level that waits on behalf of a run or a console line. */
+  private aborts = 0;
   /** Counts the level requests for each address, so a waiting level gives way to a newer one. */
   private readonly levelAsked = new Map<number, number>();
   private askCanSee = false;
@@ -819,7 +821,10 @@ export class Engine {
   }
 
   private abort(j: Job, why: string): void {
-    if (!j.aborted) j.why = why;
+    if (!j.aborted) {
+      j.why = why;
+      this.aborts++;
+    }
     j.aborted = true;
     for (const w of j.wakers ?? []) w();
     j.wakers?.clear();
@@ -1240,6 +1245,7 @@ export class Engine {
         );
         const deadline = this.clock.now() + APPLY_PATIENCE_MS;
         const stops = this.stops;
+        const aborts = this.aborts;
         const asked = this.askLevel(intent.address);
         for (;;) {
           const r = await conn.scheduler.submit(level);
@@ -1248,7 +1254,14 @@ export class Engine {
           await this.wait(Math.max(1, r.retryAt - this.clock.now()));
           // A stop, a panic or a newer level for this address while it waited ends it: the level is
           // not sent later.
-          if (this.stops !== stops || this.latched || this.active() !== conn)
+          // Stop on a run and Ctrl-C on a console line stop jobs one by one, and the level may be
+          // waiting for one of them (Stage 11 review N3). Any job stopped ends the wait.
+          if (
+            this.stops !== stops ||
+            this.aborts !== aborts ||
+            this.latched ||
+            this.active() !== conn
+          )
             return { ok: false, kind: 'dropped', reason: 'Stopped.' };
           if (this.levelAsked.get(intent.address) !== asked)
             return { ok: false, kind: 'dropped', reason: 'A newer level replaced this one.' };

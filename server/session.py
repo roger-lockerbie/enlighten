@@ -49,6 +49,8 @@ class Hub:
         self.previous = None
         self.attached = False
         self.closing = False
+        # A stop that did not reach the hasseb: the lights are as they were, and are owed an OFF.
+        self.stop_owed = False
 
     # Tokens ----------------------------------------------------------------------------------------
 
@@ -82,6 +84,13 @@ class Hub:
                 self.attached = attached
                 self.log(f"hasseb {'attached' if attached else 'not attached'}")
                 await self._send(self.client, p.device(attached))
+            # The stop that could not be sent goes as soon as the hasseb is back, unless a client
+            # has taken over by then: its app finds the lights as they are and has its own stop.
+            if attached and self.stop_owed and not self.closing:
+                if self.client is None:
+                    await self.stop()
+                else:
+                    self.stop_owed = False
             await asyncio.sleep(DEVICE_POLL_S)
 
     async def _transmit(self, a: int, b: int, expect_reply: bool, send_twice: bool) -> tuple[int, int]:
@@ -144,7 +153,14 @@ class Hub:
             self.previous = None
         t = p.SENT if t == p.NO_REPLY else t
         o = p.SENT if o == p.NO_REPLY else o
-        self.log(f"stop: TERMINATE and broadcast OFF sent (statuses {t} and {o})")
+        self.stop_owed = o != p.SENT
+        if self.stop_owed:
+            self.log(
+                f"stop: the broadcast OFF did NOT reach the hasseb (statuses {t} and {o}). "
+                "The lights are as they were. It is sent again when the hasseb is back."
+            )
+        else:
+            self.log(f"stop: TERMINATE and broadcast OFF sent (statuses {t} and {o})")
         return t, o
 
     # Connections -----------------------------------------------------------------------------------

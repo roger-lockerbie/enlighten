@@ -1255,15 +1255,21 @@ describe('DT8 gear whose colour is not known (ADR 0019, S5-P1)', () => {
     expect(judged(bench(0x17), [c('DT8_ACTIVATE', A)])).toBe(noFade);
     expect(judged(bench(), red)).toBe('');
     // The extended fade time and DT6's fast fade time are fades too.
-    for (const more of [{ ext: 0x16 }, { fast: 20 }]) {
+    for (const [more, which] of [
+      [{ ext: 0x16 }, 'extended fade time'],
+      [{ fast: 20 }, 'fast fade time'],
+    ] as const) {
       const g = hw();
       expect(scanInto(g, 0, { ...rgb, fade: 0x07, ...more }).ok).toBe(true);
       g.markInventoryFresh(false);
       expect(verify(g).ok).toBe(true);
-      expect(judged(g, red)).toBe(noFade);
+      // The words name the setting that is in the way.
+      expect(judged(g, red)).toBe(noFade.replace('its fade time', `its ${which}`));
     }
     // A fade time set in the same transaction counts, and so does one not read back.
-    expect(judged(bench(), [c('DTR0', undefined, 3), c('SET_FADE_TIME', A), ...red])).toBe(noFade);
+    expect(judged(bench(), [c('DTR0', undefined, 3), c('SET_FADE_TIME', A), ...red])).toBe(
+      "Rate guard: A0's colour changes only with no fade, and this sets a fade setting with it: send that on its own first (a0).",
+    );
     // The colour temperature steps are colour changes.
     const tcGear = () => {
       const g = hw();
@@ -1413,9 +1419,13 @@ describe('DT8 gear whose colour is not known (ADR 0019, S5-P1)', () => {
 
     it('goes with no fade of any kind, and with none of the three otherwise', () => {
       expect(judged(ready(), [c('DAPC', A, 150)]).kind).toBe('allow');
-      for (const more of [{ fade: 0x17 }, { ext: 0x16 }, { fast: 20 }])
-        expect(reason(judged(ready(more), [c('DAPC', A, 150)])), JSON.stringify(more)).toBe(
-          LEVEL_NO_FADE,
+      for (const [more, which] of [
+        [{ fade: 0x17 }, 'fade time'],
+        [{ ext: 0x16 }, 'extended fade time'],
+        [{ fast: 20 }, 'fast fade time'],
+      ] as const)
+        expect(reason(judged(ready(more), [c('DAPC', A, 150)])), which).toBe(
+          LEVEL_NO_FADE.replace('its fade time', `its ${which}`),
         );
       // A fade time set in the same transaction counts, whatever it is set to.
       for (const t of [0, 3])
@@ -1423,7 +1433,9 @@ describe('DT8 gear whose colour is not known (ADR 0019, S5-P1)', () => {
           reason(
             judged(ready(), [c('DTR0', undefined, t), c('SET_FADE_TIME', A), c('DAPC', A, 150)]),
           ),
-        ).toBe(LEVEL_NO_FADE);
+        ).toBe(
+          'Rate guard: A0 is colour gear, so its level changes only with no fade, and this sets a fade setting with it: send that on its own first (a0).',
+        );
     });
 
     it('holds for every command that moves the level but a scene recall, which has its own words', () => {
@@ -1702,7 +1714,7 @@ describe('the colour rule, at the corners mutation testing found unpinned (Stage
       tell(g, cmd, undefined, 5000);
     });
     expect(judged(g, red, 9000)).toBe(
-      "Rate guard: A0's colour changes only with no fade, and its fade settings have not been read back since they were set (a0).",
+      "Rate guard: A0's colour changes only with no fade, and its fade settings have not all been read back (a0).",
     );
     // Read back as still 1, then as 0.
     read(g, 0x17);
@@ -1711,7 +1723,7 @@ describe('the colour rule, at the corners mutation testing found unpinned (Stage
     expect(judged(g, red, 9000)).toBe('');
     // An extended fade time read back counts too.
     read(g, 0x07, 0x16);
-    expect(judged(g, red, 9000)).toBe(noFade);
+    expect(judged(g, red, 9000)).toBe(noFade.replace('its fade time', 'its extended fade time'));
     // A level to colour gear waits for the read-back too (ADR 0022).
     const unread = bench();
     set0.forEach((cmd) => {
@@ -1720,7 +1732,7 @@ describe('the colour rule, at the corners mutation testing found unpinned (Stage
     tell(unread, ACT, undefined, 8000);
     // Long after the ACTIVATE, whose own range runs the longest fade DALI allows while unread.
     expect(judged(unread, [LVL], 8000 + 20 * 60_000)).toBe(
-      'Rate guard: A0 is colour gear, so its level changes only with no fade, and its fade settings have not been read back since they were set (a0).',
+      'Rate guard: A0 is colour gear, so its level changes only with no fade, and its fade settings have not all been read back (a0).',
     );
     // Until a fade setting is read back, a level's range runs the longest fade DALI allows. Gear
     // with no colour, which takes a faded level.
@@ -1733,7 +1745,7 @@ describe('the colour rule, at the corners mutation testing found unpinned (Stage
     expect(long.kind === 'refuse' ? long.retryAt : 0).toBeGreaterThanOrEqual(12_000 + 16 * 60_000);
     // A fade rate not read back makes CONTINUOUS UP as long, and a fast fade time of 27 is 700 ms.
     const k = bench({ fast: 27 });
-    expect(judged(k, red, 9000)).toBe(noFade);
+    expect(judged(k, red, 9000)).toBe(noFade.replace('its fade time', 'its fast fade time'));
   });
 
   it('gear with no DT6 part has no fast fade time, and gear whose types were not read may fade', () => {

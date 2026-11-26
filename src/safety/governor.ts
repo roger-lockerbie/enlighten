@@ -1465,15 +1465,21 @@ export class Governor {
           this.unsureMoving.get(n) ?? -Infinity,
         );
         const name = gearName(n);
-        /** Why a change that needs no fade is refused, when the gear has one or may have one. */
+        /** Why a change that needs no fade is refused, naming what stands in its way. */
         const fadeWhy = (what: string): string => {
           const f = this.fades(n);
-          const unread =
-            !refaded.has(n) &&
-            (f.fadeTime === undefined || f.extendedFade === undefined || f.fastFade === undefined);
-          return unread
-            ? `${what} only with no fade, and its fade settings have not been read back since they were set`
-            : `${what} only with no fade, so set its fade time to 0 first`;
+          const only = `${what} only with no fade`;
+          if (refaded.has(n))
+            return `${only}, and this sets a fade setting with it: send that on its own first`;
+          if (f.fadeTime === undefined || f.extendedFade === undefined || f.fastFade === undefined)
+            return `${only}, and its fade settings have not all been read back`;
+          const which =
+            f.fadeTime !== 0
+              ? 'fade time'
+              : f.extendedFade !== 0
+                ? 'extended fade time'
+                : 'fast fade time';
+          return `${only}, so set its ${which} to 0 first`;
         };
         if (id === 'ENABLE_DAPC_SEQUENCE') {
           // In a DAPC sequence every level fades over 200 ms whatever the fade time is, and a faded

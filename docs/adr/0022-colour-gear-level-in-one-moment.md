@@ -22,7 +22,7 @@ OFF is not a level-moving command and goes as before. GO TO SCENE keeps its own 
 
 The rule covers all colour gear and not only gear with a red channel. On hardware the colour type comes from a read-back, and the holding position is that the guard rests on what was sent, not on what the shadow believes about the gear.
 
-Each refusal has no time to ask again: the fade setting has to change first. The words say so ("set its fade time to 0 first", or that the settings have not been read back since they were set).
+Each refusal has no time to ask again: a fade setting has to change first. The words name what is in the way: the fade time, the extended fade time or the fast fade time that is not 0, settings that have not all been read back, or a fade setting sent in the same transaction, which has to go on its own first.
 
 The engine's moving level control sends no DAPC sequence to such gear on hardware. It sends a plain DAPC, which the other holding rules allow about once every 2 s to an address.
 

@@ -374,6 +374,36 @@ def test_an_idle_session_notices_an_unplug(dist: Path, monkeypatch: pytest.Monke
     asyncio.run(go())
 
 
+def test_a_stop_that_cannot_reach_the_hasseb_is_sent_when_it_is_back(dist: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stage 11 review N6: the client goes away while the hasseb is unplugged."""
+    monkeypatch.setattr(session, "DEVICE_POLL_S", 0.05)
+
+    async def go() -> None:
+        async with server(dist) as s:
+            async with s.client() as ws:
+                await welcomed(ws)
+                await ws.send(send(1, 0x02, 100))
+                assert await recv(ws) == p.result(1, p.SENT)
+                s.device.plugged = False
+                assert await recv(ws) == p.device(False)
+            # The client has gone. The stop could not be sent, and the server knows it.
+            for _ in range(100):
+                if s.hub.stop_owed:
+                    break
+                await asyncio.sleep(0.02)
+            assert s.hub.stop_owed
+            assert s.frames()[-2:] != STOP
+            s.device.plugged = True
+            for _ in range(100):
+                if not s.hub.stop_owed:
+                    break
+                await asyncio.sleep(0.02)
+            assert not s.hub.stop_owed
+            assert s.frames()[-2:] == STOP
+
+    asyncio.run(go())
+
+
 def test_nothing_goes_out_after_the_final_off_when_the_server_stops(dist: Path) -> None:
     """Security review M1: a SEND that arrives while the server is stopping is dropped, not queued."""
 
