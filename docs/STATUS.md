@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next. After it, between stages, the console gained help for every DALI command and `explain` (ADR 0023), which is in review on `console-help-explain`.
+Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next. After it, between stages, the console gained help for every DALI command and `explain` (ADR 0023), merged as PR 25 on 2026-11-26. Version 0.2.0 carries it, tagged at the owner's request.
 
 ## Done in Stage 0
 
@@ -390,7 +390,7 @@ Not done, and why:
 
 Open, none High: S9-P1 and S9-T1 (for the owner), S11-11, S11-13 to S11-16, S11-25, and the hardware-day items.
 
-## Between stages: console help and explain, in review
+## Between stages: console help and explain, done
 
 Branch `console-help-explain`, on Fable, at the owner's request on 2026-11-26, after v0.1.0. It is outside the numbered stages and was closed as a stage is. Stage 12 is unchanged but for one new checklist item.
 
@@ -413,11 +413,8 @@ Not done, and why:
 - **`explain` gives no verdict from the governor**, only the clamp to the ceiling. A verdict without side effects needs a change in `src/safety` and its own review.
 - **`explain` does not cover `scan`, `profile apply`, `cap`, `panic` or `target`**, whose frames the engine builds as it goes.
 - **Not tried on hardware.** The test plan's section 10 has an item for it.
-- **No version or tag.** The changes are under Unreleased in the changelog. A 0.2.0 is the owner's call.
 
 ## Next
-
-- The owner's review of the help and explain PR, and whether to tag a 0.2.0.
 
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
 - Stage 12 (hardware day) on Opus, whenever the hasseb arrives.
