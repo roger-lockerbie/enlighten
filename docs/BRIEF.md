@@ -94,7 +94,7 @@ S6. The UI honours `prefers-reduced-motion` and never flashes.
 - Visual direction: dark and restrained. A near-black neutral background, one accent colour used sparingly, generous spacing, tabular figures, and monospace only for the console and frames. No gradients, glows or decoration. The light in the visualiser should be the most colourful thing on screen.
 - Name: Enlighten, shown as a plain wordmark in the UI font. No logo for now.
 - Suppliers and market research favour what is sold in Australia.
-- The licence is chosen when the repo goes public.
+- The licence is chosen when the repo goes public. (Chosen on 2026-11-26: Apache-2.0.)
 
 ### Visualiser approach, for Stage 1 to test
 

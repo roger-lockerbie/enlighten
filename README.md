@@ -88,6 +88,10 @@ To run a release, unpack it and set up the server's Python environment as `serve
 
 The app is a static site under a strict Content Security Policy with Trusted Types, and it treats every imported file as untrusted data. `docs/THREAT_MODEL.md` says what it protects and what it accepts. To report a problem, read `SECURITY.md`.
 
+## Licence
+
+Enlighten is under the Apache License 2.0: see `LICENSE` and `NOTICE`. What a build carries from other projects, and under which licences, is in `THIRD_PARTY_NOTICES.md`.
+
 ## Documents
 
 - `docs/BRIEF.md`: the goal and the requirements.

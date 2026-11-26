@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 10 are merged. Stage 11 (hardening, independent review, going public) is in review on `stage-11-hardening`, up to its gate: the owner's answer on the licence and on making the repo public. The release tag comes after that.
+Stages 0 to 10 are merged. Stage 11 (hardening, independent review, going public) is in review on `stage-11-hardening`, up to its gate. The owner chose Apache-2.0 on 2026-11-26, and `LICENSE` and `NOTICE` are on the branch. Making the repo public still waits for the owner's yes. The release tag comes after that.
 
 ## Done in Stage 0
 
@@ -374,7 +374,7 @@ Stage close:
 Not done, and why:
 
 - **The release workflow has not run on GitHub.** The pack script runs locally. A manual run (build only) is the first thing to try once the branch is pushed.
-- **The tag, the licence, the public switch, secret scanning, push protection and the `main` ruleset** wait for the owner's yes (step 5 of the stage).
+- **The tag, the public switch, secret scanning, push protection and the `main` ruleset** wait for the owner's yes (step 5 of the stage).
 - **The workflow lockfile** (S11-14) needs the `gh actions-lock` extension installed, which is the owner's call.
 - **A byte-for-byte match** between a local build and CI's archive has not been shown. The local machine has no GNU tar.
 - `pnpm mutate` was not run in this stage, though `src/safety` changed. It is the first thing owed on the governor's new lines.
@@ -383,6 +383,6 @@ Open, none High: S9-P1 and S9-T1 (for the owner), S11-11, S11-13 to S11-16, S11-
 
 ## Next
 
-- The owner's answer on the licence (Apache-2.0 suggested) and on making the repo public. Then: the licence file, public, secret scanning and push protection, the `main` and tag rulesets, CodeQL's first run, and the v0.1.0 tag.
+- The owner's answer on making the repo public. Then: public, secret scanning and push protection, the `main` and tag rulesets, CodeQL's first run, and the v0.1.0 tag.
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
 - Stage 12 (hardware day) on Opus, whenever the hasseb arrives.
