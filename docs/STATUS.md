@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 10 are merged, and Stage 11 (hardening, independent review, going public) is merged as PR 19. The owner chose Apache-2.0 and said yes to going public on 2026-11-26, and the repo is public. What is left of Stage 11 is the v0.1.0 tag, which waits for the owner's yes.
+Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next.
 
 ## Done in Stage 0
 
@@ -350,7 +350,7 @@ Stage close:
 
 Known gaps: no console commands for plates; zencontrol's own timings and first-hold direction are unconfirmed; the stored tree nesting limit is now 10.
 
-## Stage 11 (hardening, independent review, going public), merged, tag to come
+## Stage 11 (hardening, independent review, going public), done
 
 Branch `stage-11-hardening`, on Fable by the owner's choice (the plan said Opus), reviewers included. Three decisions the owner made in planning on 2026-11-26: close S8b-R4-D1 with a holding rule, run the reviewers on Fable, and make the repo public before tagging v0.1.0, because a build provenance attestation needs a public repo on this account's plan.
 
@@ -377,10 +377,13 @@ After the merge, on 2026-11-26:
 - Two rulesets with no bypass: `main` needs a PR and the four CI checks (`checks`, `e2e (1/2)`, `e2e (2/2)`, `e2e-server`) and refuses force pushes and deletion; `v*` tags cannot be moved or deleted once made.
 - One CI failure before the merge, cause not found: the Both leg of the Visualiser modes test in `e2e/server/modes.spec.ts` saw no light 15 s after a `tc` command on a slow runner. It passed 6 times locally and on the next CI run. The test now waits for the console's answer first, so a repeat shows the reason. The same test ran about 7 s slower in CI on the stage branch than on `main` before it, which is not explained.
 
+- CodeQL's first run found nothing in the TypeScript or the Python. Secret scanning has no alerts.
+- v0.1.0 is published with four files. Checked from a fresh download by the README's steps: `shasum -a 256 -c SHA256SUMS` passes, `gh attestation verify` passes for the archive and both SBOMs, and fails for a wrong tag and for a file with no attestation. The archive's `COMMIT` names `8d66815`.
+- `main`'s own CI run on `8d66815` failed once before the tag: three property tests in `ceiling.prop.test.ts` and `rate-console.prop.test.ts` hit their 120 s limit on a slow runner, with no counterexample (the test step took 434 s against about 255 s). A rerun of the job passed and the tag followed. These tests run at about 90 s each on a normal CI run, so the margin is thin and a slow runner will do this again. Not fixed.
+
 Not done, and why:
 
-- **The release workflow has run once, by hand, build only**, on `main` at `0d468d4`, and passed. The attest and publish steps have never run: the tag is their first run.
-- **The v0.1.0 tag** waits for the owner's yes.
+- **The release workflow** ran build only by hand on `main`, then in full from the tag. That was the first run of its attest and publish steps, and it passed.
 - **The workflow lockfile** (S11-14) needs the `gh actions-lock` extension installed, which is the owner's call.
 - **A byte-for-byte match** between a local build and CI's is not shown. The server SBOM matched CI's. The app SBOM did not, and the cause is not found (a guess: platform packages). The archive was not compared: the local machine has no GNU tar.
 - `pnpm mutate` was not run in this stage, though `src/safety` changed. It is the first thing owed on the governor's new lines.
@@ -389,6 +392,5 @@ Open, none High: S9-P1 and S9-T1 (for the owner), S11-11, S11-13 to S11-16, S11-
 
 ## Next
 
-- CodeQL's first results, then the owner's yes to the v0.1.0 tag, then checking the release by the README's own steps.
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
 - Stage 12 (hardware day) on Opus, whenever the hasseb arrives.
