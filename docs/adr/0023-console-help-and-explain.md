@@ -25,7 +25,7 @@ Only one thing about a DALI command is written by hand: the sentence or three sa
 Everything else in an entry is built from data the app already runs on:
 
 - The syntax, the frame, the reply, the registers read and set, and send-twice come from the command table (`src/dali/commands.ts`), which the golden fixtures check against python-dali.
-- The governor's line comes from the rule table (`src/safety/rules.ts`), through one sentence for each rule. The map is typed over the rule names, so a new rule does not compile without its sentence.
+- The governor's line comes from the rule table (`src/safety/rules.ts`), through one sentence for each rule. The map is typed over the rule names, so a new rule does not compile without its sentence. A command in the governor's set of light-changing commands also says that the rate guard can hold or refuse it, and points to `help hardware`.
 - The example line is made by the same function `explain` uses, and a test parses every example back to its command.
 
 Help therefore cannot describe a frame, a register or a rule that the app does not have.
@@ -45,6 +45,8 @@ It runs the console's own executor, so it cannot drift from the real path, with 
 
 It does not ask the governor. It says so in its last line, and it reports the one thing that can be told without asking: a DAPC above the ceiling would be clamped to it. A hold by the rate guard, a refusal by a holding rule, or a level lowered for a colour is known only when the line is sent.
 
+With hardware chosen and no connection it answers as the real line does, that hardware is disconnected. It prints 150 lines at most and then says how many more there are, so its header stays in what the page receives.
+
 Where a later frame depends on a reply, `explain` says what it cannot know. `scene <addr> store <n>` with no value reads the level first, so the DTR0 that follows is shown as 0 with a note.
 
 ## Consequences
@@ -60,5 +62,6 @@ Where a later frame depends on a reply, `explain` says what it cannot know. `sce
 - U-console: an entry for every command and no other; every example parses to its command; the governor's line agrees with the rule table for every command; `help dali` names all 137; the word search.
 - P-unparse: for any valid command, the line `explain` prints for it parses back to the same command.
 - U-engine: `explain` then the real line, for 29 lines on the simulator, give the same commands; the hardware split and read-backs; the clamp note, checked against what the governor then sends; RESET explained with nothing reset; the host that cannot act.
-- P-explain: for any line, `explain` sends no frame, adds no monitor line and leaves levels, ceiling, target, unlocks and the latch as they were.
+- P-explain: for any line, on the simulator, on hardware and on Both, `explain` sends no frame to either transport, takes no time on the clock, and leaves everything the engine reports but console lines, and the DTR view, as it was.
+- U-console also judges every addressed command on an unverified address with a real governor, and compares the verdict with what help says about verified gear.
 - E-console: help for a DALI command, completion after `help`, and `explain` leaving the Bus monitor's count unchanged.

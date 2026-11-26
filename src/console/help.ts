@@ -11,7 +11,7 @@ import { short } from '../dali/address.ts';
 import { frameText, type Command } from '../dali/codec.ts';
 import { COMMANDS, type CommandSpec } from '../dali/commands.ts';
 import { framesFor } from '../dali/sequences.ts';
-import { ruleFor, UNVERIFIED_OK, type Rule } from '../safety/rules.ts';
+import { LIGHT_CHANGING, ruleFor, UNVERIFIED_OK, type Rule } from '../safety/rules.ts';
 import { DALI_HELP, GROUP_TITLES, type DaliGroup } from './dali-help.ts';
 import { legend, type Platform } from './keys.ts';
 import { byName, nameOf, sharedNames } from './names.ts';
@@ -129,9 +129,16 @@ const TOPICS: Readonly<Record<string, readonly string[]>> = {
   ],
   hardware: [
     'On the Hardware and Both targets the governor trusts nothing about real gear until it has',
-    'been tried (ADR 0019, ADR 0022). Until then it refuses colour fades, level fades on colour',
-    'gear, and any change to a group or to all but OFF, and it allows about one change every',
-    '2 seconds to an address. A fade setting counts only as read back from the driver.',
+    'been tried (ADR 0019, ADR 0022). Until then, besides its usual rules:',
+    '  It allows about one change of light every 2 seconds to an address, OFF included.',
+    '  A change of light goes to one short address. To a group or to all, only OFF is allowed.',
+    '  Colour gear takes its colour before its level: a level alone is refused while the app',
+    '  does not know which colour the driver holds. tc and rgb send them in that order.',
+    '  A colour changes only with no fade, and so does a level on colour gear. Its fade time and',
+    '  extended fade time must read back as 0.',
+    '  UP, DOWN, CONTINUOUS UP, CONTINUOUS DOWN and a DAPC sequence are refused to colour gear.',
+    '  A fade setting counts only as read back from the driver.',
+    'The refusal says which rule it was. The DA5-L on the bench is colour gear.',
   ],
   scripts: [
     'scripts lists the scripts. The Scripts page edits, imports and exports them.',
@@ -170,10 +177,10 @@ const PART: Readonly<Record<0 | 6 | 8, string>> = {
 /** What the governor does with each rule (SPEC section 5), in the words of `applyRule`. */
 const RULE_TEXT: Readonly<Record<Rule, string>> = {
   allow: 'Allowed.',
-  dapc: 'A level above the ceiling is clamped to it, and the rate guard limits how fast and how far the light may swing.',
+  dapc: 'A level above the ceiling is clamped to it.',
   off: 'Allowed.',
   'verified-down': '',
-  'verified-up': 'The rate guard judges the light the app predicts it will make.',
+  'verified-up': '',
   'enable-dapc-sequence':
     'On Hardware and Both it is refused to gear that may be colour gear (ADR 0022).',
   'set-max': 'Refused when DTR0 is above the ceiling. 255 counts as 254.',
@@ -220,7 +227,12 @@ export function governorText(s: CommandSpec): string {
       : '';
   const open =
     s.kind !== 'special' && UNVERIFIED_OK.has(rule) ? 'Unverified gear takes it too.' : '';
-  return [verified, RULE_TEXT[rule], open].filter((x) => x !== '').join(' ');
+  // What the rule table does not say: the rate guard and, on real gear, the holding rules.
+  const light =
+    LIGHT_CHANGING.has(s.id) && rule !== 'refuse'
+      ? 'It changes the light, so the rate guard can hold or refuse it, and on Hardware and Both the holding rules apply: help hardware.'
+      : '';
+  return [verified, RULE_TEXT[rule], open, light].filter((x) => x !== '').join(' ');
 }
 
 /** A command with sample arguments, for the example line. */
@@ -349,6 +361,9 @@ function daliOverview(): string[] {
 
 const FIND_LIMIT = 30;
 
+/** Typed text as help repeats it: one line, and short, so it cannot pass for help's own text. */
+const said = (text: string) => text.replace(/\s+/g, ' ').slice(0, 40);
+
 /** `help -k <word>`: topics and DALI commands whose name or text has the word. */
 function find(word: string): string[] {
   const w = word.toLowerCase();
@@ -365,7 +380,7 @@ function find(word: string): string[] {
     const first = `${name}: ${((h?.does ?? c.label).split('. ')[0] ?? '').replace(/\.$/, '')}.`;
     hits.push(cap(first));
   }
-  if (hits.length === 0) return [`Nothing in help mentions "${word}".`];
+  if (hits.length === 0) return [`Nothing in help mentions "${said(word)}".`];
   const shown = hits.slice(0, FIND_LIMIT);
   if (hits.length > FIND_LIMIT)
     shown.push(`${String(hits.length - FIND_LIMIT)} more. Try a longer word.`);
@@ -404,7 +419,8 @@ export function help(ask: HelpAsk, platform: Platform): string[] {
       );
     return out;
   }
-  const t = TOPICS[topic];
+  // An own topic only: `constructor` and the like are not topics (SH-1).
+  const t = Object.hasOwn(TOPICS, topic) ? TOPICS[topic] : undefined;
   const s = byName(topic);
   // `off` is both: the console's own command, and the DALI command it sends.
   if (t !== undefined) return s === undefined ? [...t] : [...t, '', ...daliHelp(s, topic)];
@@ -412,7 +428,7 @@ export function help(ask: HelpAsk, platform: Platform): string[] {
   const shared = sharedNames(topic);
   if (shared !== undefined)
     return [
-      `${topic} names commands for more than one device type. Try help ${shared.join(' or help ')}.`,
+      `${said(topic)} names commands for more than one device type. Try help ${shared.join(' or help ')}.`,
     ];
-  return [`No help for "${topic}". Type help for the list, or help -k ${topic} to look it up.`];
+  return [`No help for "${said(topic)}". Type help for the list, or help -k to look a word up.`];
 }

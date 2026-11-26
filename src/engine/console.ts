@@ -157,6 +157,8 @@ export function fadeReadBack(a: Address): Command[] {
 }
 
 const EXPLAIN_SENDS_NOTHING = 'explain sends nothing.';
+/** The most lines one explain prints before it says how many more there are. */
+export const EXPLAIN_MAX_LINES = 150;
 
 /**
  * A host for `explain`: it reads what the real one reads and can do nothing else. Every method that
@@ -242,8 +244,26 @@ export class ConsoleExec {
       kind: 'out',
       text: `explain ${c.line}: with the target ${target}, this would send:`,
     });
-    const dry = new ConsoleExec(dryHost(this.host), this.o, true);
+    // A long list is cut short: a snapshot carries the last 200 console lines, and the header and
+    // the first rows must stay in it.
+    let printed = 0;
+    let hidden = 0;
+    const capped: ExecOptions = {
+      ...this.o,
+      out: (l) => {
+        if (printed < EXPLAIN_MAX_LINES) {
+          printed++;
+          this.o.out(l);
+        } else hidden++;
+      },
+    };
+    const dry = new ConsoleExec(dryHost(this.host), capped, true);
     await dry.run(c.inner);
+    if (hidden > 0)
+      this.o.out({
+        kind: 'note',
+        text: `${String(hidden)} more lines are not shown. Explain fewer addresses at a time to see them.`,
+      });
     const { commands, frames } = dry.shown;
     const plural = (n: number, w: string) => `${String(n)} ${w}${n === 1 ? '' : 's'}`;
     this.o.out({

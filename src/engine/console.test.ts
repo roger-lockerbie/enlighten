@@ -15,6 +15,7 @@ import { SimTransport } from '../transport/sim.ts';
 import {
   ConsoleExec,
   dryHost,
+  EXPLAIN_MAX_LINES,
   explainLines,
   frameCount,
   nearestFade,
@@ -533,7 +534,10 @@ describe('explain (ADR 0023)', () => {
     await t.settle();
     await t.type('level 0 100');
     const frames = t.simTransport.log.length;
-    const monitor = t.engine.snapshot().monitor.length;
+    // The snapshot carries the monitor's last lines only, so its length says nothing: the last
+    // line's number does.
+    const monitor = t.engine.snapshot().monitor.at(-1)?.seq;
+    expect(monitor).toBeGreaterThan(0);
     const { r, out } = await t.type('explain tc 0 3000K 30%');
     expect(r.ok).toBe(true);
     expect(out).toEqual([
@@ -546,7 +550,7 @@ describe('explain (ADR 0023)', () => {
       'The governor judges a line when it is sent, and may clamp, hold or refuse it.',
     ]);
     expect(t.simTransport.log.length).toBe(frames);
-    expect(t.engine.snapshot().monitor.length).toBe(monitor);
+    expect(t.engine.snapshot().monitor.at(-1)?.seq).toBe(monitor);
     // The driver is where it was.
     const { out: level } = await t.type('query 0 level');
     expect(level[0]).toMatch(/^actual level 100 /);
@@ -680,6 +684,42 @@ describe('explain (ADR 0023)', () => {
       { id: 'DAPC', address: { kind: 'short', n: 0 }, value: 200 },
     ]);
     expect((await t.type('explain dapc 0 mask')).out.join(' ')).not.toContain('The ceiling is');
+  });
+
+  it('cuts a long list short, keeping the header and saying how many lines are left out', async () => {
+    const t = setup();
+    await t.settle();
+    const { r, out } = await t.type('explain query 0..16');
+    expect(r.ok).toBe(true);
+    expect(out[0]).toBe('explain query 0..16: with the target simulator, this would send:');
+    expect(out[1]).toMatch(/^ {2}query-status 0 /);
+    // 17 addresses of 12 queries: 204 rows, of which 150 are printed.
+    expect(out.filter((l) => l.startsWith('  ')).length).toBe(EXPLAIN_MAX_LINES);
+    expect(out).toContain(
+      '54 more lines are not shown. Explain fewer addresses at a time to see them.',
+    );
+    expect(out).toContain('204 commands, 204 frames on the bus. Nothing was sent.');
+    // The whole answer fits in what a snapshot carries.
+    expect(out.length).toBeLessThan(200);
+  });
+
+  it('turns away a word that is not in its tables, as the real line does (SH-1)', async () => {
+    const t = setup();
+    await t.settle();
+    for (const w of ['constructor', '__proto__', 'toString']) {
+      const a = await t.type(`explain query 0 ${w}`);
+      expect(a.r.ok, w).toBe(false);
+      expect(a.out.join(' '), w).toContain('is not something query can ask');
+      expect((await t.type(`target ${w}`)).out.join(' '), w).toContain(
+        'target takes sim, hw or both.',
+      );
+      expect((await t.type(`help ${w}`)).out.join(' '), w).toMatch(/^No help for "/);
+    }
+    expect(t.engine.snapshot().target).toBe('simulator');
+    // A script that asks for help on such a word runs to its end.
+    const r = await t.drive(t.engine.runScript('x', 'help constructor\necho done', ctx));
+    expect(r.ok).toBe(true);
+    expect(t.engine.snapshot().script).toBeUndefined();
   });
 
   it('says which DTR a command would read', async () => {

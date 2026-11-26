@@ -52,7 +52,11 @@ describe('complete', () => {
     expect(at('help expl')?.text).toBe('explain ');
     expect(at('explain sce')?.text).toBe('scene ');
     expect(at('explain scene 0 re')?.items).toEqual(['recall', 'remove']);
-    expect(at('explain help ke')?.text).toBe('keys ');
+    // Only what explain covers is offered after it.
+    expect(at('explain help ke')).toBeUndefined();
+    expect(at('explain pa')).toBeUndefined();
+    expect(at('explain expl')).toBeUndefined();
+    expect(at('explain query-act')?.text).toBe('query-actual-level ');
     expect(at('unlock r')?.items).toEqual(['rate', 'reset']);
     expect(at('lock e')?.text).toBe('expert ');
     expect(at('target b')?.text).toBe('both ');

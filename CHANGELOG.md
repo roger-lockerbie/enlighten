@@ -10,6 +10,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 - `explain <line>`: what a console line would send, as typeable commands and frames in hex, without sending anything (ADR 0023).
 - Tab completes DALI command names after `help`, and completes the line after `explain`.
 
+### Fixed
+
+- `help constructor`, `query 0 constructor` and `target constructor` (and other words every object carries) are turned away as unknown words. Before, the first threw, and in a script left the script shown as running. This was in 0.1.0 (SH-1).
+
 ### Changed
 
 - The floor of the property tests' time limit is 5 minutes, up from 2, after two CI runs timed out on slow runners.

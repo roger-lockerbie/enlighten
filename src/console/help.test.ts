@@ -1,7 +1,12 @@
 /** U-console: help for DALI commands, the word search, and the line that sends each command. */
 import { describe, expect, it } from 'vitest';
 import { COMMANDS, spec } from '../dali/commands.ts';
-import { ruleFor } from '../safety/rules.ts';
+import { short } from '../dali/address.ts';
+import type { Command } from '../dali/codec.ts';
+import { framesForAll } from '../dali/sequences.ts';
+import { Governor } from '../safety/governor.ts';
+import { LIGHT_CHANGING, ruleFor } from '../safety/rules.ts';
+import { Simulator } from '../sim/simulator.ts';
 import { DALI_HELP, GROUP_TITLES } from './dali-help.ts';
 import { daliHelp, governorText, help } from './help.ts';
 import { DALI_NAMES, nameOf } from './names.ts';
@@ -76,14 +81,68 @@ describe('help for DALI commands', () => {
       expect(g.includes('reset unlock'), s.id).toBe(rule === 'reset' || rule === 'commissioning');
       expect(g.includes('expert unlock'), s.id).toBe(rule === 'expert' || rule === 'expert-curve');
     }
+    // A command that changes the light says that the rate guard and the holding rules apply.
+    for (const s of COMMANDS) {
+      const rule = ruleFor(s.id, s.reply !== 'none');
+      expect(governorText(s).includes('help hardware'), s.id).toBe(
+        LIGHT_CHANGING.has(s.id) && rule !== 'refuse',
+      );
+    }
+    expect(governorText(spec('OFF'))).toContain('the rate guard can hold or refuse it');
     expect(governorText(spec('DAPC'))).toContain('clamped');
     expect(governorText(spec('DAPC'))).toContain('Unverified gear takes it too.');
     expect(governorText(spec('UP'))).toContain('Needs gear whose safety profile is verified.');
+    expect(governorText(spec('CONTINUOUS_UP'))).toContain('help hardware');
     expect(governorText(spec('SET_FADE_TIME'))).toBe(
       'Needs gear whose safety profile is verified.',
     );
     expect(governorText(spec('DTR0'))).toBe('Allowed.');
     expect(governorText(spec('IDENTIFY_DEVICE'))).toBe('Refused always.');
+  });
+
+  it('says "needs verified gear" exactly where the governor refuses unverified gear', () => {
+    // A governor that has scanned nothing: address 0 is not verified. Every unlock is on, so a
+    // command behind one is judged by its own rule, as help says.
+    for (const s of COMMANDS) {
+      if (s.kind === 'special') continue;
+      const g = new Governor({
+        target: 'simulator',
+        shadow: Simulator.bench(),
+        connectedAt: -10_000,
+      });
+      for (const u of ['rate', 'reset', 'expert'] as const) g.unlock(u, 'console', true);
+      const cmd: Command = {
+        id: s.id,
+        address: short(0),
+        ...(s.kind === 'dapc' ? { value: 100 } : s.param === 'nibble' ? { value: 3 } : {}),
+      };
+      const v = g.judge(
+        {
+          frames: framesForAll([
+            { id: 'DTR0', value: 1 },
+            { id: 'DTR1', value: 1 },
+            { id: 'DTR2', value: 1 },
+            cmd,
+          ]),
+          source: 'console',
+          label: 'help test',
+        },
+        0,
+      );
+      const refusedAsUnverified = v.kind === 'refuse' && v.reason.includes('is not verified');
+      const text = governorText(s);
+      const rule = ruleFor(s.id, s.reply !== 'none');
+      if (rule === 'refuse' || rule === 'refuse-colour-type') {
+        // Refused on any gear. On unverified gear the governor gives that as the reason first.
+        expect(v.kind, s.id).toBe('refuse');
+        expect(text, s.id).toMatch(/^Refused/);
+        continue;
+      }
+      expect(text.includes('Needs gear whose safety profile is verified.'), s.id).toBe(
+        refusedAsUnverified,
+      );
+      if (text.includes('Unverified gear takes it too.')) expect(v.kind, s.id).not.toBe('refuse');
+    }
   });
 
   it('says so when the research notes do not describe a command', () => {
@@ -148,7 +207,19 @@ describe('help topics', () => {
 
   it('points an unknown topic at the word search', () => {
     expect(help('nope', 'mac')).toEqual([
-      'No help for "nope". Type help for the list, or help -k nope to look it up.',
+      'No help for "nope". Type help for the list, or help -k to look a word up.',
     ]);
+  });
+
+  it('takes only its own topics, and repeats typed text short and on one line (SH-1)', () => {
+    for (const w of ['constructor', '__proto__', 'tostring', 'hasownproperty'])
+      expect(help(w, 'other')[0], w).toMatch(/^No help for "/);
+    const long = `${'x'.repeat(30)}  \n  ${'y'.repeat(30)}`;
+    expect(help(long, 'other')[0]).toBe(
+      `No help for "${'x'.repeat(30)} ${'y'.repeat(9)}". Type help for the list, or help -k to look a word up.`,
+    );
+    expect(help({ find: long }, 'other')[0]).toBe(
+      `Nothing in help mentions "${'x'.repeat(30)} ${'y'.repeat(9)}".`,
+    );
   });
 });

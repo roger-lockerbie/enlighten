@@ -316,6 +316,14 @@ describe('friendly commands', () => {
     expect(err('trace maybe')).toBe('trace takes on or off.');
   });
 
+  it('reads only its own words from its tables (SH-1)', () => {
+    for (const w of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
+      expect(err(`target ${w}`), w).toBe('target takes sim, hw or both.');
+      expect(err(`query 0 ${w}`), w).toMatch(/is not something query can ask/);
+      expect(err(`explain query 0 ${w}`), w).toMatch(/is not something query can ask/);
+    }
+  });
+
   it('explain takes one line that sends DALI frames itself', () => {
     expect(cmd('explain tc 0 3000K 30%')).toEqual({
       cmd: 'explain',

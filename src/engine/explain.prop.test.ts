@@ -1,6 +1,8 @@
 /**
- * P-explain (ADR 0023): whatever line it is given, `explain` sends no frame to the bench, adds no
- * line to the bus monitor and leaves every driver's level and the DTRs as the governor knows them.
+ * P-explain (ADR 0023): whatever line it is given, on the simulator, on hardware and on Both,
+ * `explain` sends no frame to either transport and leaves everything the engine reports as it was:
+ * the bus monitor, the devices and their levels, the DTRs as the governor knows them, the ceiling,
+ * the target, the unlocks, the latch, jobs and scan state. Only console lines are added.
  */
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
@@ -11,7 +13,40 @@ import { nameOf } from '../console/names.ts';
 import type { ParseContext } from '../console/parse.ts';
 import { Simulator } from '../sim/simulator.ts';
 import { SimTransport } from '../transport/sim.ts';
-import { Engine } from './engine.ts';
+import type { TxFrame } from '../dali/sequences.ts';
+import type { SendResult } from '../safety/types.ts';
+import { Engine, type OutputTarget } from './engine.ts';
+import type { HardwareInfo, HardwareTransport, TransportState } from './transport.ts';
+
+/** A second simulator behind a transport, standing in for the server and the hasseb. */
+class FakeHardware implements HardwareTransport {
+  readonly kind = 'server';
+  readonly inner: SimTransport;
+  private st: TransportState = 'down';
+  constructor(sim: Simulator, clock: VirtualClock) {
+    this.inner = new SimTransport(sim, clock, withFloors({}), { keepLog: true });
+  }
+  state(): TransportState {
+    return this.st;
+  }
+  info(): HardwareInfo {
+    return { fwMajor: 2, fwMinor: 4, attached: true };
+  }
+  connect(): Promise<void> {
+    this.st = 'ready';
+    return Promise.resolve();
+  }
+  disconnect(): Promise<void> {
+    this.st = 'down';
+    return Promise.resolve();
+  }
+  send(f: TxFrame): Promise<SendResult> {
+    return this.inner.send(f);
+  }
+  sendPanic(f: TxFrame): Promise<SendResult> {
+    return this.inner.sendPanic(f);
+  }
+}
 
 const runs = Number(process.env['PROP_RUNS'] ?? 200);
 const ctx: ParseContext = { aliases: new Map() };
@@ -55,49 +90,60 @@ const friendly = fc.oneof(
 );
 
 describe('P-explain', () => {
-  it('sends nothing, whatever the line', async () => {
-    const clock = new VirtualClock(1000);
-    const sim = Simulator.bench({ at: 1000 });
-    const simTransport = new SimTransport(sim, clock, withFloors({}), { keepLog: true });
-    const engine = new Engine({ clock, sim, simTransport });
-    const settle = async () => {
-      for (let i = 0; i < 200_000; i++) {
-        await flushMicrotasks();
-        if (engine.snapshot().jobs.length === 0) return;
-        const next = clock.next();
-        if (next === undefined) throw new Error('Nothing is waiting on the clock.');
-        await clock.advanceTo(next);
-      }
-      throw new Error('The engine did not settle.');
-    };
-    await settle();
-    // Unlock everything a person can, so no line is stopped by a lock before it could send.
-    for (const u of ['rate', 'reset', 'expert'] as const) engine.unlock(u, 'console', true);
-    let explained = 0;
-    await fc.assert(
-      fc.asyncProperty(friendly, async (line) => {
-        const frames = simTransport.log.length;
-        const before = engine.snapshot();
-        const p = engine.console(`explain ${line}`, ctx, true);
+  for (const target of [
+    'simulator',
+    'hardware',
+    'both',
+  ] as const satisfies readonly OutputTarget[]) {
+    it(`sends nothing and changes nothing, whatever the line, on ${target}`, async () => {
+      const clock = new VirtualClock(1000);
+      const sim = Simulator.bench({ at: 1000 });
+      const simTransport = new SimTransport(sim, clock, withFloors({}), { keepLog: true });
+      const hw = new FakeHardware(Simulator.bench({ at: 0 }), clock);
+      const engine = new Engine({ clock, sim, simTransport, hardware: hw });
+      const settle = async () => {
+        for (let i = 0; i < 400_000; i++) {
+          await flushMicrotasks();
+          if (engine.snapshot().jobs.length === 0) return;
+          const next = clock.next();
+          if (next === undefined) throw new Error('Nothing is waiting on the clock.');
+          await clock.advanceTo(next);
+        }
+        throw new Error('The engine did not settle.');
+      };
+      await settle();
+      if (target !== 'simulator') {
+        const p = engine.setTarget(target, 'ui');
         await settle();
-        const r = await p;
-        const after = engine.snapshot();
-        expect(simTransport.log.length, line).toBe(frames);
-        expect(after.monitor.length, line).toBe(before.monitor.length);
-        expect(
-          after.devices.map((d) => d.level),
-          line,
-        ).toEqual(before.devices.map((d) => d.level));
-        expect(after.ceilingArc, line).toBe(before.ceilingArc);
-        expect(after.target, line).toBe(before.target);
-        expect(after.unlocks, line).toEqual(before.unlocks);
-        expect(after.latched, line).toBe(before.latched);
-        if (r.ok) explained++;
-      }),
-      { numRuns: runs * 3 },
-    );
-    // The property is not empty: most lines were explained, not turned away by the parser.
-    expect(explained).toBeGreaterThan(runs);
-    engine.dispose();
-  }, 120_000);
+        expect((await p).ok).toBe(true);
+        await settle();
+      }
+      expect(engine.snapshot().devices.length).toBe(2);
+      // Unlock everything a person can, so no line is stopped by a lock before it could send.
+      for (const u of ['rate', 'reset', 'expert'] as const) engine.unlock(u, 'console', true);
+      /** Everything the engine reports but the console's own lines, and the DTRs under it. */
+      const state = () => {
+        const rest = { ...engine.snapshot(), console: [] };
+        return JSON.stringify({ rest, dtr: engine.dtrView() });
+      };
+      let explained = 0;
+      await fc.assert(
+        fc.asyncProperty(friendly, async (line) => {
+          const frames = [simTransport.log.length, hw.inner.log.length];
+          const before = state();
+          const at = clock.now();
+          const r = await engine.console(`explain ${line}`, ctx, true);
+          // It needs no time on the clock: nothing is queued, nothing waits.
+          expect(clock.now(), line).toBe(at);
+          expect([simTransport.log.length, hw.inner.log.length], line).toEqual(frames);
+          expect(state(), line).toBe(before);
+          if (r.ok) explained++;
+        }),
+        { numRuns: runs * 3 },
+      );
+      // The property is not empty: most lines were explained, not turned away by the parser.
+      expect(explained).toBeGreaterThan(runs);
+      engine.dispose();
+    }, 300_000);
+  }
 });

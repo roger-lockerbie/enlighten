@@ -276,6 +276,16 @@ describe('hardware and Both', () => {
     ]);
     expect(hw?.frames()).toBe(sentHw);
     expect(simTransport.log.length).toBe(sentSim);
+    // With the connection gone there is nothing to build for, as the real line answers.
+    hw?.drop();
+    from = seq();
+    await drive(engine.console('explain tc 0 3000K 30%', { aliases: new Map() }));
+    expect(text(from)).toEqual([
+      'explain tc 0 3000K 30%: with the target hardware, this would send:',
+      'refused: Hardware: disconnected.',
+      'Nothing would be sent.',
+    ]);
+    expect(simTransport.log.length).toBe(sentSim);
     engine.dispose();
   });
 

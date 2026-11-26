@@ -402,7 +402,8 @@ function queryBody(rest: readonly Token[]): Parsed<QueryWhat> {
   const w = word(rest[0]);
   if (w === undefined) return { ok: true, value: 'summary' };
   if (rest.length > 1) return fail('query takes one thing to ask.');
-  const known = QUERY_WORDS[w];
+  // An own word only: `constructor` and the like are not words of the table (SH-1).
+  const known = Object.hasOwn(QUERY_WORDS, w) ? QUERY_WORDS[w] : undefined;
   if (known !== undefined) return { ok: true, value: known };
   const s = w.startsWith('query-') || /^dt[68]-query-/.test(w) ? byName(w) : byName(`query-${w}`);
   if (s !== undefined && s.reply !== 'none' && s.kind !== 'special') {
@@ -568,7 +569,8 @@ export function parseLine(line: string, ctx: ParseContext): ParseResult {
     }
     case 'target': {
       if (n === 0) return ok({ cmd: 'target' });
-      const t = TARGETS[word(args[0]) ?? ''];
+      const w = word(args[0]) ?? '';
+      const t = Object.hasOwn(TARGETS, w) ? TARGETS[w] : undefined;
       if (t === undefined || n > 1) return fail('target takes sim, hw or both.');
       return ok({ cmd: 'target', target: t });
     }

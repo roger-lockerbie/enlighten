@@ -1780,6 +1780,11 @@ export class Engine {
     return [...this.jobs].find((j) => CONSOLE_JOBS.includes(j.kind));
   }
 
+  /** DTR0 to DTR2 as the active connection's governor knows them, undefined where unknown. */
+  dtrView(): readonly (number | undefined)[] {
+    return this.active()?.governor.dtrView() ?? [];
+  }
+
   /** The engine as the console's executor sees it, for one job. */
   private consoleHost(job: Job): ConsoleHost {
     const stopped = () => job.aborted;
@@ -1791,7 +1796,7 @@ export class Engine {
       compile: (intent) => this.compile(intent),
       devices: () => this.deviceViews(),
       ceilingArc: () => this.ceiling,
-      dtr: () => this.active()?.governor.dtrView() ?? [],
+      dtr: () => this.dtrView(),
       target: () => this.target,
       connectionText: () =>
         this.target === 'simulator'
@@ -1820,9 +1825,18 @@ export class Engine {
    * nothing, asks the governor nothing and changes nothing.
    */
   compile(intent: Intent): Compiled | string {
-    const conn = this.active() ?? this.simConn;
+    // As `request` answers: with hardware chosen and no connection, there is nothing to build for.
+    const conn = this.active();
+    if (conn === undefined) return 'Hardware: disconnected.';
     switch (intent.kind) {
       case 'commands':
+        for (const c of intent.commands) {
+          try {
+            spec(c.id);
+          } catch {
+            return `Unknown command ${c.id}.`;
+          }
+        }
         return { commands: [...intent.commands], notes: [] };
       case 'raw': {
         const c = decode({ a: intent.a & 0xff, b: intent.b & 0xff });
