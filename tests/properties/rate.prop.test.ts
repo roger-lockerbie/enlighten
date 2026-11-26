@@ -189,7 +189,12 @@ async function unseen(cfg: Saved[0], stream: readonly Step[], unlock = false): P
   // The trace is checked from the connect: what the gear did before is not the app's doing.
   await b.ready();
   if (unlock) b.governor.unlock('reset', 'console', true);
-  const { rec } = await play(b, [...extra, ...stream]);
+  // The wait at the end puts the last step's fade in the trace.
+  const { rec } = await play(b, [
+    ...extra,
+    ...stream,
+    { kind: 'tx', dt: 6000, source: 'ui', cmds: [] },
+  ]);
   expect(rateProblems(rec, 1)).toEqual([]);
 }
 
@@ -197,7 +202,8 @@ async function unseen(cfg: Saved[0], stream: readonly Step[], unlock = false): P
  * Steps aimed at what a scan cannot read (S8b-R2-D1, S8b-R2-D2): colours, parts of colours, levels,
  * recalls and switch-offs to two addresses, from 0 to 3 s apart and often close together. And what
  * the third review added (S8b-R3-8): queries, rescans, groups and broadcast, steps, fade settings and,
- * under the reset unlock, gear moved from one address onto the other.
+ * under the reset unlock, gear moved from one address onto the other. Stage 11 added fade settings
+ * read back, DAPC sequences and DOWN (S8b-R4-D1).
  */
 const aimed: fc.Arbitrary<Step[]> = fc.array(
   fc
@@ -208,6 +214,9 @@ const aimed: fc.Arbitrary<Step[]> = fc.array(
         ...(['rgb', 'red', 'tc', 'act', 'level', 'level', 'last', 'off', 'both'] as const),
         ...(['query', 'rescan', 'group', 'all', 'alloff', 'scene', 'up', 'down'] as const),
         ...(['cooler', 'fade0', 'fade0', 'fade2', 'move'] as const),
+        // Stage 11 (S8b-R4-D1, ADR 0022): fade settings read back, so a level can meet a fade the
+        // guard knows of, and the level commands that fade whatever the fade time is.
+        ...(['read', 'read', 'fade2read', 'sequence', 'dim', 'pink', 'pink'] as const),
       ),
       fc.array(fc.integer({ min: 0, max: 254 }), { minLength: 6, maxLength: 6 }),
       fc.integer({ min: 60, max: 900 }),
@@ -233,6 +242,27 @@ const aimed: fc.Arbitrary<Step[]> = fc.array(
           { id: 'DTR0', value: 2 },
           { id: 'SET_FADE_TIME', address: a },
         ],
+        read: [
+          { id: 'QUERY_FADE_TIME_FADE_RATE', address: a },
+          { id: 'QUERY_EXTENDED_FADE_TIME', address: a },
+        ],
+        fade2read: [
+          { id: 'DTR0', value: 2 },
+          { id: 'SET_FADE_TIME', address: a },
+          { id: 'QUERY_FADE_TIME_FADE_RATE', address: a },
+          { id: 'QUERY_EXTENDED_FADE_TIME', address: a },
+        ],
+        sequence: [{ id: 'ENABLE_DAPC_SEQUENCE', address: a }, level],
+        dim: [{ id: 'DOWN', address: a }],
+        // Red full and the others near it: a level fade then takes red in and out of saturation.
+        pink: rgbwafCommands(a, [
+          254,
+          180 + ((mix[1] ?? 0) % 60),
+          180 + ((mix[2] ?? 0) % 60),
+          0,
+          0,
+          0,
+        ]),
         // Under the reset unlock: the gear at one address moves onto the other.
         move: [
           { id: 'DTR0', value: ((1 - n) << 1) | 1 },

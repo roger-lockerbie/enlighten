@@ -283,6 +283,17 @@ const LEVEL_MOVING: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Level commands that fade whatever the fade time is: UP and DOWN run for 200 ms at the fade rate, and
+ * the continuous commands run at the fade rate until stopped.
+ */
+const FADES_AT_RATE: ReadonlySet<string> = new Set([
+  'UP',
+  'DOWN',
+  'CONTINUOUS_UP',
+  'CONTINUOUS_DOWN',
+]);
+
+/**
  * This gear has stopped moving by `at`, so a range that waited only on it ends (ADR 0019).
  * - `off`: an OFF reached it. The range ends at the OFF, or at the end of its head if that came first.
  * - `settled`: a scan found it at rest, or found no gear there. Its hard step came by then. One lost
@@ -1366,7 +1377,9 @@ export class Governor {
    * colour can be waiting in the gear, since automatic activation would bring it in: after an
    * ACTIVATE that reached the gear for sure, with no colour loaded, scene recalled or Tc step sent
    * since. A colour change (ACTIVATE, a Tc step, a scene recall) goes only when the gear has no fade
-   * of any kind and its level is steady (amendments 1 and 2).
+   * of any kind and its level is steady (amendments 1 and 2). A level changes only with no fade of
+   * any kind either, and never by a command that fades at the fade rate or in a DAPC sequence
+   * (ADR 0022, S8b-R4-D1).
    */
   private colourRule(planned: readonly Planned[], first: number): Violation | undefined {
     if (this.target !== 'hardware') return undefined;
@@ -1424,26 +1437,31 @@ export class Governor {
           this.unsureMoving.get(n) ?? -Infinity,
         );
         const name = gearName(n);
-        if (LOADS_TEMPORARY.has(id)) {
+        /** Why a change that needs no fade is refused, when the gear has one or may have one. */
+        const fadeWhy = (what: string): string => {
+          const f = this.fades(n);
+          const unread =
+            !refaded.has(n) &&
+            (f.fadeTime === undefined || f.extendedFade === undefined || f.fastFade === undefined);
+          return unread
+            ? `${what} only with no fade, and its fade settings have not been read back since they were set`
+            : `${what} only with no fade, so set its fade time to 0 first`;
+        };
+        if (id === 'ENABLE_DAPC_SEQUENCE') {
+          // In a DAPC sequence every level fades over 200 ms whatever the fade time is, and a faded
+          // level on colour gear is more than one leg (ADR 0022, S8b-R4-D1).
+          return refuse(
+            `a${String(n)}`,
+            `${name} may be colour gear, so its level changes only in one step, and a DAPC sequence fades it`,
+          );
+        } else if (LOADS_TEMPORARY.has(id)) {
           // A temporary colour may now wait in the gear, and any level command brings it in.
           clear.set(n, false);
         } else if (COLOUR_ONLY.has(id)) {
           // A colour fade can turn a channel more than once, which one leg does not cover, so a
           // colour changes only in one moment (ADR 0019 amendment 2, S8b-R3-1).
-          if (refaded.has(n) || this.mayFade(n)) {
-            const f = this.fades(n);
-            const unread =
-              !refaded.has(n) &&
-              (f.fadeTime === undefined ||
-                f.extendedFade === undefined ||
-                f.fastFade === undefined);
-            return refuse(
-              `a${String(n)}`,
-              unread
-                ? `${name}'s colour changes only with no fade, and its fade settings have not been read back since they were set`
-                : `${name}'s colour changes only with no fade, so set its fade time to 0 first`,
-            );
-          }
+          if (refaded.has(n) || this.mayFade(n))
+            return refuse(`a${String(n)}`, fadeWhy(`${name}'s colour changes`));
           if (moved.has(n))
             return refuse(
               `a${String(n)}`,
@@ -1480,6 +1498,24 @@ export class Governor {
           if (settling.has(n)) return refuse(`a${String(n)}`, fading);
           const until = this.colourSettling.get(n) ?? -Infinity;
           if (p.deliverAt < until) return refuse(`a${String(n)}`, fading, until);
+          // A faded level at a steady colour is not one leg on colour gear: each channel follows the
+          // level, and a channel crossing a line the rule counts (red entering or leaving
+          // saturation, SPEC S3.1a) is a leg of its own. Three legs in a third of a second went
+          // through on gear with a red channel (S8b-R4-D1). The colour is never known on hardware,
+          // so the rule holds for all colour gear: its level changes only in one moment (ADR 0022).
+          // A scene recall has the same rule below, in its own words.
+          if (id !== 'GO_TO_SCENE') {
+            if (FADES_AT_RATE.has(id))
+              return refuse(
+                `a${String(n)}`,
+                `${name} is colour gear, so its level changes only in one step, and ${id.replaceAll('_', ' ')} is a fade`,
+              );
+            if (refaded.has(n) || this.mayFade(n))
+              return refuse(
+                `a${String(n)}`,
+                fadeWhy(`${name} is colour gear, so its level changes`),
+              );
+          }
           // A scene's level is read in the scan and its colour is not, so a recall fades the level
           // and a colour the guard does not know together. With no fade both change in one moment,
           // which counts as one leg and one hard step. A scene can change the colour with its level

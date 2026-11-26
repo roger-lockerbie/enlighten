@@ -1363,6 +1363,13 @@ export class Engine {
     return cmds;
   }
 
+  /** Hardware gear that is, or may be, colour gear: the governor refuses it a DAPC sequence. */
+  private stepOnly(conn: Conn, address: number): boolean {
+    if (conn.governor.target !== 'hardware') return false;
+    const i = conn.governor.addressInfo(address);
+    return i?.typesRead !== true || (i.deviceTypes ?? []).includes(8);
+  }
+
   private async sendLive(key: string, v: LiveValue): Promise<CoalescedResult> {
     const conn = this.active();
     if (conn === undefined) return { ok: false };
@@ -1385,8 +1392,10 @@ export class Engine {
         // A moving control keeps a DAPC sequence going: the gear fades over 200 ms between them.
         // The time is taken when the last DAPC finished, which is later than the gear heard it, so a
         // margin keeps a sequence going only while it surely is (DALI review S5-D4).
+        // On hardware, colour gear takes a level only in one step (ADR 0022), so no sequence there.
         if (
           v.live &&
+          !this.stepOnly(conn, v.address) &&
           now - (this.lastLiveDapc.get(v.address) ?? -Infinity) >
             DAPC_SEQUENCE_MS - SEQUENCE_MARGIN_MS
         )

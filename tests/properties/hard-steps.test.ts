@@ -1114,6 +1114,40 @@ describe('what the gear did not take, or did not answer (S8b-R4, ADR 0019 amendm
     expect(rateProblems(second.rec, 1)).toEqual([]);
   });
 
+  it('a faded level at a steady colour is more than one leg on gear with a red channel (S8b-R4-D1, ADR 0022)', async () => {
+    // RGB 254/205/205 at 180 with no fade. A bare ACTIVATE, then fade time 2 set and read back, then
+    // DAPC 150: the level, and red entering and leaving saturation, three legs in 330 ms. The level
+    // is refused now, and with no fade it goes in one moment.
+    const readBack = [
+      { id: 'QUERY_FADE_TIME_FADE_RATE', address: a0 },
+      { id: 'QUERY_EXTENDED_FADE_TIME', address: a0 },
+    ];
+    const setFade = (t: number) => [
+      { id: 'DTR0', value: t },
+      { id: 'SET_FADE_TIME', address: a0 },
+      ...readBack,
+    ];
+    const { real, b } = await bench('C3', (r) => {
+      r.run(rgbwafCommands(short(0), [254, 205, 205, 0, 0, 0]));
+      r.to('DAPC', 0, 180);
+    });
+    const { rec } = await play(b, [
+      tx(20_000, [{ id: 'DT8_ACTIVATE', address: a0 }]),
+      tx(4000, setFade(2)),
+      tx(4000, [{ id: 'DAPC', address: a0, value: 150 }]),
+      tx(6000, []),
+    ]);
+    expect(rateProblems(rec, 1)).toEqual([]);
+    expect(real.unit('R0')?.gear.levelAt(b.clock.now())).toBe(180);
+    const again = await play(b, [
+      tx(4000, setFade(0)),
+      tx(4000, [{ id: 'DAPC', address: a0, value: 150 }]),
+      tx(6000, []),
+    ]);
+    expect(rateProblems(again.rec, 1)).toEqual([]);
+    expect(real.unit('R0')?.gear.levelAt(b.clock.now())).toBe(150);
+  });
+
   it('a fade time read back as 0 lets a colour go', async () => {
     const { real, b } = await bench(
       'C2',
