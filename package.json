@@ -19,17 +19,17 @@
     "@types/three": "0.187.0",
     "@vitest/coverage-v8": "5.1.0",
     "eslint": "10.14.0",
-    "eslint-plugin-svelte": "3.24.0",
+    "eslint-plugin-svelte": "3.24.1",
     "fast-check": "4.10.2",
     "globals": "17.14.0",
-    "prettier": "3.9.10",
+    "prettier": "3.10.1",
     "prettier-plugin-svelte": "4.1.1",
     "svelte": "5.57.3",
     "svelte-check": "4.7.8",
     "svelte-eslint-parser": "1.10.1",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.72.1",
-    "vite": "8.3.6",
+    "typescript-eslint": "8.72.2",
+    "vite": "8.3.8",
     "vitest": "5.1.0"
   },
   "scripts": {
@@ -55,7 +55,8 @@
     "server:demo": "pnpm build && server/.venv/bin/python -m server --demo",
     "test:server": "server/.venv/bin/python -m pytest server -q",
     "coverage": "PROP_SEED=1 vitest run --coverage",
-    "mutate": "PROP_RUNS=5 stryker run"
+    "mutate": "PROP_RUNS=5 stryker run",
+    "sbom:all": "mkdir -p sbom && pnpm sbom --sbom-format cyclonedx --sbom-type application --out sbom/enlighten-app.cdx.json && python3 -I tools/sbom/server.py server/requirements.txt sbom/enlighten-server.cdx.json"
   },
   "dependencies": {
     "three": "0.187.0"
