@@ -97,6 +97,11 @@ const TOPICS: Readonly<Record<string, readonly string[]>> = {
     'Topics: every command of the console, every DALI command by name, and keys, addresses, values,',
     'dali, hardware and scripts. help -k looks a word up in all of them.',
   ],
+  manual: [
+    'manual [<page>]',
+    'Opens the manual, at a page named by its file, its title or part of its title. F1 opens it too.',
+    'The manual has a guide to read in order, a terse reference, and tables of keys and commands.',
+  ],
   explain: [
     'explain <line>',
     'Shows what a line would send, and sends nothing: each DALI command as a line you could type,',
@@ -295,19 +300,29 @@ function frameLine(s: CommandSpec): string {
   return `Frame: the address byte, then ${op}.${dt} ${reply}`;
 }
 
-/** Help for one DALI command. `typed` is the name as it was asked for. */
-export function daliHelp(s: CommandSpec, typed?: string): string[] {
+/** Everything help says about one DALI command, as parts. The manual's table is built from it. */
+export interface DaliEntry {
+  readonly name: string;
+  readonly usage: string;
+  /** The name in the standard, and the part it is in. */
+  readonly label: string;
+  readonly part: string;
+  readonly does: string;
+  /** True when the research notes do not describe the command. */
+  readonly general: boolean;
+  readonly frame: string;
+  /** The registers it reads, sets or lets the gear write, and send-twice. Empty when none apply. */
+  readonly registers: string;
+  readonly governor: string;
+  readonly see: string | undefined;
+  readonly example: string;
+  readonly exampleFrames: string;
+}
+
+/** The parts of help for one DALI command. `typed` is the name as it was asked for. */
+export function daliEntry(s: CommandSpec, typed?: string): DaliEntry {
   const name = typed !== undefined && byName(typed) === s ? typed.toLowerCase() : nameOf(s.id);
   const h = DALI_HELP[s.id];
-  const out: string[] = [`${usage(s, name)}     ${s.label}, ${PART[s.deviceType]}`];
-  if (h !== undefined) out.push(...wrap(h.does));
-  if (h?.general === true)
-    out.push(
-      ...wrap(
-        "The project's research notes do not describe this command, so that line is from general knowledge of the standard.",
-      ),
-    );
-  out.push(...wrap(frameLine(s)));
   const regs: string[] = [];
   if (s.reads.length > 0)
     regs.push(
@@ -319,18 +334,50 @@ export function daliHelp(s: CommandSpec, typed?: string): string[] {
       `The gear may write ${s.gearWrites.map((r) => `DTR${String(r)}`).join(', ')}, which the app then treats as unknown.`,
     );
   if (s.sendTwice) regs.push('Sent twice within 100 ms, which the app does for you.');
-  if (regs.length > 0) out.push(...wrap(regs.join(' ')));
-  out.push(...wrap(`Governor: ${governorText(s)}`));
-  if (h?.see !== undefined) out.push(...wrap(`See also: ${h.see}`));
   const eg = sample(s);
-  const frames = framesFor(eg)
-    .map((f) => frameText(f.frame))
-    .join(', ');
-  out.push(`Example: ${lineOf(eg)}     (${frames})`);
+  return {
+    name,
+    usage: usage(s, name),
+    label: s.label,
+    part: PART[s.deviceType],
+    does: h?.does ?? '',
+    general: h?.general === true,
+    frame: frameLine(s),
+    registers: regs.join(' '),
+    governor: governorText(s),
+    see: h?.see,
+    example: lineOf(eg),
+    exampleFrames: framesFor(eg)
+      .map((f) => frameText(f.frame))
+      .join(', '),
+  };
+}
+
+/** What help says where the research notes name a command without describing it. */
+export const GENERAL_NOTE =
+  "The project's research notes do not describe this command, so that line is from general knowledge of the standard.";
+
+/** Help for one DALI command. `typed` is the name as it was asked for. */
+export function daliHelp(s: CommandSpec, typed?: string): string[] {
+  const e = daliEntry(s, typed);
+  const out: string[] = [`${e.usage}     ${e.label}, ${e.part}`];
+  if (e.does !== '') out.push(...wrap(e.does));
+  if (e.general) out.push(...wrap(GENERAL_NOTE));
+  out.push(...wrap(e.frame));
+  if (e.registers !== '') out.push(...wrap(e.registers));
+  out.push(...wrap(`Governor: ${e.governor}`));
+  if (e.see !== undefined) out.push(...wrap(`See also: ${e.see}`));
+  out.push(`Example: ${e.example}     (${e.exampleFrames})`);
   return out;
 }
 
-const GROUP_ORDER: readonly DaliGroup[] = [
+/** The DALI commands of a group, in the command table's order. */
+export function daliGroup(group: DaliGroup): CommandSpec[] {
+  return COMMANDS.filter((c) => DALI_HELP[c.id]?.group === group);
+}
+
+/** The groups in the order help lists them. */
+export const DALI_GROUPS: readonly DaliGroup[] = [
   'level',
   'config',
   'query',
@@ -352,8 +399,8 @@ function daliOverview(): string[] {
     'help <name> says what a command does. help -k <word> looks a word up.',
     EXPLAIN_TIP,
   ];
-  for (const group of GROUP_ORDER) {
-    const names = COMMANDS.filter((c) => DALI_HELP[c.id]?.group === group).map((c) => nameOf(c.id));
+  for (const group of DALI_GROUPS) {
+    const names = daliGroup(group).map((c) => nameOf(c.id));
     out.push(`${GROUP_TITLES[group]} (${String(names.length)}):`);
     out.push(...wrap(names, '  ', '  '));
   }
@@ -396,11 +443,11 @@ export function help(ask: HelpAsk, platform: Platform): string[] {
   if (topic === undefined || topic === '') {
     return [
       'Commands: level off on tc rgb fade scene group query devices scan profile cap target trace',
-      '  panic resume unlock lock run scripts history clear help explain echo wait use raw',
+      '  panic resume unlock lock run scripts history clear help explain manual echo wait use raw',
       'Every DALI command by name: help dali, then help <name>. To look a word up: help -k <word>.',
       'Keys: help keys. Addresses and values: help addresses, help values. Real gear: help hardware.',
       EXPLAIN_TIP,
-      'Escape twice is panic from anywhere.',
+      'The manual: F1, or manual. Escape twice is panic from anywhere.',
     ];
   }
   if (topic === 'dali') return daliOverview();

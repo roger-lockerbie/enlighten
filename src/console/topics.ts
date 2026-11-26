@@ -27,6 +27,7 @@ export const HELP_TOPICS: readonly string[] = [
   'history',
   'clear',
   'help',
+  'manual',
   'explain',
   'echo',
   'wait',

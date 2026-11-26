@@ -63,6 +63,8 @@ export type ConsoleCommand =
   | { readonly cmd: 'lock'; readonly name?: UnlockName }
   | { readonly cmd: 'run'; readonly name: string }
   | { readonly cmd: 'scripts' }
+  /** Open the manual, at a page named by its file, its title or part of its title. */
+  | { readonly cmd: 'manual'; readonly page?: string }
   | { readonly cmd: 'history'; readonly args: readonly string[] }
   | { readonly cmd: 'clear' }
   | { readonly cmd: 'help'; readonly topic?: string; readonly find?: string }
@@ -109,6 +111,7 @@ export const FRIENDLY = [
   'clear',
   'help',
   'explain',
+  'manual',
   'echo',
   'wait',
   'pause',
@@ -606,6 +609,10 @@ export function parseLine(line: string, ctx: ParseContext): ParseResult {
         args[0] === undefined
           ? { cmd: 'help' }
           : { cmd: 'help', topic: args[0].text.toLowerCase() },
+      );
+    case 'manual':
+      return ok(
+        n === 0 ? { cmd: 'manual' } : { cmd: 'manual', page: args.map((a) => a.text).join(' ') },
       );
     case 'explain': {
       const first = args[0];

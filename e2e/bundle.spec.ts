@@ -3,7 +3,8 @@
  * three.js, which loads in a chunk of its own when the Visualiser is first opened. The pages that
  * load later (Devices, the Visualiser and its light core) share one chunk (ADR 0020). The set-up's checks are a chunk of their own too, shared by the
  * Visualiser and Settings' workspace export and import (ADR 0018). The console's help text is a
- * chunk too, loaded when help is first asked for (ADR 0023). Each worker is one file.
+ * chunk too, loaded when help is first asked for (ADR 0023), and so is the manual's text, loaded
+ * when the manual is first opened (ADR 0024). Each worker is one file.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -36,7 +37,9 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   expect(saved).toHaveLength(1);
   const helpChunk = named(/^help-[\w-]+\.js$/);
   expect(helpChunk).toHaveLength(1);
-  expect(chunks).toHaveLength(7);
+  const manualChunk = named(/^pages-[\w-]+\.js$/);
+  expect(manualChunk).toHaveLength(1);
+  expect(chunks).toHaveLength(8);
   // three.js is in the renderer's chunk and nowhere else.
   const marker = 'WebGLRenderer';
   expect(read(renderer[0] ?? '')).toContain(marker);
@@ -54,6 +57,11 @@ test('the entry chunk stays within its budget, and three.js loads only with the 
   expect(js).toContain(helpChunk[0] ?? 'missing');
   expect(read(helpChunk[0] ?? '')).toContain('Direct arc power control');
   expect(js).not.toContain('Direct arc power control');
+  // Nor is the manual: the later pages reach its text by a dynamic import of their own.
+  expect(read(visualiser[0] ?? '')).toContain(manualChunk[0] ?? 'missing');
+  expect(read(manualChunk[0] ?? '')).toContain('Enlighten manual');
+  expect(js).not.toContain('Enlighten manual');
+  expect(read(visualiser[0] ?? '')).not.toContain('Enlighten manual');
   // No chunk asks for anything from another origin.
   for (const c of chunks)
     expect(read(c)).not.toMatch(

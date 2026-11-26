@@ -20,3 +20,4 @@ server/.venv/
 test-results-perf/
 /sbom/
 /release/
+test-results-manual/

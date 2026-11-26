@@ -27,6 +27,18 @@
       </li>
     {/each}
   </ul>
+  <button
+    type="button"
+    class="manual"
+    aria-current={page === 'manual' ? 'page' : undefined}
+    aria-keyshortcuts="F1"
+    onclick={() => {
+      onpage('manual');
+    }}
+  >
+    <span>Manual</span>
+    <kbd class="muted" aria-hidden="true">F1</kbd>
+  </button>
 </nav>
 
 <style>
@@ -36,6 +48,11 @@
     border-right: 1px solid var(--line);
     padding: var(--space-3) var(--space-2);
     overflow: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .manual {
+    margin-top: auto;
   }
   ul {
     list-style: none;

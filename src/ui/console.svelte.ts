@@ -392,6 +392,10 @@ export class ConsoleState {
           this.print('out', `Commands with no address go to ${this.use}.`);
         }
         return;
+      case 'manual':
+        this.app.openManual(c.page);
+        this.print('out', 'The manual is open. Ctrl-` comes back here.');
+        return;
       case 'scripts':
         for (const s of BUILTIN_SCRIPTS) this.print('out', `${s.name} (built in)`);
         for (const s of this.app.scripts) this.print('out', s.name);

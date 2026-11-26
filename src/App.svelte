@@ -86,6 +86,7 @@
     'sequences',
     'effects',
     'switches',
+    'manual',
   ];
   type LaterPage = Extract<keyof Later, Page>;
   const isLater = (p: Page): p is LaterPage => LATER.includes(p);
@@ -168,6 +169,11 @@
         return;
       }
     }
+    if (e.key === 'F1') {
+      e.preventDefault();
+      setPage('manual');
+      return;
+    }
     if (e.key === 'F6') {
       e.preventDefault();
       cycleRegion(e.shiftKey);
@@ -185,6 +191,7 @@
     sequences: 'Sequences',
     effects: 'Effects',
     switches: 'Switches',
+    manual: 'Manual',
   };
 </script>
 
