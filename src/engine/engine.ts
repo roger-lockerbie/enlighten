@@ -1236,16 +1236,20 @@ export class Engine {
         const { arc, ...rest } = intent;
         const first = this.compileApply(conn, rest);
         if (typeof first === 'string') return { ok: false, reason: first };
+        // Taken before the colour goes, so a stop while the colour waits in the queue counts too.
+        const stops = this.stops;
+        const aborts = this.aborts;
+        const stopped = () =>
+          this.stops !== stops || this.aborts !== aborts || this.latched || this.active() !== conn;
         const set = await conn.scheduler.submit(txOf(first, source, 'apply: colour'));
         if (set.kind !== 'done') return fromTx(set);
+        if (stopped()) return { ok: false, kind: 'dropped', reason: 'Stopped.' };
         const level = txOf(
           [{ id: 'DAPC', address: short(intent.address), value: arc }],
           source,
           'apply: level',
         );
         const deadline = this.clock.now() + APPLY_PATIENCE_MS;
-        const stops = this.stops;
-        const aborts = this.aborts;
         const asked = this.askLevel(intent.address);
         for (;;) {
           const r = await conn.scheduler.submit(level);
@@ -1256,13 +1260,7 @@ export class Engine {
           // not sent later.
           // Stop on a run and Ctrl-C on a console line stop jobs one by one, and the level may be
           // waiting for one of them (Stage 11 review N3). Any job stopped ends the wait.
-          if (
-            this.stops !== stops ||
-            this.aborts !== aborts ||
-            this.latched ||
-            this.active() !== conn
-          )
-            return { ok: false, kind: 'dropped', reason: 'Stopped.' };
+          if (stopped()) return { ok: false, kind: 'dropped', reason: 'Stopped.' };
           if (this.levelAsked.get(intent.address) !== asked)
             return { ok: false, kind: 'dropped', reason: 'A newer level replaced this one.' };
         }

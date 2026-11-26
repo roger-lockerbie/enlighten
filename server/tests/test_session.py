@@ -404,6 +404,51 @@ def test_a_stop_that_cannot_reach_the_hasseb_is_sent_when_it_is_back(dist: Path,
     asyncio.run(go())
 
 
+def test_a_failed_stop_while_shutting_down_says_to_switch_off_by_hand(dist: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stage 11 close review L3: nothing sends the OFF later once the server is stopping."""
+    monkeypatch.setattr(session, "DEVICE_POLL_S", 0.05)
+
+    async def go() -> None:
+        async with server(dist) as s:
+            async with s.client() as ws:
+                await welcomed(ws)
+                s.device.plugged = False
+                assert await recv(ws) == p.device(False)
+                await s.hub.shutdown()
+            assert any("switch them off by hand" in line for line in s.logs)
+            assert not any("sent again when the hasseb is back" in line for line in s.logs)
+
+    asyncio.run(go())
+
+
+def test_silence_with_the_hasseb_away_leaves_the_stop_owed(dist: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stage 11 close review L3: the client is gone before the stop, so a failed stop stays owed."""
+    monkeypatch.setattr(session, "DEVICE_POLL_S", 0.05)
+    monkeypatch.setattr(session, "SILENCE_S", 0.3)
+
+    async def go() -> None:
+        async with server(dist) as s:
+            async with s.client() as ws:
+                await welcomed(ws)
+                await ws.send(send(1, 0x02, 100))
+                assert await recv(ws) == p.result(1, p.SENT)
+                s.device.plugged = False
+                for _ in range(100):
+                    if s.hub.stop_owed:
+                        break
+                    await asyncio.sleep(0.02)
+                assert s.hub.stop_owed and s.hub.client is None
+                s.device.plugged = True
+                for _ in range(100):
+                    if not s.hub.stop_owed:
+                        break
+                    await asyncio.sleep(0.02)
+            assert not s.hub.stop_owed
+            assert s.frames()[-2:] == STOP
+
+    asyncio.run(go())
+
+
 def test_nothing_goes_out_after_the_final_off_when_the_server_stops(dist: Path) -> None:
     """Security review M1: a SEND that arrives while the server is stopping is dropped, not queued."""
 

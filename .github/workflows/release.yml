@@ -54,9 +54,11 @@ jobs:
           retention-days: 14
 
   publish:
+    # Only a pushed tag publishes: a manual run builds and stops, whatever ref it is run on.
     # Attestations on this account's plan need a public repo, so a tag pushed while the repo is
-    # private stops here with nothing published.
-    if: github.ref_type == 'tag' && !github.event.repository.private
+    # private stops here with nothing published. That the tagged commit is on main and passed CI
+    # is for the tag ruleset to hold, not this workflow.
+    if: github.event_name == 'push' && github.ref_type == 'tag' && !github.event.repository.private
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10

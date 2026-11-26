@@ -154,7 +154,12 @@ class Hub:
         t = p.SENT if t == p.NO_REPLY else t
         o = p.SENT if o == p.NO_REPLY else o
         self.stop_owed = o != p.SENT
-        if self.stop_owed:
+        if self.stop_owed and self.closing:
+            self.log(
+                f"stop: the broadcast OFF did NOT reach the hasseb (statuses {t} and {o}). "
+                "The lights are as they were and the server is stopping: switch them off by hand."
+            )
+        elif self.stop_owed:
             self.log(
                 f"stop: the broadcast OFF did NOT reach the hasseb (statuses {t} and {o}). "
                 "The lights are as they were. It is sent again when the hasseb is back."
@@ -219,9 +224,10 @@ class Hub:
                 data = await asyncio.wait_for(ws.recv(), SILENCE_S)
             except TimeoutError:
                 self.log("no message for 3 seconds")
+                # The client is gone from here on, so a stop that fails is owed and not dropped.
+                self.client = None
                 t, o = await self.stop()
                 await self._send(ws, p.stopped(t, o))
-                self.client = None
                 await self._refuse(ws, p.SILENCE)
                 return
             except ConnectionClosed:

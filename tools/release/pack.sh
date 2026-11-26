@@ -5,8 +5,7 @@
 #
 # The archive is made the same way each time: files in name order, one fixed time (the commit's),
 # no owner names, and gzip with no name or time in its header. The same commit, built with the same
-# pinned tools, should give the same bytes. That has been checked on one machine against CI, not
-# proved in general.
+# pinned tools, should give the same bytes. That has not been checked against a CI build yet.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -40,6 +39,7 @@ elif command -v gtar >/dev/null 2>&1; then gnutar=gtar
 else gnutar=""; fi
 if test -n "${gnutar}"; then
   "${gnutar}" --sort=name --mtime="@${epoch}" --owner=0 --group=0 --numeric-owner \
+    --mode='u+rwX,go+rX,go-w' \
     --format=ustar -C "${out}" -cf "${out}/${name}.tar" "${name}"
 else
   echo "No GNU tar: the archive will not match CI's byte for byte." >&2

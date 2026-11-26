@@ -180,6 +180,8 @@ export interface AddressInfo {
   present?: boolean | undefined;
   verified: boolean;
   physicalMinimum?: number | undefined;
+  /** The highest physical minimum read at this address this session. A scan does not forget it. */
+  floorSeen?: number | undefined;
   minLevel?: number | undefined;
   maxLevel?: number | undefined;
   linearCurve?: boolean | undefined;
@@ -499,7 +501,11 @@ export class Governor {
     }
     const floor = Math.max(
       0,
-      ...[...this.info.values()].map((i) => (i.present === true ? (i.physicalMinimum ?? 0) : 0)),
+      // While a rescan has the physical minimum forgotten, the last one read still sets the floor
+      // (Stage 11 close review L4).
+      ...[...this.info.values()].map((i) =>
+        i.present === true ? (i.physicalMinimum ?? i.floorSeen ?? 0) : 0,
+      ),
     );
     if (arc < floor) {
       const pct = (arcToFraction(floor) * 100).toFixed(2);
@@ -1929,6 +1935,7 @@ export class Governor {
         break;
       case 'QUERY_PHYSICAL_MINIMUM':
         i.physicalMinimum = v;
+        if (v !== undefined) i.floorSeen = Math.max(i.floorSeen ?? 0, v);
         break;
       case 'QUERY_MIN_LEVEL':
         i.minLevel = v;

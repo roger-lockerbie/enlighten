@@ -78,7 +78,7 @@ pip has no minimum release age. Each version above was at least seven days old w
 
 `tools/golden/requirements.txt` locks python-dali 0.16 (LGPL-3.0, used as a reference and test oracle, never copied into this repo or shipped) and hidapi 0.15.0 (python-dali's hasseb driver imports it). Every file is pinned by hash. `pnpm golden` runs `tools/golden/generate.py`, which calls python-dali and writes the JSON in `tests/golden/`. CI reads only that JSON.
 
-Vite 8.3.8 (Stage 11) moves its bundler, rolldown, from 1.2.16 to 1.2.19. That release adds an optional build of rolldown for WebAssembly, `@rolldown/binding-wasm32-wasi`, with four packages under it: `@napi-rs/wasm-runtime` 1.2.6, `@emnapi/core` and `@emnapi/runtime` 2.0.0-beta.2, `@emnapi/wasi-threads` 2.2.0 and `@tybys/wasm-util` 0.10.5 (all MIT). They are in the lockfile and are installed only on a platform with no native rolldown build, which is none of ours. The two emnapi packages are beta releases, pinned by rolldown.
+Vite 8.3.8 (Stage 11) moves its bundler, rolldown, from 1.2.16 to 1.2.19. That release adds an optional build of rolldown for WebAssembly, `@rolldown/binding-wasm32-wasi`, with five packages under it: `@napi-rs/wasm-runtime` 1.2.6, `@emnapi/core` and `@emnapi/runtime` 2.0.0-beta.2, `@emnapi/wasi-threads` 2.2.0 and `@tybys/wasm-util` 0.10.5 (all MIT). They are in the lockfile and are installed only on a platform with no native rolldown build, which is none of ours. The two emnapi packages are beta releases, pinned by rolldown.
 
 The Stryker packages bring about 160 transitive packages, all for development. None runs an install script, and each passed the release-age and trust policies below when added.
 
@@ -99,13 +99,13 @@ All live in `pnpm-workspace.yaml`.
 
 ## Licences across the whole tree
 
-Checked in Stage 11 with `pnpm licenses list` over all 350 packages in the lockfile: MIT (266), Apache-2.0 (35), ISC (13), BSD-2-Clause (6), BSD-3-Clause (5), MPL-2.0 (2, lightningcss and its native build), 0BSD (1), BlueOak-1.0.0 (1, minimatch) and CC-BY-4.0 (1, caniuse-lite, which is data). All are development tools except three.js and Svelte's runtime, both MIT, which are the only package code in `dist/`. lightningcss is MPL-2.0 and runs at build time: none of its code is copied into `dist/`. The server's three packages are in the table above. python-dali's own metadata says LGPL-3.0-or-later.
+Checked in Stage 11 with `pnpm licenses list`, which covers the packages installed on this platform: 350 versions of 330 packages. By package: MIT (266), Apache-2.0 (35), ISC (13), BSD-2-Clause (6), BSD-3-Clause (5), MPL-2.0 (2, lightningcss and its native build), 0BSD (1), BlueOak-1.0.0 (1, minimatch) and CC-BY-4.0 (1, caniuse-lite, which is data). The lockfile also names builds for other platforms, which are the same packages under the same licences. All are development tools except what reaches `dist/`: three.js, Svelte's runtime, and clsx 2.1.1, a small helper Svelte's runtime imports and the bundler inlines. All three are MIT. lightningcss is MPL-2.0 and runs at build time: none of its code is copied into `dist/`. The server's three packages are in the table above. python-dali's own metadata says LGPL-3.0-or-later.
 
-`THIRD_PARTY_NOTICES.md` at the top of the repo carries the notices for what a release ships: three.js, Svelte and the fonts.
+`THIRD_PARTY_NOTICES.md` at the top of the repo carries the notices for what a release ships: three.js, Svelte, clsx and the fonts.
 
 ## SBOM
 
-`pnpm sbom:all` writes two CycloneDX 1.7 files into `sbom/`, which is git-ignored. `enlighten-app.cdx.json` comes from pnpm's own `pnpm sbom` and lists every npm package in the lockfile, development tools included, because Svelte is a development dependency whose runtime ships. `enlighten-server.cdx.json` comes from `tools/sbom/server.py`, which reads `server/requirements.txt` and uses the standard library only, so the SBOM tooling adds no package. The release workflow attaches both to a release.
+`pnpm sbom:all` writes two CycloneDX 1.7 files into `sbom/`, which is git-ignored. `enlighten-app.cdx.json` comes from pnpm's own `pnpm sbom` and lists every npm package installed on the build's platform, development tools included, because Svelte is a development dependency whose runtime ships. `enlighten-server.cdx.json` comes from `tools/sbom/server.py`, which reads `server/requirements.txt` and uses the standard library only, so the SBOM tooling adds no package. The release workflow attaches both to a release.
 
 ## Advisories on transitive packages
 

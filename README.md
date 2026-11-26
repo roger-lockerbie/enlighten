@@ -66,7 +66,7 @@ Two things to do every time:
 
 ## Verify a release
 
-A release has four files: `enlighten-v<version>.tar.gz` (the built app, the server and the licence texts), two CycloneDX SBOMs, and `SHA256SUMS`. CI builds them from the tagged commit, and each has a build provenance attestation signed through GitHub.
+A release has four files: `enlighten-v<version>.tar.gz` (the built app, the server and the licence texts), two CycloneDX SBOMs, and `SHA256SUMS`. CI builds them from the tagged commit, and the archive and the two SBOMs each have a build provenance attestation signed through GitHub.
 
 Check the sums, in the folder you downloaded into:
 
@@ -77,12 +77,12 @@ shasum -a 256 -c SHA256SUMS
 Check that the archive was built by this repository's release workflow, with the GitHub CLI:
 
 ```bash
-gh attestation verify enlighten-v0.1.0.tar.gz -R roger-lockerbie/enlighten
+gh attestation verify enlighten-v0.1.0.tar.gz -R roger-lockerbie/enlighten --signer-workflow roger-lockerbie/enlighten/.github/workflows/release.yml --source-ref refs/tags/v0.1.0
 ```
 
 The sums alone show the files match each other. The attestation is what ties them to this repository and to a commit, which is in the archive as `COMMIT`.
 
-To run a release, unpack it, set up the server's Python environment as `server/README.md` says, and run `python -m server` from the unpacked folder. To check a release against the source, check out the commit named in `COMMIT`, build as above, and run `tools/release/pack.sh` after `pnpm sbom:all`. With GNU tar the archive is made the same way each time. Whether your build matches CI's byte for byte also depends on the build tools giving the same output on your machine, which has not been proved.
+To run a release, unpack it and set up the server's Python environment as `server/README.md` says. The archive has no `package.json`, so skip that file's `pnpm` commands and start the server from the unpacked folder with `server/.venv/bin/python -m server`. The archive carries this README but not the `docs/` folder it points to: that is in the repository. To check a release against the source, check out the commit named in `COMMIT`, build as above, and run `tools/release/pack.sh` after `pnpm sbom:all`. With GNU tar the archive is made the same way each time. Whether your build matches CI's byte for byte also depends on the build tools giving the same output on your machine, which has not been proved.
 
 ## Security
 
