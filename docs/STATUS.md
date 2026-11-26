@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 8b are merged. Stage 9 (scenes, sequences and effects) is in progress on `stage-9-scenes`, on Fable by the owner's choice. Its plan is ADR 0020.
+Stages 0 to 8b are merged. Stage 9 is merged. Stage 10 (switchgear) is in review on `stage-10-switchgear`. Its plan is ADR 0021.
 
 ## Done in Stage 0
 
@@ -332,7 +332,25 @@ Known gaps:
 - Breathe is a triangle wave. A stopped effect leaves each light where it was in its cycle.
 - The manual checks in Chrome, Brave, Firefox and Safari are for the owner at review.
 
+## Stage 10 (switchgear), in review
+
+Branch `stage-10-switchgear`. ADR 0021 records the design. What is in it:
+
+- `src/switch`: the part 301 button machine, presets for the three families, the controller, LED rules, the plate schema and pure edits. Pure, in the boundary and coverage lists.
+- The engine runs plates in the bus worker with the source `switch` through the governor. `switchPlates` and `switchInput` are checked in `protocol-in.ts`. Panic, a latch and a target change let go of every button.
+- The Switches page (Alt-0), plates, mapping editor, timers and filter, in the one lazy chunk. Plates are kept in the design record and in workspace files version 5.
+- Beckhoff's timer ranges were re-read and match. The default event filter is still unconfirmed.
+- CI runs the preview e2e tests as two shards.
+
+Stage close:
+
+- `pnpm verify` passes: lint, typecheck, 3,210 unit and property tests, the build, 65 preview e2e tests (3 new, E-switch) and 18 against the server's fake.
+- `src/safety` was not changed, so `pnpm mutate` and `dali-reviewer` were not run. `security-reviewer` **passed with follow-ups**; S10-M1 and S10-M2 (Medium) and the Low findings are fixed or logged in `docs/SECURITY_FINDINGS.md`.
+- Not checked: a real touch device, and the visual baseline for the new page (`pnpm e2e:visual` is by hand).
+
+Known gaps: no console commands for plates; zencontrol's own timings and first-hold direction are unconfirmed; the stored tree nesting limit is now 10.
+
 ## Next
 
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
-- Stage 10 (switchgear) on Sonnet, in plan mode.
+- Stage 11 (hardening and review) on Opus, in a fresh session.

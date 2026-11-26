@@ -40,6 +40,7 @@ export default defineConfig({
         'src/console/**/*.ts',
         'src/script/**/*.ts',
         'src/design/**/*.ts',
+        'src/switch/**/*.ts',
       ],
       exclude: ['**/*.test.ts', '**/index.ts'],
       reporter: ['text-summary', 'text'],

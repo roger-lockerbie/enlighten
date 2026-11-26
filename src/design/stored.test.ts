@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { presetPlate } from '../switch/presets.ts';
 import { MemoryBackend, Store } from '../store/store.ts';
 import { defaultDesign, exportDesign, importDesign, parseDesign, type Design } from './stored.ts';
 
 const design: Design = {
+  plates: [presetPlate('p1', 'zencontrol', 2)],
   looks: [{ name: 'Warm', arc: 120, colour: { kind: 'tc', mirek: 370 } }],
   slots: [{ address: 0, slot: 3, look: 'Warm', arc: 120 }],
   sequences: [
@@ -60,7 +62,13 @@ describe('the stored design', () => {
     expect(b.map.get('design')).toEqual({ version: 1, data: design });
     expect(await store.loadDesign(parseDesign, defaultDesign())).toEqual({ value: design });
     await expect(
-      store.saveDesign(parseDesign, { looks: [], slots: design.slots, sequences: [], effects: [] }),
+      store.saveDesign(parseDesign, {
+        looks: [],
+        slots: design.slots,
+        sequences: [],
+        effects: [],
+        plates: [],
+      }),
     ).rejects.toThrow();
     await b.put('design', {
       version: 1,

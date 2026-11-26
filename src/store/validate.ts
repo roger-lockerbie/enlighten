@@ -8,7 +8,7 @@
 /** A workspace file or stored record is at most this many bytes of UTF-8 (SPEC section 8). */
 export const MAX_BYTES = 2 * 1024 * 1024;
 /** Objects and arrays nest at most this deep. */
-export const MAX_DEPTH = 8;
+export const MAX_DEPTH = 10;
 /** Values in one tree at most, so a stored record cannot be huge before the schema's limits apply. */
 export const MAX_NODES = 100_000;
 const FORBIDDEN = new Set(['__proto__', 'constructor', 'prototype']);

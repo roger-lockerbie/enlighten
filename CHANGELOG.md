@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Added
 
+- Stage 10 switchgear (ADR 0021): `src/switch` with the part 301 button event machine, presets for zencontrol, generic coupler and KNX-through-gateway plates, the mapping and the controller; the Switches page (Alt-0) with 1, 2 and 4 button plates, LED feedback, a mapping editor and timers; plates in the workspace file (version 5). Actions go through the engine and governor with the source `switch` and show in the console. CI runs the preview e2e tests as two shards.
+- Stored and imported trees may nest 10 deep, up from 8.
 - Stage 0 baseline: TypeScript (strict), Vite, Svelte 5, Vitest, fast-check and Playwright.
 - ESLint rules that ban `eval`, `new Function`, string timers, `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` and `{@html}`, with a test that proves each one is caught.
 - Security headers for build and preview: CSP with Trusted Types, COOP, COEP, CORP, Permissions-Policy, Referrer-Policy, nosniff and frame-ancestors, with a meta-tag fallback in the built page.

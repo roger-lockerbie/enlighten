@@ -43,9 +43,15 @@ jobs:
   # The end-to-end tests are two jobs since Stage 9, when the preview tests alone grew to about
   # 34 minutes on this runner and the two suites together ran past 40. Between them they run what
   # `pnpm e2e` runs.
+  # Stage 10 split the preview tests in two shards, since the first job had about 5 minutes to spare.
   e2e:
+    name: e2e (${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/2', '2/2']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,12 +85,12 @@ jobs:
       - name: Build
         run: pnpm build
       - name: End-to-end tests against the preview
-        run: pnpm exec playwright test
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ strategy.job-index }}
           path: |
             playwright-report/
             test-results/

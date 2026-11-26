@@ -3,7 +3,9 @@
  * effects (ADR 0020). Loaded only by the pages that use it and by a workspace import
  * or export, so the entry chunk does not carry these checks.
  */
-import { object, req, type Result } from '../store/validate.ts';
+import { object, opt, req, type Result } from '../store/validate.ts';
+import type { Plate } from '../switch/plate.ts';
+import { plates } from '../switch/schema.ts';
 import type { Look, SlotEntry } from './look.ts';
 import type { EffectDef } from './effects.ts';
 import { effects, looks, sequences, slots } from './schema.ts';
@@ -14,6 +16,8 @@ export interface Design {
   readonly slots: readonly SlotEntry[];
   readonly sequences: readonly Sequence[];
   readonly effects: readonly EffectDef[];
+  /** The switch plates and their mappings (SPEC R16). */
+  readonly plates: readonly Plate[];
 }
 
 export const defaultDesign = (): Design => ({
@@ -21,6 +25,7 @@ export const defaultDesign = (): Design => ({
   slots: [],
   sequences: [],
   effects: [],
+  plates: [],
 });
 
 const design = object({
@@ -28,12 +33,18 @@ const design = object({
   slots: req(slots),
   sequences: req(sequences),
   effects: req(effects),
+  plates: opt(plates),
 });
 
 /** Check a stored or imported design. Every slot must name a look the library has. */
 export function parseDesign(x: unknown): Result<Design> {
-  const r = design(x, '');
-  if (!r.ok) return r;
+  const parsed = design(x, '');
+  if (!parsed.ok) return parsed;
+  // A design stored before Stage 10 has no plates.
+  const r: { readonly ok: true; readonly value: Design } = {
+    ok: true,
+    value: { ...parsed.value, plates: parsed.value.plates ?? [] },
+  };
   const names = new Set(r.value.looks.map((l) => l.name));
   const orphan = r.value.slots.find((s) => !names.has(s.look));
   if (orphan !== undefined)
@@ -53,6 +64,7 @@ export function exportDesign(d: Design): Partial<Design> {
     ...(d.slots.length === 0 ? {} : { slots: d.slots }),
     ...(d.sequences.length === 0 ? {} : { sequences: d.sequences }),
     ...(d.effects.length === 0 ? {} : { effects: d.effects }),
+    ...(d.plates.length === 0 ? {} : { plates: d.plates }),
   };
 }
 
@@ -68,7 +80,7 @@ export function importDesign(
   file: FileDesign,
 ): Result<{ readonly design: Design; readonly changes: readonly string[] } | undefined> {
   const has = (k: keyof Design) => file[k] !== undefined;
-  if (!has('looks') && !has('slots') && !has('sequences') && !has('effects'))
+  if (!has('looks') && !has('slots') && !has('sequences') && !has('effects') && !has('plates'))
     return { ok: true, value: undefined };
   const looksIn = has('looks') ? file.looks : present.looks;
   const names =
@@ -85,6 +97,7 @@ export function importDesign(
     slots: has('slots') ? file.slots : kept,
     sequences: has('sequences') ? file.sequences : present.sequences,
     effects: has('effects') ? file.effects : present.effects,
+    plates: has('plates') ? file.plates : present.plates,
   });
   if (!r.ok) return { ok: false, error: `The file's looks, sequences or effects: ${r.error}` };
   const d = r.value;
@@ -108,6 +121,10 @@ export function importDesign(
   if (has('effects'))
     changes.push(
       `Effects: the file's ${count(d.effects.length, 'effect takes', 'effects take')} the place of the ${String(present.effects.length)} stored. None runs until you run it.`,
+    );
+  if (has('plates'))
+    changes.push(
+      `Switches: the file's ${count(d.plates.length, 'plate takes', 'plates take')} the place of the ${String(present.plates.length)} stored. A plate sends nothing until you press it.`,
     );
   return { ok: true, value: { design: d, changes } };
 }

@@ -79,7 +79,14 @@
   // These pages load when one of them is first opened, so the entry chunk stays within its budget
   // (ADR 0002): the visualiser with its light core, and Devices with the simulator's settings.
   type Later = typeof import('./ui/pages/later.ts');
-  const LATER: readonly Page[] = ['devices', 'visualiser', 'looks', 'sequences', 'effects'];
+  const LATER: readonly Page[] = [
+    'devices',
+    'visualiser',
+    'looks',
+    'sequences',
+    'effects',
+    'switches',
+  ];
   type LaterPage = Extract<keyof Later, Page>;
   const isLater = (p: Page): p is LaterPage => LATER.includes(p);
   let later: Promise<Later> | undefined;
@@ -152,8 +159,9 @@
       return;
     }
     if (e.altKey && !e.ctrlKey && !e.metaKey) {
-      const m = /^Digit([1-9])$/.exec(e.code);
-      const target = m?.[1] === undefined ? undefined : RAIL[Number(m[1]) - 1];
+      const m = /^Digit([0-9])$/.exec(e.code);
+      // Alt-1 to Alt-9 are the first nine pages, and Alt-0 is the tenth.
+      const target = m?.[1] === undefined ? undefined : RAIL[(Number(m[1]) + 9) % 10];
       if (target !== undefined) {
         e.preventDefault();
         setPage(target.page);
@@ -176,6 +184,7 @@
     looks: 'Looks',
     sequences: 'Sequences',
     effects: 'Effects',
+    switches: 'Switches',
   };
 </script>
 

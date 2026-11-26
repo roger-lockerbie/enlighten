@@ -32,7 +32,7 @@ test('exports the workspace, and imports it back after listing the changes', asy
   const file = await exported(page);
   expect(file).toMatchObject({
     format: 'enlighten-workspace',
-    version: 4,
+    version: 5,
     ceiling: 220,
     preferences: {
       playgroundMode: 'live',
@@ -110,9 +110,9 @@ test('refuses oversized, malformed, foreign, newer and hostile files, and change
     ],
     ['{', 'not valid JSON'],
     ['{"format":"other"}', 'not an Enlighten workspace file'],
-    ['{"format":"enlighten-workspace","version":5}', 'newer version of the app'],
+    ['{"format":"enlighten-workspace","version":6}', 'newer version of the app'],
     ['{"format":"enlighten-workspace","version":1,"__proto__":{"ceiling":1}}', 'not allowed'],
-    ['{"format":"enlighten-workspace","version":1,"plates":[]}', 'unknown key "plates"'],
+    ['{"format":"enlighten-workspace","version":1,"bogus":[]}', 'unknown key "bogus"'],
     [
       '{"format":"enlighten-workspace","version":1,"devices":[{"address":64}]}',
       'devices[0].address',
