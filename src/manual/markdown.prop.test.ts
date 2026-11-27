@@ -91,7 +91,7 @@ describe('P-manual', () => {
       'brackets alone': '['.repeat(N),
       'emphasis that never closes': '*a '.repeat(N / 3),
       underscores: '_'.repeat(N),
-      'backticks, odd': `${'`a'.repeat(N / 2 - 1)}`,
+      'backticks, odd': '`a'.repeat(N / 2 - 1),
       'quotes nested deep': '> '.repeat(N / 2),
       'bullets nested deep': Array.from(
         { length: 2000 },

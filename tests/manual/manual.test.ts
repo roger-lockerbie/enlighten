@@ -171,9 +171,18 @@ describe('every file', () => {
   });
 
   it('has no control characters and no characters that reorder text', () => {
+    // By code point, not by a pattern: tab, newline and carriage return are the only controls
+    // allowed, and no mark that changes the direction text is drawn in.
+    const bad = (c: number): boolean =>
+      (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d) ||
+      c === 0x7f ||
+      c === 0x200e ||
+      c === 0x200f ||
+      (c >= 0x202a && c <= 0x202e) ||
+      (c >= 0x2066 && c <= 0x2069);
     for (const [path, text] of Object.entries(files))
       expect(
-        /[\u0000-\u0008\u000b-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(text),
+        [...text].some((ch) => bad(ch.codePointAt(0) ?? 0)),
         path,
       ).toBe(false);
   });
