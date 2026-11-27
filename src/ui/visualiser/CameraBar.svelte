@@ -63,15 +63,19 @@
       onclick={() => {
         onview(downHall(scene));
       }}
-      data-testid="camera-down">Down the hall</button
+      data-testid="camera-down"
     >
+      Down the hall
+    </button>
     <button
       type="button"
       onclick={() => {
         onview(atWall(scene, wallSide));
       }}
-      data-testid="camera-wall">At the {wallSide} wall</button
+      data-testid="camera-wall"
     >
+      At the {wallSide} wall
+    </button>
   </div>
 
   {#if view.mode === 'walk'}

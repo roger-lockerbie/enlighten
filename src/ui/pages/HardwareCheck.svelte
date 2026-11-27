@@ -63,29 +63,30 @@
         <li data-testid={`check-${s.id}`}>
           <p>
             <strong>{s.title}</strong>
-            <span class="kind"
-              >{s.kind}{s.unlock === undefined ? '' : `, needs the ${s.unlock} unlock`}</span
-            >
+            <span class="kind">
+              {s.kind}{s.unlock === undefined ? '' : `, needs the ${s.unlock} unlock`}
+            </span>
             <span class="status" data-testid="check-status">{r?.status ?? 'not run'}</span>
           </p>
           <p class="muted">{s.how}</p>
           {#if r?.error}<p class="problem">{r.error}</p>{/if}
-          <label class="note"
-            >Note <textarea rows="1" bind:value={notes[s.id]} aria-label={`Note for ${s.title}`}
-            ></textarea></label
-          >
+          <label class="note">
+            Note <textarea rows="1" bind:value={notes[s.id]} aria-label={`Note for ${s.title}`}
+            ></textarea>
+          </label>
           {#if s.kind === 'confirm'}
-            <label
-              ><input type="checkbox" bind:checked={confirmed[s.id]} /> I know what this step sends</label
-            >
+            <label>
+              <input type="checkbox" bind:checked={confirmed[s.id]} /> I know what this step sends
+            </label>
           {/if}
           {#if s.kind === 'manual'}
             <button type="button" disabled={busy !== ''} onclick={() => step(s.id)}>Record</button>
           {:else}
             <button type="button" disabled={busy !== ''} onclick={() => step(s.id)}>Run</button>
           {/if}
-          <button type="button" disabled={busy !== ''} onclick={() => step(s.id, true)}>Skip</button
-          >
+          <button type="button" disabled={busy !== ''} onclick={() => step(s.id, true)}>
+            Skip
+          </button>
         </li>
       {/each}
     </ol>

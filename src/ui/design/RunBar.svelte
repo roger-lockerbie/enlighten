@@ -58,21 +58,27 @@
       type="button"
       data-testid="run-check"
       disabled={def === undefined || busy}
-      onclick={() => void call('planCheck')}>Check</button
+      onclick={() => void call('planCheck')}
     >
+      Check
+    </button>
     <button
       type="button"
       class="primary"
       data-testid="run-start"
       disabled={def === undefined || busy || run !== undefined}
-      onclick={() => void call('runPlan')}>Run</button
+      onclick={() => void call('runPlan')}
     >
+      Run
+    </button>
     <button
       type="button"
       data-testid="run-stop"
       disabled={run === undefined}
-      onclick={() => void app.call({ op: 'stopRun' })}>Stop</button
+      onclick={() => void app.call({ op: 'stopRun' })}
     >
+      Stop
+    </button>
     {#if plan !== undefined && def !== undefined && plan.rows.length > 0}
       <a
         class="button"
@@ -81,8 +87,10 @@
         href="#export-csv"
         onclick={(e) => {
           fill(e.currentTarget, 'text/csv', toCsv(plan));
-        }}>Export CSV</a
+        }}
       >
+        Export CSV
+      </a>
       <a
         class="button"
         data-testid="export-json"
@@ -90,8 +98,10 @@
         href="#export-json"
         onclick={(e) => {
           fill(e.currentTarget, 'application/json', toJson(name, def.kind, plan));
-        }}>Export JSON</a
+        }}
       >
+        Export JSON
+      </a>
     {/if}
   </div>
   {#if onHardware}

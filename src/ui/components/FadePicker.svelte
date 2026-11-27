@@ -63,16 +63,16 @@
       <option value="none">No fade</option>
       <optgroup label="Standard fade time">
         {#each standard as o (o.value)}
-          <option value={`s:${String(o.value)}`}
-            >{duration(o.ms)} (standard fade time {o.value})</option
-          >
+          <option value={`s:${String(o.value)}`}>
+            {duration(o.ms)} (standard fade time {o.value})
+          </option>
         {/each}
       </optgroup>
       <optgroup label="Extended fade time">
         {#each extended as o (o.value)}
-          <option value={`e:${String(o.value)}`}
-            >{duration(o.ms)}{o.gapBefore === true ? ' (larger steps from here)' : ''}</option
-          >
+          <option value={`e:${String(o.value)}`}>
+            {duration(o.ms)}{o.gapBefore === true ? ' (larger steps from here)' : ''}
+          </option>
         {/each}
       </optgroup>
     </select>

@@ -36,10 +36,10 @@
   {/if}
   {#if snap?.latched}
     <p class="banner danger" role="alert">
-      <span
-        >Panic is on: everything stopped and every tape was sent OFF. Nothing is sent until you
-        resume.</span
-      >
+      <span>
+        Panic is on: everything stopped and every tape was sent OFF. Nothing is sent until you
+        resume.
+      </span>
       <button type="button" onclick={() => void app.call({ op: 'resume' })}>Resume</button>
     </p>
   {/if}
@@ -58,9 +58,9 @@
         Can you see the lights from where you are? If you cannot, the rate unlock stays off for this
         session.
       </span>
-      <button type="button" onclick={() => void app.call({ op: 'canSee', can: true })}
-        >Yes, I can see them</button
-      >
+      <button type="button" onclick={() => void app.call({ op: 'canSee', can: true })}>
+        Yes, I can see them
+      </button>
       <button type="button" onclick={() => void app.call({ op: 'canSee', can: false })}>No</button>
     </p>
   {/if}
@@ -85,15 +85,19 @@
         type="button"
         onclick={() => {
           app.raiseTo = app.savedCeiling;
-        }}>Restore {percentText(app.savedCeiling)}%</button
+        }}
       >
+        Restore {percentText(app.savedCeiling)}%
+      </button>
       <button
         type="button"
         onclick={() => {
           app.savedCeiling = undefined;
           app.update({ ceilingArc: app.snap?.ceilingArc ?? app.prefs.ceilingArc });
-        }}>Keep the default</button
+        }}
       >
+        Keep the default
+      </button>
     </p>
   {/if}
   {#if app.storeProblem !== undefined}
@@ -103,8 +107,10 @@
         type="button"
         onclick={() => {
           app.storeProblem = undefined;
-        }}>Dismiss</button
+        }}
       >
+        Dismiss
+      </button>
     </p>
   {/if}
 </div>

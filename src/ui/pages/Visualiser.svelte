@@ -379,8 +379,9 @@
         <span data-testid={`mount${prefix}-${String(i)}-flux`}>{out[1].toFixed(2)}</span> lm/m now{#if sum > 0},
           x <span data-testid={`mount${prefix}-${String(i)}-x`}>{(out[0] / sum).toFixed(5)}</span>
           y
-          <span data-testid={`mount${prefix}-${String(i)}-y`}>{(out[1] / sum).toFixed(5)}</span
-          >{/if}.{#if note !== undefined}
+          <span data-testid={`mount${prefix}-${String(i)}-y`}>
+            {(out[1] / sum).toFixed(5)}
+          </span>{/if}.{#if note !== undefined}
           <span class="warn-text">{note}</span>{/if}{#if simulatedOnly(m)}
           <StatusChip kind="simulated only" />{/if}
       </li>
@@ -573,8 +574,9 @@
                 onchange={setEditing}
                 testid="editing"
               />
-              <button type="button" onclick={copyAtoB} data-testid="copy-a-to-b">Copy A to B</button
-              >
+              <button type="button" onclick={copyAtoB} data-testid="copy-a-to-b">
+                Copy A to B
+              </button>
             </div>
           {/if}
         </div>
@@ -625,8 +627,10 @@
             onclick={() => {
               edit((s) => addMount(s, addKind, addSide));
             }}
-            data-testid="add-mount">Add a mount</button
+            data-testid="add-mount"
           >
+            Add a mount
+          </button>
           <span class="muted small">
             {current.scene.mounts.length} of {MAX_MOUNTS} mounts. Select one to change it in the inspector.
           </span>
@@ -685,8 +689,10 @@
           type="button"
           onclick={() => void measure()}
           disabled={renderer === undefined || measuring}
-          data-testid="measure">Measure frame time</button
+          data-testid="measure"
         >
+          Measure frame time
+        </button>
         {#if measured !== undefined}
           <span class="small" data-testid="measured">
             {#if measured.frames === 0}

@@ -52,9 +52,9 @@
   let { kind, testid }: { kind: ChipKind; testid?: string } = $props();
 </script>
 
-<span class="chip {TONE[kind]}" data-testid={testid}
-  ><span class="shape" aria-hidden="true">{SHAPE[kind]}</span>{kind}</span
->
+<span class="chip {TONE[kind]}" data-testid={testid}>
+  <span class="shape" aria-hidden="true">{SHAPE[kind]}</span>{kind}
+</span>
 
 <style>
   .chip {

@@ -28,8 +28,10 @@
       disabled={disabled || o.disabled === true}
       onclick={() => {
         onchange(o.value);
-      }}>{o.label}</button
+      }}
     >
+      {o.label}
+    </button>
   {/each}
 </div>
 

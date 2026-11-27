@@ -124,8 +124,8 @@
       {@const a = cfg.mapping[event]}
       {@const target = a === undefined ? undefined : targetOf(a)}
       <div class="row wrap map-row" data-testid={`map-${event}`}>
-        <label class="row"
-          ><span class="ev">{EVENT_LABEL[event]}</span>
+        <label class="row">
+          <span class="ev">{EVENT_LABEL[event]}</span>
           <select
             value={a?.kind ?? 'none'}
             data-testid={`map-${event}-kind`}
@@ -136,11 +136,11 @@
             {#each KINDS as k (k)}
               <option value={k} selected={(a?.kind ?? 'none') === k}>{ACTION_LABEL[k]}</option>
             {/each}
-          </select></label
-        >
+          </select>
+        </label>
         {#if a !== undefined && target !== undefined}
-          <label class="row"
-            >Target
+          <label class="row">
+            Target
             <select
               aria-label={`${EVENT_LABEL[event]} target`}
               data-testid={`map-${event}-target`}
@@ -150,11 +150,11 @@
             >
               <option value="short" selected={targetKind(target) === 'short'}>Address</option>
               <option value="group" selected={targetKind(target) === 'group'}>Group</option>
-              <option value="broadcast" selected={targetKind(target) === 'broadcast'}
-                >Everything</option
-              >
-            </select></label
-          >
+              <option value="broadcast" selected={targetKind(target) === 'broadcast'}>
+                Everything
+              </option>
+            </select>
+          </label>
           {#if target.kind === 'short' || target.kind === 'group'}
             <NumberField
               label={`${EVENT_LABEL[event]} number`}
@@ -182,8 +182,8 @@
           />
         {/if}
         {#if a?.kind === 'toggle'}
-          <label class="row"
-            >On with
+          <label class="row">
+            On with
             <select
               onchange={(e) => {
                 onchange(
@@ -196,12 +196,12 @@
             >
               <option value="last" selected={a.on === 'last'}>Last active level</option>
               <option value="max" selected={a.on === 'max'}>Max level</option>
-            </select></label
-          >
+            </select>
+          </label>
         {/if}
         {#if a?.kind === 'dim'}
-          <label class="row"
-            >Direction
+          <label class="row">
+            Direction
             <select
               data-testid={`map-${event}-dir`}
               onchange={(e) => {
@@ -214,16 +214,17 @@
                 );
               }}
             >
-              <option value="alternate" selected={a.dir === 'alternate'}>Alternate each hold</option
-              >
+              <option value="alternate" selected={a.dir === 'alternate'}>
+                Alternate each hold
+              </option>
               <option value="up" selected={a.dir === 'up'}>Up</option>
               <option value="down" selected={a.dir === 'down'}>Down</option>
-            </select></label
-          >
+            </select>
+          </label>
         {/if}
         {#if a?.kind === 'tune'}
-          <label class="row"
-            >Direction
+          <label class="row">
+            Direction
             <select
               onchange={(e) => {
                 const v = e.currentTarget.value;
@@ -235,16 +236,17 @@
                 );
               }}
             >
-              <option value="alternate" selected={a.dir === 'alternate'}>Alternate each hold</option
-              >
+              <option value="alternate" selected={a.dir === 'alternate'}>
+                Alternate each hold
+              </option>
               <option value="warmer" selected={a.dir === 'warmer'}>Warmer</option>
               <option value="cooler" selected={a.dir === 'cooler'}>Cooler</option>
-            </select></label
-          >
+            </select>
+          </label>
         {/if}
         {#if a?.kind === 'run'}
-          <label class="row"
-            >Kind
+          <label class="row">
+            Kind
             <select
               onchange={(e) => {
                 onchange(
@@ -258,10 +260,10 @@
             >
               <option value="sequence" selected={a.what === 'sequence'}>Sequence</option>
               <option value="effect" selected={a.what === 'effect'}>Effect</option>
-            </select></label
-          >
-          <label class="row"
-            >Name
+            </select>
+          </label>
+          <label class="row">
+            Name
             <select
               data-testid={`map-${event}-run`}
               onchange={(e) => {
@@ -272,8 +274,8 @@
               {#each a.what === 'sequence' ? sequences : effects as n (n)}
                 <option value={n} selected={a.name === n}>{n}</option>
               {/each}
-            </select></label
-          >
+            </select>
+          </label>
         {/if}
       </div>
     {/each}
@@ -282,8 +284,8 @@
       and stops when the button is let go. Nothing is sent to an address that is not verified.
     </p>
 
-    <label class="row"
-      >LED
+    <label class="row">
+      LED
       <select
         data-testid="led-mode"
         disabled={plate.family !== 'zencontrol'}
@@ -294,8 +296,8 @@
         {#each Object.keys(LED_LABEL) as m (m)}
           <option value={m} selected={cfg.led === m}>{LED_LABEL[m as LedMode]}</option>
         {/each}
-      </select></label
-    >
+      </select>
+    </label>
     {#if plate.family === 'coupler'}
       <p class="muted small">A coupler has no LEDs, so this plate shows none.</p>
     {:else if plate.family === 'knx'}
@@ -376,8 +378,8 @@
     <fieldset class="row wrap">
       <legend>Events the button sends</legend>
       {#each FILTER_BITS as f (f.mask)}
-        <label class="row"
-          ><input
+        <label class="row">
+          <input
             type="checkbox"
             checked={(plate.filter & f.mask) !== 0}
             data-testid={`filter-${f.events}`}
@@ -389,8 +391,8 @@
                 ),
               );
             }}
-          />{f.label}</label
-        >
+          />{f.label}
+        </label>
       {/each}
     </fieldset>
     <div class="row">
@@ -398,11 +400,13 @@
         type="button"
         onclick={() => {
           onchange(setFilter(setTimers(plate, DEFAULT_TIMERS), DEFAULT_FILTER));
-        }}>Restore the part 301 defaults</button
+        }}
       >
-      <span class="muted small"
-        >Filter {isEnabled(plate.filter, 'short') ? 'passes' : 'holds back'} short press.</span
-      >
+        Restore the part 301 defaults
+      </button>
+      <span class="muted small">
+        Filter {isEnabled(plate.filter, 'short') ? 'passes' : 'holds back'} short press.
+      </span>
     </div>
   </section>
 {/if}

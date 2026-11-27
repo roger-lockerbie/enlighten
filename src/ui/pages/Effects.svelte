@@ -129,8 +129,10 @@
             data-testid={`effect-${e.id}`}
             onclick={() => {
               choose(e.id);
-            }}>{e.name}</button
+            }}
           >
+            {e.name}
+          </button>
         {/each}
       </div>
       <p data-testid="effect-about">
@@ -143,8 +145,8 @@
       <h2 id="settings-h">Settings</h2>
       {#each spec.params as x (x.key)}
         <div class="row setting">
-          <label class="row grow"
-            ><span class="label">{x.label}</span>
+          <label class="row grow">
+            <span class="label">{x.label}</span>
             <input
               type="range"
               min={x.min}
@@ -155,8 +157,8 @@
               oninput={(e) => {
                 params = { ...params, [x.key]: Number(e.currentTarget.value) };
               }}
-            /></label
-          >
+            />
+          </label>
           <NumberField
             label={x.label}
             hideLabel
@@ -180,8 +182,8 @@
           <span class="muted">No driver answered the scan. See Devices.</span>
         {/if}
         {#each snap.devices as d (d.address)}
-          <label class="row"
-            ><input
+          <label class="row">
+            <input
               type="checkbox"
               checked={aimed.includes(d.address)}
               data-testid={`target-${String(d.address)}`}
@@ -190,8 +192,8 @@
               }}
             />{app.name(d.address)}{aimed.includes(d.address) && aimed.length > 1
               ? ` (${String(aimed.indexOf(d.address) + 1)})`
-              : ''}</label
-          >
+              : ''}
+          </label>
         {/each}
       </fieldset>
 
@@ -228,15 +230,15 @@
     <section class="stack" aria-labelledby="saved-h">
       <h2 id="saved-h">Saved</h2>
       <div class="row">
-        <label class="row"
-          >Name <input
+        <label class="row">
+          Name <input
             type="text"
             maxlength={MAX_NAME}
             bind:value={name}
             autocomplete="off"
             data-testid="effect-name"
-          /></label
-        >
+          />
+        </label>
         <button type="button" data-testid="effect-save" onclick={save}>Save these settings</button>
       </div>
       {#if saved.length === 0}
@@ -244,11 +246,13 @@
       {:else}
         <table data-testid="saved-effects">
           <thead>
-            <tr
-              ><th scope="col">Name</th><th scope="col">Effect</th><th scope="col">Drivers</th><th
-                scope="col">Actions</th
-              ></tr
-            >
+            <tr>
+              <th scope="col">Name</th><th scope="col">Effect</th><th scope="col">Drivers</th><th
+                scope="col"
+              >
+                Actions
+              </th>
+            </tr>
           </thead>
           <tbody>
             {#each saved as e (e.name)}
@@ -262,15 +266,19 @@
                     aria-label={`Open ${e.name}`}
                     onclick={() => {
                       load(e);
-                    }}>Open</button
+                    }}
                   >
+                    Open
+                  </button>
                   <button
                     type="button"
                     aria-label={`Remove ${e.name}`}
                     onclick={() => {
                       remove(e);
-                    }}>Remove</button
+                    }}
                   >
+                    Remove
+                  </button>
                 </td>
               </tr>
             {/each}

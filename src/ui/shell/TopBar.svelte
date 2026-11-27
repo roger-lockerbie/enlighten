@@ -53,22 +53,24 @@
       aria-label={`Ceiling ${ceilingText(snap.ceilingArc)}. Change the ceiling.`}
       onclick={() => {
         app.ceilingOpen = true;
-      }}>Ceiling {ceilingText(snap.ceilingArc)}</button
+      }}
     >
+      Ceiling {ceilingText(snap.ceilingArc)}
+    </button>
     <span data-testid="verified">{verified}/{snap.devices.length} verified</span>
     <span>Bus {Math.round(snap.busUse * 100)}%</span>
-    <span data-testid="unlocks"
-      >Unlocks: {snap.unlocks.length === 0 ? 'none' : snap.unlocks.join(', ')}</span
-    >
+    <span data-testid="unlocks">
+      Unlocks: {snap.unlocks.length === 0 ? 'none' : snap.unlocks.join(', ')}
+    </span>
     {#if snap.unlocks.length > 0}
       <button type="button" onclick={() => void app.call({ op: 'lock' })}>Lock all</button>
     {/if}
     {#if snap.latched}<span class="latched" data-testid="latched">▲ Panic latched</span>{/if}
   {/if}
 
-  <button type="button" class="panic" onclick={onPanic} aria-keyshortcuts="Escape Escape"
-    >Panic</button
-  >
+  <button type="button" class="panic" onclick={onPanic} aria-keyshortcuts="Escape Escape">
+    Panic
+  </button>
 </header>
 {#if message !== ''}<p class="hint" role="status">{message}</p>{/if}
 

@@ -64,14 +64,18 @@
         {/if}
       </p>
       <div class="row">
-        <button type="button" onclick={() => void run(app.call({ op: 'rescan' }), 'Scan finished.')}
-          >Scan again</button
+        <button
+          type="button"
+          onclick={() => void run(app.call({ op: 'rescan' }), 'Scan finished.')}
         >
+          Scan again
+        </button>
         <button
           type="button"
           onclick={() => void run(app.call({ op: 'reapplyProfile' }), 'Profile written.')}
-          >Write the safety profile again</button
         >
+          Write the safety profile again
+        </button>
       </div>
 
       {#if snap.devices.length === 0}
@@ -113,10 +117,11 @@
                       }}
                     />
                   </td>
-                  <td
-                    ><span class="sr-only" data-testid="profile-status">{d.ceiling}</span
-                    ><StatusChip kind={d.ceiling} /></td
-                  >
+                  <td>
+                    <span class="sr-only" data-testid="profile-status">{d.ceiling}</span><StatusChip
+                      kind={d.ceiling}
+                    />
+                  </td>
                   <td>{driveText(d.facts?.drive)}</td>
                   <td>{d.facts?.deviceTypes.join(', ') ?? 'not read'}</td>
                   <td>{num(d.facts?.physicalMinimum)}</td>
@@ -172,25 +177,25 @@
       <h2 id="unlocks-h">Unlocks</h2>
       <p class="muted">An unlock lasts until the page reloads. Type its name to confirm.</p>
       <div class="row">
-        <label class="row"
-          >Unlock
+        <label class="row">
+          Unlock
           <select bind:value={unlockName} data-testid="unlock-name">
             <option value="reset">reset</option>
             <option value="expert">expert</option>
             <option value="rate">rate</option>
           </select>
         </label>
-        <label class="row"
-          >Type its name <input
+        <label class="row">
+          Type its name <input
             bind:value={unlockTyped}
             autocomplete="off"
             data-testid="unlock-typed"
-          /></label
-        >
+          />
+        </label>
         <button type="button" onclick={() => void unlock()}>Unlock</button>
-        <button type="button" onclick={() => void run(app.call({ op: 'lock' }), 'Locked.')}
-          >Lock all</button
-        >
+        <button type="button" onclick={() => void run(app.call({ op: 'lock' }), 'Locked.')}>
+          Lock all
+        </button>
       </div>
     </section>
 
@@ -202,13 +207,13 @@
         unlock.
       </p>
       <div class="row">
-        <label class="row"
-          >Type "commission" to confirm <input
+        <label class="row">
+          Type "commission" to confirm <input
             bind:value={commissionTyped}
             autocomplete="off"
             data-testid="commission-typed"
-          /></label
-        >
+          />
+        </label>
         <button type="button" onclick={() => void commission()}>Commission</button>
       </div>
       {#if snap.commission}

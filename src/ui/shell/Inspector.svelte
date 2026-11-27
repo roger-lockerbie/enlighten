@@ -36,8 +36,10 @@
       type="button"
       onclick={() => {
         app.update({ inspectorOpen: false });
-      }}>Hide</button
+      }}
     >
+      Hide
+    </button>
   </header>
   {#if page === 'visualiser'}
     {#if app.inspector !== undefined}

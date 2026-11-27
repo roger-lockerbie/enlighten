@@ -85,18 +85,23 @@
 
 {#snippet inline(nodes: readonly Inline[])}
   {#each nodes as n, i (i)}
-    {#if n.t === 'text'}{n.v}{:else if n.t === 'code'}<code>{n.v}</code
-      >{:else if n.t === 'strong'}<strong>{@render inline(n.c)}</strong>{:else if n.t === 'em'}<em
-        >{@render inline(n.c)}</em
-      >{:else if linkKind(n.href) === 'none'}<span class="nolink"
-        >{@render inline(n.c)}{outside(n.href)}</span
-      >{:else}<button
+    {#if n.t === 'text'}{n.v}{:else if n.t === 'code'}<code>
+        {n.v}
+      </code>{:else if n.t === 'strong'}<strong>
+        {@render inline(n.c)}
+      </strong>{:else if n.t === 'em'}<em>
+        {@render inline(n.c)}
+      </em>{:else if linkKind(n.href) === 'none'}<span class="nolink">
+        {@render inline(n.c)}{outside(n.href)}
+      </span>{:else}<button
         type="button"
         class="link"
         onclick={() => {
           follow(n.href);
-        }}>{@render inline(n.c)}</button
-      >{/if}
+        }}
+      >
+        {@render inline(n.c)}
+      </button>{/if}
   {/each}
 {/snippet}
 
@@ -127,8 +132,10 @@
                   aria-label={`Put in console: ${line}`}
                   onclick={() => {
                     putInConsole(line);
-                  }}>Put in console</button
+                  }}
                 >
+                  Put in console
+                </button>
               {/if}
             </li>
           {/each}
@@ -176,9 +183,9 @@
     {:else if b.t === 'callout'}
       <aside class={`callout ${b.kind}`}>
         <p class="callout-title">
-          <span class="kind"
-            >{b.kind === 'warning' ? 'Warning' : b.kind === 'tip' ? 'Tip' : 'Note'}</span
-          >{b.title === '' ? '' : ` ${b.title}`}
+          <span class="kind">
+            {b.kind === 'warning' ? 'Warning' : b.kind === 'tip' ? 'Tip' : 'Note'}
+          </span>{b.title === '' ? '' : ` ${b.title}`}
         </p>
         {@render blocks(b.c)}
       </aside>
@@ -213,8 +220,10 @@
               class="link"
               onclick={() => {
                 go(h.page.path);
-              }}>{h.page.title}</button
+              }}
             >
+              {h.page.title}
+            </button>
             <span class="muted small">{h.snippet}</span>
           </li>
         {:else}
@@ -234,8 +243,10 @@
                   aria-current={p.path === page?.path ? 'page' : undefined}
                   onclick={() => {
                     go(p.path);
-                  }}>{p.title}</button
+                  }}
                 >
+                  {p.title}
+                </button>
               </li>
             {/each}
           </ul>
@@ -259,8 +270,10 @@
             type="button"
             onclick={() => {
               go(previous.path);
-            }}>Previous: {previous.title}</button
+            }}
           >
+            Previous: {previous.title}
+          </button>
         {/if}
         {#if next !== undefined}
           <button
@@ -268,8 +281,10 @@
             class="next"
             onclick={() => {
               go(next.path);
-            }}>Next: {next.title}</button
+            }}
           >
+            Next: {next.title}
+          </button>
         {/if}
       </footer>
     {/if}

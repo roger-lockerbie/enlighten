@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## Unreleased
 
+### Changed
+
+- fast-check 4.10.3, typescript-eslint 8.73.0 and prettier-plugin-svelte 4.2.0. The new formatter plugin lays out Svelte files differently, so 28 of them are re-laid with no change to what they draw.
+
 ## 0.3.0
 
 A user manual, and a viewer for it in the app. Nothing in the governor, the DALI core, the simulator or the bus changed.

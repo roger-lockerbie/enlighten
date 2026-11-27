@@ -53,8 +53,10 @@
               void set(
                 extras.filter((x) => x.address !== e.address),
                 `Removed the driver at address ${String(e.address)}.`,
-              )}>Remove</button
+              )}
           >
+            Remove
+          </button>
         </li>
       {/each}
     </ul>
@@ -70,8 +72,8 @@
       }}
       testid="extra-address"
     />
-    <label class="row"
-      >Light type
+    <label class="row">
+      Light type
       <select bind:value={lightType} data-testid="extra-type">
         <option value="C5">C5, RGB and two whites</option>
         <option value="C2">C2, tunable white</option>
@@ -81,8 +83,10 @@
       type="button"
       data-testid="extra-add"
       disabled={extras.length >= MAX_EXTRAS}
-      onclick={add}>Add a simulated driver</button
+      onclick={add}
     >
+      Add a simulated driver
+    </button>
   </div>
   <p role="status" aria-live="polite" data-testid="extras-message">{message}</p>
 </section>
