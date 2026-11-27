@@ -449,9 +449,24 @@ Not done, and why:
 - **The pictures can be re-taken only on the reference laptop,** since fonts differ on Linux.
 - **Prose can go out of date without a test failing.** The tests catch a console line, a link, a picture or a generated table that no longer matches, not a sentence.
 
+## After Stage 11b
+
+- **Development tools updated** (PR 29, 2026-11-27): fast-check 4.10.3, typescript-eslint 8.73.0 and prettier-plugin-svelte 4.2.0, which re-laid 28 Svelte files with no change to what they draw. Not in a release: v0.3.0 was built before it.
+- **The spike branch is a tag.** `spike/stage-2-stack` was deleted, and its one commit, `9730a32`, is kept as the tag `archive/spike-stage-2` (ADR 0002 cites that commit).
+
+## Tests known to fail now and then in CI
+
+None of these has shown a fault in the app. Each failed once or twice on a CI runner, passed on a rerun with nothing changed, and passes locally.
+
+| Test                                                                    | What happens                                                                     | Cause                                                                                                                                                                                                                                                   | State                                                                                                                                                                  |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2e/mounts.spec.ts`, "adds, edits, mirrors and removes mounts"         | The harness records `request failed` for the light worker's script (PR 29, once) | Read from the code, not reproduced: the app ends the light worker when a set-up changes (`src/ui/visualiser/solver.ts`), and if its script is still loading the browser reports the fetch as failed. The harness counts any failed request as a problem | Open. Either the test should allow an aborted request for a worker the app has ended, or the app should let the worker load before ending it. Decide which in Stage 12 |
+| `e2e/server/modes.spec.ts`, the Visualiser in Both                      | No light 15 s after a `tc` command on a slow runner (PR 19, once)                | Not found. The test now waits for the console's answer first, so a repeat shows the reason                                                                                                                                                              | Open                                                                                                                                                                   |
+| `tests/properties/ceiling.prop.test.ts` and `rate-console.prop.test.ts` | Timed out at 2 minutes on a slow runner, with no counterexample (twice)          | Runner speed: about 1.7 times slower than usual                                                                                                                                                                                                         | Fixed: the floor of the time limit is 5 minutes                                                                                                                        |
+
 ## Next
 
 - On hardware day: whether the `rate` unlock gets a control for the swing limit.
-
+- The flaky mounts test above.
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
 - Stage 12 (hardware day) on Opus, whenever the hasseb arrives.
