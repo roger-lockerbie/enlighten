@@ -30,7 +30,7 @@ A button does not send "on". It makes events, and a mapping turns events into ac
 
 "Edit mapping" (2) shows, for each button, what each event does: on, off, toggle, recall a slot, dim while held, warmer or cooler while held, run a sequence or an effect, stop.
 
-This is where the earlier chapters meet. A double press can recall the slot you wrote in [Looks](06-looks.md). A hold can start the wind-down from [Sequences](07-sequences.md).
+This is where the earlier chapters meet. A double press can recall the slot you wrote in [Looks](06-looks.md). A hold can start a sequence you saved in [Sequences](07-sequences.md). A built-in one has to be opened and saved under a name first.
 
 ## Timers are the feel
 

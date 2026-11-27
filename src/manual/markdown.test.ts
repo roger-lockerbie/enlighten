@@ -54,7 +54,10 @@ describe('blocks', () => {
       { t: 'para', c: [{ t: 'text', v: 'One two.' }] },
       { t: 'para', c: [{ t: 'text', v: 'Three.' }] },
     ]);
-    expect(parseMarkdown('---\n__proto__: x\nconstructor: y\n---\n').meta).toEqual({});
+    // The record has no prototype, so `constructor` is only a key, and `__proto__` is not one.
+    const odd = parseMarkdown('---\n__proto__: x\nconstructor: y\n---\n').meta;
+    expect(Object.getPrototypeOf(odd)).toBeNull();
+    expect(Object.keys(odd)).toEqual(['constructor']);
   });
 
   it('reads fenced code as it is, markup and all', () => {
@@ -133,6 +136,32 @@ describe('blocks', () => {
       { t: 'image', alt: 'The playground', src: '../img/playground.png' },
       { t: 'rule' },
     ]);
+  });
+
+  it('takes a lone backtick in a table cell as a character', () => {
+    const t = blocks('| Keys | Does |\n| --- | --- |\n| Ctrl ` | Console |\n| `a` and ` | x |');
+    expect(t[0]).toMatchObject({
+      t: 'table',
+      rows: [
+        [[{ t: 'text', v: 'Ctrl `' }], [{ t: 'text', v: 'Console' }]],
+        [
+          [
+            { t: 'code', v: 'a' },
+            { t: 'text', v: ' and `' },
+          ],
+          [{ t: 'text', v: 'x' }],
+        ],
+      ],
+    });
+  });
+
+  it('ends lines at the Unicode line separators too, and drops closing hashes', () => {
+    expect(blocks('one\u2028\u2028two\u2029\u2029## Three ##')).toEqual([
+      { t: 'para', c: [{ t: 'text', v: 'one' }] },
+      { t: 'para', c: [{ t: 'text', v: 'two' }] },
+      { t: 'heading', level: 2, c: [{ t: 'text', v: 'Three' }], id: 'three' },
+    ]);
+    expect(blocks('# C# and F#')).toMatchObject([{ t: 'heading', id: 'c-and-f' }]);
   });
 
   it('keeps raw HTML as text', () => {

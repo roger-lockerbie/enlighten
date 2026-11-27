@@ -9,7 +9,7 @@ Start here, before any light is made. Two controls are worth having in your hand
 
 ## Why these two first
 
-The tapes on the bench are bright enough to be unpleasant in a small room, and a wrong command can ask for full output. The brightness ceiling makes that mistake harmless: whatever is asked for, nothing goes above it.
+The tapes on the bench are bright enough to be unpleasant in a small room, and a wrong command can ask for full output. The brightness ceiling takes the sting out of that mistake: a level that asks for more is sent as the ceiling.
 
 Panic is for everything else. A script that does something you did not expect, an effect that is more than you wanted, a moment of doubt: panic stops all of it and turns every light off, and nothing in the app can delay it.
 
@@ -50,7 +50,7 @@ The reply says what happened: the level was sent as the ceiling, and the line is
 
 ![Driver A0 after asking for 100% under a 20% ceiling](../img/ceiling-held.png)
 
-The driver holds the ceiling too. The app wrote it as MAX LEVEL, so a command from somewhere else on the bus is limited by the driver itself. That is why the top bar counts verified drivers (3): a driver is verified when the value it stores has been read back and matches.
+The driver holds the ceiling too. The app wrote it as MAX LEVEL, so a level from somewhere else on the bus is limited by the driver itself, once that driver is verified. For a colour tape, the part of the ceiling that counts its channels is held by the app alone. That is why the top bar counts verified drivers (3): a driver is verified when the value it stores has been read back and matches.
 
 > [!NOTE] What the ceiling is not
 > The ceiling is a comfort limit. The safety control is the rate guard, which limits how fast light may change. The ceiling can be raised by a deliberate action, and a RESET removes it from a driver, which is why RESET is blocked unless you unlock it.
@@ -79,5 +79,7 @@ While it is latched, nothing is sent: not from the playground, not from the cons
 - Lower the ceiling freely. Raising it is the step to think about.
 - A reply that says `clamped` means the ceiling did its job.
 - Escape twice is panic from anywhere. Resume when you are ready.
+
+Before going on, put the ceiling back to 40%: open the dialog, type 40, choose Raise, and type the value it asks for. The rest of the guide assumes the default.
 
 The reference page [Safety](../reference/safety.md) has every rule in tables.

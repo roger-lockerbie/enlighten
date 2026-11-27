@@ -45,7 +45,7 @@ A step that changes nothing sends nothing. That is how to make a pause: a step t
 
 ## What the rate guard will not let a sequence do
 
-Try a sequence of steps a few levels apart with no time between them, and Check says the governor would refuse it, with the rule. A sequence is held to the same limits as your hand on a slider. The planner tells you before the run, not during it.
+Try a sequence of steps that go up and down with no time between them, and Check says the governor would refuse it, with the rule. Steps in one direction pass. A sequence is held to the same limits as your hand on a slider. The planner tells you before the run, not during it.
 
 ## Long runs and the browser
 

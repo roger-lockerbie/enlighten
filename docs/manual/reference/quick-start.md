@@ -41,6 +41,7 @@ Node 26.13.1 and pnpm 12.18.0 for all three. Python 3.11 or later for the server
 devices
 level 0 30%
 tc 0 2700K
+level 1 20%
 rgb 1 200 60 0
 off all
 ```

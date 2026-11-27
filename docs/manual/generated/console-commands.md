@@ -12,14 +12,14 @@ Every command of the console, as `help <command>` gives it. `help -k <word>` loo
 | Command | What it does |
 | --- | --- |
 | `level <addr> <value> [fade <time>]` | Sets the level. 35% is output, a bare number is an arc level 0 to 254. A fade is set first. The governor holds every level to the ceiling. Sends DAPC. With a fade it first sends DTR0 and SET FADE TIME, or SET EXTENDED FADE TIME. |
-| `off <addr>` | Turns the address off. Sends OFF. off <addr> OFF, IEC 62386-102 Switches the light off at once, with no fade. Frame: the address byte, then 0x00 (command 0). No reply. Governor: Allowed. Unverified gear takes it too. It changes the light, so the rate guard can hold or refuse it, and on Hardware and Both the holding rules apply: help hardware. See also: off <addr> Example: off 0 (01 00) |
+| `off <addr>` | Turns the address off. Sends OFF. off \<addr> OFF, IEC 62386-102 Switches the light off at once, with no fade. Frame: the address byte, then 0x00 (command 0). No reply. Governor: Allowed. Unverified gear takes it too. It changes the light, so the rate guard can hold or refuse it, and on Hardware and Both the holding rules apply: help hardware. See also: off \<addr> Example: off 0 (01 00) |
 | `on <addr>` | Goes back to the last level it had. Sends GO TO LAST ACTIVE LEVEL. |
 | `tc <addr> <temperature> [<value>]` | Colour temperature, as 2700K or 370m, with an optional level in the same fade. Sends DTR0 and DTR1 (the temperature in mirek), SET TEMPORARY COLOUR TEMPERATURE Tc, then ACTIVATE, a DAPC, or both. |
 | `rgb <addr> <r> <g> <b> [w <n>] [a <n>] or rgb <addr> #rrggbb [w <n>] [a <n>]` | Channel levels 0 to 254. w is the first white, a the second. Whites not given are off. Sends DTR0 to DTR2 and SET TEMPORARY RGB DIMLEVEL, the same for SET TEMPORARY WAF DIMLEVEL, then ACTIVATE. |
 | `fade <addr> fade <addr> <time> fade <addr> rate <n>` | Shows the fade, or sets the nearest fade time the driver has and says which. A rate is 1 to 15. Sends DTR0 with SET FADE TIME, SET EXTENDED FADE TIME or SET FADE RATE, or the two fade queries. |
 | `scene <addr> recall <n> scene <addr> store <n> [<value>] scene <addr> remove <n> scene <addr> list` | Scenes 0 to 15. store keeps the present level, or the one given, and reads it back. Sends GO TO SCENE, DTR0 with SET SCENE, REMOVE FROM SCENE, or QUERY SCENE LEVEL. |
 | `group <addr> add <n> group <addr> remove <n>` | Group membership, 0 to 15. Sends ADD TO GROUP or REMOVE FROM GROUP. |
-| `query <addr> [<what>]` | One value, or a summary. <what> is level, max, min, phm, power-on, failure, type, fade, groups, tc, or any query command without "query-", such as actual-level or status. |
+| `query <addr> [<what>]` | One value, or a summary. \<what> is level, max, min, phm, power-on, failure, type, fade, groups, tc, or any query command without "query-", such as actual-level or status. |
 | `devices` | Lists the inventory. |
 | `scan` | Scans the bus again and writes the safety profile. |
 | `profile [<addr>] profile apply` | Shows the safety profile's state, or writes it again. |
@@ -31,7 +31,7 @@ Every command of the console, as `help <command>` gives it. `help -k <word>` loo
 | `unlock rate \| reset \| expert` | A session unlock. You type its name to confirm. |
 | `lock [<name>]` | Drops one unlock, or all of them. |
 | `run <script>` | Runs a script. Enter continues at a pause. Ctrl-C stops it, and so does panic. |
-| `scripts lists the scripts. The Scripts page edits, imports and exports them.` | A script is one command a line, with wait <time>, pause "message", echo <text>, repeat <n> ... end (1 to 1000, nested twice at most) and # comments. Not in a script: unlock, lock, target, run, history, clear, use, resume, scripts, explain, and cap with a value above the ceiling. |
+| `scripts lists the scripts. The Scripts page edits, imports and exports them.` | A script is one command a line, with wait \<time>, pause "message", echo \<text>, repeat \<n> ... end (1 to 1000, nested twice at most) and # comments. Not in a script: unlock, lock, target, run, history, clear, use, resume, scripts, explain, manual, and cap with a value above the ceiling. |
 | `history [<first> [<last>]] [-n] [-r] [-i] history -c` | Lists history: the last 16, or a range. -n drops numbers, -r reverses, -i adds times. -c clears it, after you type yes. Expansion: !! !n !-n !prefix !?text? ^old^new, and :p to print only. |
 | `clear` | Clears the output. Ctrl-L does the same. |
 | `help [<topic>] help -k <word>` | Topics: every command of the console, every DALI command by name, and keys, addresses, values, dali, hardware and scripts. help -k looks a word up in all of them. |
@@ -53,7 +53,7 @@ Values: 35% is output. A bare number is an arc level or channel level, 0 to 254.
 
 ## Scripts
 
-scripts lists the scripts. The Scripts page edits, imports and exports them. A script is one command a line, with wait <time>, pause "message", echo <text>, repeat <n> ... end (1 to 1000, nested twice at most) and # comments. Not in a script: unlock, lock, target, run, history, clear, use, resume, scripts, explain, and cap with a value above the ceiling.
+scripts lists the scripts. The Scripts page edits, imports and exports them. A script is one command a line, with wait \<time>, pause "message", echo \<text>, repeat \<n> ... end (1 to 1000, nested twice at most) and # comments. Not in a script: unlock, lock, target, run, history, clear, use, resume, scripts, explain, manual, and cap with a value above the ceiling.
 
 ## On hardware
 

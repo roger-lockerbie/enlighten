@@ -54,7 +54,7 @@ The effects were chosen to be the calm kind: slow, shallow, and mostly made of d
 
 ## Effects need the right driver
 
-Colour temperature drift needs a driver that takes a colour temperature. Hue drift and accent tint need colour channels. Two-tone and presence follow want more than one driver, which is a good reason to [add a simulated one](03-simulated-drivers.md). When an effect cannot run, the page says why in place of the cost.
+Colour temperature drift and warm shift need a driver that takes a colour temperature. Hue drift and accent tint need colour channels. Two-tone needs an even number of drivers, and presence follow wants several, which is a good reason to [add a simulated one](03-simulated-drivers.md). Sunrise starts from off, and turns away a light that is on. When an effect cannot run, the page says why in place of the cost.
 
 ## The bus cost
 

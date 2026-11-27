@@ -56,6 +56,31 @@ test('the manual opens three ways, reads as pages, and sends nothing', async ({ 
   await expect(consoleLog(page)).not.toContainText('level 0 100%');
   await input.fill('');
 
+  // With the keyboard: Enter held down on the button fills the input, and does not then send it.
+  await page.keyboard.press('Control+Backquote');
+  const put = article.getByRole('button', { name: 'Put in console: cap 20%' });
+  await put.focus();
+  await page.keyboard.down('Enter');
+  await expect(input).toBeFocused();
+  await page.keyboard.down('Enter');
+  await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  await expect(input).toHaveValue('cap 20%');
+  await expect(consoleLog(page)).not.toContainText('cap 20%');
+  await expect(page.getByTestId('ceiling')).toContainText('arc 220');
+  await input.fill('');
+
+  // An ask is answered once: after `manual safety`, coming back returns to the page last read.
+  await typeLine(page, 'manual safety');
+  await expect(article.getByRole('heading', { level: 1, name: 'Safety' })).toBeVisible();
+  await contents.getByRole('button', { name: 'Keys', exact: true }).click();
+  await expect(article.getByRole('heading', { level: 1, name: 'Keys' })).toBeVisible();
+  await page.keyboard.press('Alt+Digit1');
+  await page.keyboard.press('F1');
+  await expect(article.getByRole('heading', { level: 1, name: 'Keys' })).toBeVisible();
+  // The row for the console's own key keeps its two cells (SH2-3).
+  await expect(article.getByRole('row', { name: /Ctrl `/ }).getByRole('cell')).toHaveCount(2);
+
   // From the console, by part of a title, and the search.
   await typeLine(page, 'manual safety');
   await expect(article.getByRole('heading', { level: 1, name: 'Safety' })).toBeVisible();

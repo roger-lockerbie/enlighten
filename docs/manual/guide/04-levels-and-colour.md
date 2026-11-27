@@ -11,12 +11,7 @@ The Playground is where you try things by hand. Each driver has a panel with the
 
 ![A tunable white driver: 1 level, 2 power, 3 dim buttons, 4 colour temperature, 5 fade](../img/playground-level.png)
 
-The level control (1) shows two numbers, and you can type either.
-
-| Number    | Is                                 |
-| --------- | ---------------------------------- |
-| Output %  | How much light, as a share of full |
-| Arc level | What DALI sends: 0 to 254          |
+The level control (1) shows two numbers, and you can type either: output %, which is how much light as a share of full, and the arc level, 0 to 254, which is what DALI sends.
 
 They are not in step, on purpose. DALI spaces its 254 levels so that each step looks about the same to the eye, which puts most of them at the dim end: arc level 127 is only 3% of full output, and 220 is about 40%. Thinking in % is natural. Seeing the arc level tells you what the driver was asked for.
 
@@ -82,9 +77,12 @@ Tape B has red, green and blue, and two whites. Its panel has a colour picker.
 | Raw channels     | Each channel as a number from 0 to 254                           |
 
 ```console
+level 1 20%
 rgb 1 200 60 0
 rgb 1 #204060 w 30
 ```
+
+`rgb` sets the colour and leaves the level alone, so put some light on first.
 
 A screen cannot show LED colours at full saturation. The real tape will look more vivid than the picker.
 

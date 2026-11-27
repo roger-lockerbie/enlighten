@@ -22,7 +22,7 @@ Three ways to keep a piece of lighting design. All are stored in this browser, t
 | Colour | None, a colour temperature, or RGBWAF channel levels |
 | Fade   | None, or one of the driver's fade values             |
 
-A look is not tied to a driver. The slot map says, for each driver, which look is in which of its 16 scene slots.
+A look is not tied to one driver, but a look with a colour fits only drivers that take that kind of colour: writing a colour temperature look to an RGBWAF driver is refused. The editor's "Take what a driver shows now" copies a driver's level and colour into the look. The slot map says, for each driver, which look is in which of its 16 scene slots.
 
 | Action               | Does                                                                    | Sends                                                                |
 | -------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
@@ -31,12 +31,13 @@ A look is not tied to a driver. The slot map says, for each driver, which look i
 | Empty                | Takes the driver out of the scene                                       | REMOVE FROM SCENE                                                    |
 | Read the slots again | Reads all 16 levels                                                     | QUERY SCENE LEVEL, 16 times                                          |
 
-| Slot state             | Means                                                                                   |
-| ---------------------- | --------------------------------------------------------------------------------------- |
-| Empty                  | The driver holds nothing in it                                                          |
-| Holds arc n, read back | The driver's level, the level written and the look agree                                |
-| mismatch               | They do not: the look was edited since, or the driver was written from elsewhere        |
-| assumed                | Said of the colour. A stored colour cannot be read back, so the app takes it as written |
+| Slot state             | Means                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Empty                  | The driver holds nothing in it                                                                                                                          |
+| Not read yet           | The slot has not been read since the app started                                                                                                        |
+| Holds arc n, read back | The driver's level, the level written and the look agree                                                                                                |
+| mismatch               | They do not: the look was edited since, or the driver was written from elsewhere. "The driver holds arc n, which no look here wrote" is the second case |
+| assumed                | Said of the colour. A stored colour cannot be read back, so the app takes it as written                                                                 |
 
 "Recall on several drivers" sends one recall to every driver or to a group. Each driver goes to what its own slot holds, and a driver whose slot is empty does not change.
 
@@ -60,7 +61,12 @@ The planner turns each step into one driver fade where a fade fits the duration,
 | Run, Stop               | Runs it. A plan the governor would refuse does not start                                                    |
 | Export CSV, Export JSON | One row for each change: time, address, command, values, fade                                               |
 
-Built in: Night fade-in (off to 20% at 2700 K over 25 minutes), Wind down (to 10% at 2700 K over 10 minutes), Night light (to 1% at 2700 K over 1 minute), Sunrise (off at 2700 K to 30% at about 4000 K over 30 minutes).
+| Built in      | From               | To                  | Over       |
+| ------------- | ------------------ | ------------------- | ---------- |
+| Night fade-in | Off                | 20% at 2700 K       | 25 minutes |
+| Wind down     | Where the light is | 10% at 2700 K       | 10 minutes |
+| Night light   | Where the light is | 1% at 2700 K        | 1 minute   |
+| Sunrise       | Off, at 2700 K     | 30% at about 4000 K | 30 minutes |
 
 A run times itself on the app's clock and holds a screen wake lock. A long run depends on the browser keeping the page awake. If the page is suspended or the computer sleeps, the run stops keeping time, and the report at the end says so.
 
@@ -81,7 +87,13 @@ A run times itself on the app's clock and holds a screen wake lock. A long run d
 | Presence follow          | Each driver in turn brightens, then eases back      | Pace 1 to 5 s, boost 5 to 40 levels, rise 0.7 to 1.4 s, hold 1 to 10 s             | No      |
 | Sunrise                  | A long rise from off, from warm to cooler           | Length 20 to 40 min, level 5 to 39%, colour temperature 3000 to 5000 K             | No      |
 
-An effect moves around the level a light is at, so a light that is off is turned away with the reason. Sunrise is the exception: it starts from off. Colour temperature drift needs a driver that takes a colour temperature, and hue drift and accent tint need RGBWAF channels.
+An effect moves around the level a light is at, so a light that is off is turned away with the reason. Sunrise is the reverse: it starts from off, and a light that is on is turned away.
+
+| Effect                               | Needs                                    |
+| ------------------------------------ | ---------------------------------------- |
+| Colour temperature drift, Warm shift | A driver that takes a colour temperature |
+| Hue drift, Accent tint               | RGBWAF channels                          |
+| Two-tone                             | An even number of drivers                |
 
 The ranges are narrow on purpose. They are the ranges inside which the rate guard allows the effect, so a setting the sliders offer is one that runs.
 

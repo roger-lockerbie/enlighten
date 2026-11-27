@@ -34,10 +34,10 @@ A driver cannot fade over any time you like. It has two sets of values.
 | Fade time          | 15 steps from 0.7 s to 90.5 s, each about 1.4 times the last            | The original DALI fades                       |
 | Extended fade time | 0.1 to 1.6 s in tenths, 1 to 16 s, 10 to 160 s in tens, 1 to 16 minutes | Newer, and used only while the fade time is 0 |
 
-The picker lists both, and the line under it (2) says which the driver will use and why. Ask for a time it does not have and the app picks the nearest and tells you:
+The picker lists both, and the line under it (2) says which the driver will use and why. Ask for a time it does not have and the app picks the nearest and says which it set. 25 seconds is not one of them, and comes back as fade time 11, 22.6 seconds:
 
 ```console
-fade 0 5s
+fade 0 25s
 ```
 
 There are gaps. Above 160 seconds the steps are whole minutes, so nothing lies between 160 seconds and 3 minutes. A sequence that needs 25 minutes is made of two fades, 16 and 9, which is [the planner's](07-sequences.md) job.

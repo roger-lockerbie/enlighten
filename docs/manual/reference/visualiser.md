@@ -46,7 +46,7 @@ A mount is a tape in a place. Up to six. Select one in the list to change it in 
 | Kind                                                       | Skirting slot, Shadowline reveal, Flush channel                                                     |
 | Wall                                                       | Left, Right. "Mirror on the other wall" keeps a pair alike                                          |
 | Height, direction                                          | A channel's height (600 mm by default), a reveal's height and whether it faces up, down or both     |
-| Tape                                                       | Tunable white or RGB + CCT, at 60 LEDs/m, 120 LEDs/m or COB                                         |
+| Tape                                                       | One of three: tunable white at 120 LEDs/m, RGB + CCT at 60 LEDs/m, or COB tunable white             |
 | Cover                                                      | None, clear, frosted, opal (market typical), opal (Linear Lux), each with a transmission and a blur |
 | Opening height and depth, setback, lit width, LED to cover | The profile's dimensions, in mm                                                                     |
 | Start, Length                                              | Where the tape runs along the hall                                                                  |
@@ -61,17 +61,17 @@ Presets replace the mounts and keep the hallway: skirting slot, mid-wall channel
 
 ## Hallway
 
-| Setting               | Range                            | Default                                   |
-| --------------------- | -------------------------------- | ----------------------------------------- |
-| Length                |                                  | 5 m                                       |
-| Width                 | 1.0 to 1.5 m                     | 1.2 m                                     |
-| Height                | 2.4 to 3.0 m                     | 2.7 m                                     |
-| Ends                  | Closed, Open                     | Closed                                    |
-| Ceiling, Walls, Floor | A named finish, or a reflectance | White, neutral matte, light neutral matte |
+| Setting               | Range                            | Default                                                                     |
+| --------------------- | -------------------------------- | --------------------------------------------------------------------------- |
+| Length                | 1 to 12 m                        | 5 m                                                                         |
+| Width                 | 1.0 to 1.5 m                     | 1.2 m                                                                       |
+| Height                | 2.4 to 3.0 m                     | 2.7 m                                                                       |
+| End walls             | Closed, Open                     | Closed                                                                      |
+| Ceiling, Walls, Floor | A named finish, or a reflectance | Vivid White (0.90), Natural White (0.80), Light microcement (0.50, assumed) |
 
 ## A/B view
 
-Two set-ups side by side, driven by the same drivers, with one exposure and one white balance. Use it to compare a cover, a height or a tape density.
+Two set-ups side by side, driven by the same drivers, with one exposure and one white balance. "Editing" chooses which of Set-up A and Set-up B the controls change, and "Copy A to B" starts B from A. Use it to compare a cover, a height or a tape.
 
 ## Timing
 

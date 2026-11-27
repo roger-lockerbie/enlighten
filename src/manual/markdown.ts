@@ -50,6 +50,10 @@ export interface Doc {
 
 /** The longest page the parser reads. A page is a few thousand words; this is far above that. */
 export const MAX_PAGE = 400_000;
+/** The longest line. The longest in the manual is a generated table row of under 1,000. */
+export const MAX_LINE = 4000;
+/** The longest text of a link, and the longest address, and the longest run in bold or italic. */
+const MAX_SPAN = 600;
 /** How deep lists and quotes may nest before the rest is read as paragraphs. */
 const MAX_DEPTH = 4;
 
@@ -83,16 +87,19 @@ export function parseInline(src: string, depth = 0): Inline[] {
     if (buf !== '') out.push(text(buf));
     buf = '';
   };
+  let moreTicks = true;
+  let nextClose = 0;
   let i = 0;
   while (i < src.length) {
     const ch = src.charAt(i);
-    if (ch === '\\' && i + 1 < src.length && /[\\`*_[\]()!|#>-]/.test(src.charAt(i + 1))) {
+    if (ch === '\\' && i + 1 < src.length && /[\\`*_[\]()!|#<>-]/.test(src.charAt(i + 1))) {
       buf += src.charAt(i + 1);
       i += 2;
       continue;
     }
-    if (ch === '`') {
+    if (ch === '`' && moreTicks) {
       const end = src.indexOf('`', i + 1);
+      if (end < 0) moreTicks = false;
       if (end > i) {
         flush();
         out.push({ t: 'code', v: src.slice(i + 1, end) });
@@ -100,9 +107,12 @@ export function parseInline(src: string, depth = 0): Inline[] {
         continue;
       }
     }
-    if (ch === '[' && depth < MAX_DEPTH) {
-      const close = src.indexOf('](', i + 1);
-      const end = close < 0 ? -1 : src.indexOf(')', close + 2);
+    if (ch === '[' && depth < MAX_DEPTH && nextClose >= 0) {
+      // The next `](` is looked for once and kept, not once for every `[` before it (SH2-1).
+      if (nextClose <= i) nextClose = src.indexOf('](', i + 1);
+      const close = nextClose >= 0 && nextClose - i <= MAX_SPAN ? nextClose : -1;
+      const tail = close < 0 ? -1 : src.slice(close + 2, close + 2 + MAX_SPAN).indexOf(')');
+      const end = tail < 0 ? -1 : close + 2 + tail;
       if (close > i && end > close && !src.slice(i + 1, close).includes('[')) {
         flush();
         out.push({
@@ -117,7 +127,8 @@ export function parseInline(src: string, depth = 0): Inline[] {
     if ((ch === '*' || ch === '_') && depth < MAX_DEPTH) {
       const double = src.charAt(i + 1) === ch;
       const mark = double ? ch + ch : ch;
-      const end = src.indexOf(mark, i + mark.length);
+      const found = src.slice(i + mark.length, i + mark.length + MAX_SPAN).indexOf(mark);
+      const end = found < 0 ? -1 : i + mark.length + found;
       const inner = end < 0 ? '' : src.slice(i + mark.length, end);
       // An underscore inside a word (snake_case) is not emphasis.
       const inWord = ch === '_' && /\w/.test(src.charAt(i - 1));
@@ -152,17 +163,26 @@ export function slug(s: string): string {
 // -------------------------------------------------------------------------------------------------
 // Blocks
 
-const FENCE = /^(`{3,})\s*([\w-]*)\s*$/;
-const HEADING = /^(#{1,4})\s+(.*?)\s*#*\s*$/;
-const RULE = /^(?:-{3,}|\*{3,}|_{3,})\s*$/;
-const BULLET = /^(\s*)([-*+])\s+(.*)$/;
-const NUMBER = /^(\s*)(\d{1,3})[.)]\s+(.*)$/;
-const IMAGE = /^!\[([^\]]*)\]\(([^)\s]+)\)\s*$/;
-const CALLOUT = /^\[!(NOTE|WARNING|TIP)\]\s*(.*)$/i;
-const TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+// Every line is trimmed at its end before these are tried, and a line is never longer than
+// MAX_LINE, so none of them has a run of optional blanks before `$` to try in every way (SH2-1).
+const FENCE = /^(`{3,})[ \t]*([\w-]*)$/;
+const HEADING = /^(#{1,4})[ \t]+(.*)$/;
+const RULE = /^(?:-{3,}|\*{3,}|_{3,})$/;
+const BULLET = /^([ \t]*)([-*+])[ \t]+(.*)$/;
+const NUMBER = /^([ \t]*)(\d{1,3})[.)][ \t]+(.*)$/;
+const IMAGE = /^!\[([^\]]*)\]\(([^)\s]+)\)$/;
+const CALLOUT = /^\[!(NOTE|WARNING|TIP)\][ \t]*(.*)$/i;
+const RULE_CELL = /^:?-{3,}:?$/;
+
+/** True for the line under a table's head: cells of dashes, with an optional colon at either end. */
+function isTableRule(line: string): boolean {
+  if (!line.includes('-')) return false;
+  const cs = cells(line);
+  return cs.length > 0 && cs.every((c) => RULE_CELL.test(c));
+}
 
 /** The cells of a table row. A `\|` is a bar inside a cell, and a bar inside a code span stays. */
-function cells(line: string): string[] {
+export function cells(line: string): string[] {
   const out: string[] = [];
   let cur = '';
   let code = false;
@@ -172,8 +192,14 @@ function cells(line: string): string[] {
     if (ch === '\\' && t.charAt(i + 1) === '|') {
       cur += '|';
       i++;
+    } else if (ch === '\\' && t.charAt(i + 1) === '`') {
+      // An escaped backtick is a character, and is left for the inline parser to unescape.
+      cur += '\\`';
+      i++;
     } else if (ch === '`') {
-      code = !code;
+      // A code span needs its closing mark in this row. A lone backtick is a character (SH2-3).
+      if (code) code = false;
+      else if (t.includes('`', i + 1)) code = true;
       cur += ch;
     } else if (ch === '|' && !code) {
       out.push(cur.trim());
@@ -214,7 +240,10 @@ function parseBlocks(lines: readonly string[], depth: number): Block[] {
     }
     const h = HEADING.exec(line);
     if (h !== null) {
-      const c = parseInline(h[2] ?? '');
+      // Closing hashes, as in `## Title ##`, are not part of the title.
+      const c = parseInline(
+        (h[2] ?? '').replace(/[ \t#]+$/, (tail) => (tail.includes('#') ? '' : tail)),
+      );
       out.push({
         t: 'heading',
         level: (h[1] ?? '#').length as 1 | 2 | 3 | 4,
@@ -287,7 +316,7 @@ function parseBlocks(lines: readonly string[], depth: number): Block[] {
       out.push({ t: 'list', ordered, items });
       continue;
     }
-    if (line.includes('|') && TABLE_RULE.test(lines[i + 1] ?? '')) {
+    if (line.includes('|') && isTableRule(lines[i + 1] ?? '')) {
       const head = cells(line).map((c) => parseInline(c));
       i += 2;
       const rows: Inline[][][] = [];
@@ -312,17 +341,23 @@ function parseBlocks(lines: readonly string[], depth: number): Block[] {
 
 /** Parse one page. It never throws: text it does not know stays text. */
 export function parseMarkdown(source: string): Doc {
-  const lines = source.slice(0, MAX_PAGE).replace(/\r\n?/g, '\n').split('\n');
-  const meta: Record<string, string> = {};
+  // Lines end at any line terminator, the two Unicode ones included, since `.` in a pattern stops
+  // at those too. Blanks at the end of a line mean nothing here. A line longer than MAX_LINE is cut:
+  // no page has one, and the patterns and scans below are then bounded for any text (SH2-1).
+  const lines = source
+    .slice(0, MAX_PAGE)
+    .split(/\r\n?|[\n\u2028\u2029]/)
+    .map((l) => l.slice(0, MAX_LINE).trimEnd());
+  // No prototype, so a key such as `constructor` is only a key.
+  const meta = Object.create(null) as Record<string, string>;
   let start = 0;
   if (lines[0] === '---') {
     const end = lines.indexOf('---', 1);
     if (end > 0) {
       for (const l of lines.slice(1, end)) {
-        const m = /^([a-z][\w-]*):\s*(.*)$/i.exec(l);
+        const m = /^([a-z][\w-]*):[ \t]*(.*)$/i.exec(l);
         const key = m?.[1]?.toLowerCase();
-        if (key !== undefined && key !== '__proto__' && key !== 'constructor')
-          meta[key] = (m?.[2] ?? '').trim().replace(/^"(.*)"$/, '$1');
+        if (key !== undefined) meta[key] = (m?.[2] ?? '').trim().replace(/^"(.*)"$/, '$1');
       }
       start = end + 1;
     }

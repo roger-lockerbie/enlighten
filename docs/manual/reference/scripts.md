@@ -29,13 +29,13 @@ Not allowed in a script: `unlock`, `lock`, `target`, `run`, `history`, `clear`, 
 
 ## Running
 
-| Step                                    | Notes                                                    |
-| --------------------------------------- | -------------------------------------------------------- |
-| `run <name>` or Run on the Scripts page | The saved text runs. Unsaved text in the editor does not |
-| Each step is shown                      | With `+` and its line number, before it runs             |
-| At a `pause`                            | Enter goes on. The console's header has Go on and Stop   |
-| A refused step                          | Stops the script and reports the line                    |
-| To stop                                 | Ctrl-C in the console, Stop, or panic                    |
+| Step                                                      | Notes                                                    |
+| --------------------------------------------------------- | -------------------------------------------------------- |
+| `run <name>`, or "Run in the console" on the Scripts page | The saved text runs. Unsaved text in the editor does not |
+| Each step is shown                                        | With `+` and its line number, before it runs             |
+| At a `pause`                                              | Enter goes on. The console's header has Go on and Stop   |
+| A refused step                                            | Stops the script and reports the line                    |
+| To stop                                                   | Ctrl-C in the console, Stop, or panic                    |
 
 A script is checked whole before anything runs: if a line does not parse, nothing runs. It runs in the background on the app's own clock, and the page holds a screen wake lock while it does.
 
@@ -43,7 +43,7 @@ A script cannot unlock anything or raise the ceiling, so an imported script can 
 
 ## Built in
 
-`first-light` walks the bench through its first check: both tapes on and off, each alone, warm and cool white on tape A, each colour and white on tape B. Every level in it is held to the ceiling.
+`first-light` walks the bench through its first check: both tapes on and off, each alone, warm and cool white on tape A, each colour and white on tape B. Every level in it is held to the ceiling. It runs on the simulator. On Hardware and Both its level to both tapes at once is refused by the holding rules, so it does not run there yet.
 
 ```console
 scripts

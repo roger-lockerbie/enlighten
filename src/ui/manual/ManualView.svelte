@@ -42,12 +42,12 @@
     });
   }
 
-  // `manual <page>` and F1 ask through the app's state.
-  let asked = 0;
+  // `manual <page>` asks through the app's state. An ask is answered once: the page is built again
+  // each time the manual is opened, and an old ask must not move it then (SH2-5).
   $effect(() => {
     const ask = app.manualAsk;
-    if (ask.n === asked) return;
-    asked = ask.n;
+    if (ask.n === app.manualServed) return;
+    app.manualServed = ask.n;
     if (ask.name === undefined) return;
     const found = findPage(book, ask.name);
     if (found !== undefined) go(found.path);

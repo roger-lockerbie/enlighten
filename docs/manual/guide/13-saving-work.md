@@ -25,12 +25,12 @@ Export when a design reaches a point worth keeping, and before trying something 
 
 An import is careful in one direction only.
 
-| It will                                               | It will not              |
-| ----------------------------------------------------- | ------------------------ |
-| Apply a ceiling lower than yours, at once             | Raise the ceiling        |
-| Turn verify mode on                                   | Turn it off              |
-| Replace looks, sequences, effects, scripts and plates | Run any of them          |
-| Add and remove simulated drivers to match             | Write a look to a driver |
+| It will                                                                 | It will not              |
+| ----------------------------------------------------------------------- | ------------------------ |
+| Apply a ceiling lower than yours, at once                               | Raise the ceiling        |
+| Turn verify mode on                                                     | Turn it off              |
+| Replace looks, sequences, effects and plates, and merge scripts by name | Run any of them          |
+| Add and remove simulated drivers to match                               | Write a look to a driver |
 
 A file from someone else is treated as untrusted. It is checked before it is used, and nothing in it runs because it was imported. A script in it is text until you type `run`.
 

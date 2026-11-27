@@ -149,7 +149,7 @@ const TOPICS: Readonly<Record<string, readonly string[]>> = {
     'scripts lists the scripts. The Scripts page edits, imports and exports them.',
     'A script is one command a line, with wait <time>, pause "message", echo <text>,',
     'repeat <n> ... end (1 to 1000, nested twice at most) and # comments.',
-    'Not in a script: unlock, lock, target, run, history, clear, use, resume, scripts, explain,',
+    'Not in a script: unlock, lock, target, run, history, clear, use, resume, scripts, explain, manual,',
     'and cap with a value above the ceiling.',
   ],
 };

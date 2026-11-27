@@ -51,14 +51,14 @@ Alt 2.
 
 ![The inventory: 1 scan again, 2 the safety profile's state, 3 how the driver is driven](../img/devices-inventory.png)
 
-| Section            | Holds                                                                                                                                                                                                                        |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Inventory          | What each driver reports: device types, physical minimum, MIN, MAX, power-on and system failure levels, fades, colour. A name you give it becomes an alias in the console. "Scan again" and "Write the safety profile again" |
-| Unlocks            | Choose `rate`, `reset` or `expert`, type its name, Unlock. "Lock all"                                                                                                                                                        |
-| Commissioning      | Gives each driver without a short address the lowest free one, then scans and writes the profile. Needs the `reset` unlock and the word typed                                                                                |
-| Simulated drivers  | Up to four more DA5-L drivers at addresses 2 to 63, as C2 (tunable white) or C5 (RGB and two whites). Simulator only                                                                                                         |
-| Simulator settings | Each behaviour of the DA5-L that is not known, as a setting with a sourced default and the hardware-day test that settles it                                                                                                 |
-| Hardware check     | On Hardware and Both: the steps of the first day with hardware, run and recorded                                                                                                                                             |
+| Section            | Holds                                                                                                                                                                                                                                                |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inventory          | What each driver reports: device types, physical minimum, MIN, MAX, power-on and system failure levels, fades, colour. A name you give it becomes an alias in the console. "Scan again" and "Write the safety profile again"                         |
+| Unlocks            | Choose `rate`, `reset` or `expert`, type its name, Unlock. "Lock all"                                                                                                                                                                                |
+| Commissioning      | Gives each driver without a short address the lowest free one, then scans and writes the profile. Needs the `reset` unlock and the word typed                                                                                                        |
+| Simulated drivers  | Up to four more DA5-L drivers at addresses 2 to 63, as C2 (tunable white) or C5 (RGB and two whites). Simulator only                                                                                                                                 |
+| Simulator settings | Each behaviour of the DA5-L that is not known, as a setting with a sourced default and the hardware-day test that settles it. "Presents colour as" chooses how a simulated driver reports its colour, and "Back to the defaults" undoes every change |
+| Hardware check     | Parts 2 to 4 of the first day with hardware, each step run or recorded, with the results as a file. On the simulator the steps run against the simulated bench                                                                                       |
 
 ## Bus monitor
 
@@ -69,6 +69,7 @@ Alt 3.
 | Frames, Divergence log | Every frame sent, or the differences between simulator and hardware in Both |
 | Address, Source        | Filters                                                                     |
 | Pause                  | Holds the list still. Frames are still kept                                 |
+| Clear                  | Empties the divergence log                                                  |
 
 ![The bus monitor: 1 the filters, 2 the frames](../img/bus-monitor.png)
 
@@ -94,13 +95,13 @@ Preferences are kept in this browser only. Unlocks, the panic latch and the conn
 
 Alt 5. See [Scripts](scripts.md).
 
-| Control        | Does                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| The list       | Built-in and saved scripts. `first-light` is built in                                      |
-| New, Import    | A new script, or one from a text file                                                      |
-| The text       | One command a line. The line under it says whether it parses, with each error and its line |
-| Save, Run      | Run runs the saved text, never unsaved text                                                |
-| Export, Delete | A text file, or removal after a confirmation                                               |
+| Control                  | Does                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| The list                 | Built-in and saved scripts. `first-light` is built in                                      |
+| New, Import              | A new script, or one from a text file                                                      |
+| The text                 | One command a line. The line under it says whether it parses, with each error and its line |
+| Save, Run in the console | It runs the saved text, never unsaved text                                                 |
+| Export, Delete           | A text file, or removal after a confirmation                                               |
 
 ## Visualiser
 

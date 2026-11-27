@@ -9,13 +9,15 @@ A script is a list of console lines in a file, with a few words of its own for w
 
 ## Run the built-in one
 
-`first-light` is the check for a newly wired bench: is each tape on the address it should be, are warm and cool the right way round, is each colour channel where it should be.
+`first-light` is the check for a newly wired bench, and today it runs on the simulator only: is each tape on the address it should be, are warm and cool the right way round, is each colour channel where it should be.
 
 ```console
 run first-light
 ```
 
 It turns something on, tells you what you should see, and waits. Press Enter to go on, or Ctrl-C to stop. Every level in it is held to the ceiling.
+
+On hardware its first step, a level to both tapes at once, is refused by the holding rules. [The last chapter](14-hardware.md#a-first-few-lines) has the same checks by hand.
 
 ## Write one
 
@@ -34,7 +36,7 @@ wait 5s
 off 0
 ```
 
-The line under the text (3) says whether it parses, and names each error with its line. Save, then Run.
+The line under the text (3) says whether it parses, and names each error with its line. Save, then "Run in the console".
 
 | Word                 | Does                                  |
 | -------------------- | ------------------------------------- |

@@ -30,6 +30,8 @@ A command name, then arguments separated by spaces. Double quotes group a string
 
 `use <addr>` sets a default address, after which it may be left out. `use` alone clears it.
 
+A group is made in the console, as no page has a control for it: `group <addr> add <n>` for each member, then `scan`, since a change of groups makes the inventory stale. `target [sim | hw | both]` changes the output target, and `clear` empties the console's output.
+
 ## Two kinds of command
 
 | Kind              | Examples                                                                      | What they are                                                                          |

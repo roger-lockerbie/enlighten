@@ -86,12 +86,12 @@ One thing `explain` cannot tell you is whether the governor would let the line t
 Many DALI commands that store a setting take no value of their own. The value goes in a register first, with a command that every driver on the bus hears, and the storing command then reads it.
 
 ```console
-dtr0 200
-set-max-level 0
-query-max-level 0
+dtr0 5
+set-fade-rate 0
+query-fade-time-fade-rate 0
 ```
 
-The app tracks the registers. If something may have changed one without the app knowing, a command that reads it is refused until you set it again. `help set-max-level` says which register a command reads.
+That sets the fade rate, which only the dim buttons use, so it is a harmless one to try. The app tracks the registers. If something may have changed one without the app knowing, a command that reads it is refused until you set it again. `help set-fade-rate` says which register a command reads.
 
 ## Editing
 

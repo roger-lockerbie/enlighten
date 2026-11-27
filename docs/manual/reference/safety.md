@@ -29,7 +29,7 @@ Panic empties the queue, stops every script, sequence and effect, and sends TERM
 > [!WARNING] Untried on hardware (HW-01)
 > On hardware the OFF is meant to be on the bus within 100 ms of the key press when the bus is idle. That time has been measured against the fake hasseb only.
 
-If the page hangs, the bus worker stops every runner after 3 seconds without a heartbeat from a visible page. On hardware the server also turns the lights off when the page goes away or falls silent for 3 seconds.
+If the page hangs, the bus worker stops every script, sequence and effect after 3 seconds without a heartbeat from a visible page. That stops new changes. It does not turn lit tapes off. On hardware the server turns the lights off when the connection goes away or falls silent for 3 seconds, so for a stuck page close the tab, or press Ctrl-C at the server.
 
 ## Rate guard
 
@@ -42,6 +42,8 @@ If the page hangs, the bus worker stops every runner after 3 seconds without a h
 | RESET, when unlocked | One in any 10 seconds                                               |                            |
 
 A swing is two opposite legs. A leg is a run of light in one direction whose ends differ by a ratio of 1.10 or more, or that starts or ends at off. A hard step is a leg with a ratio above 2, or to or from off, made with no fade of 0.7 s or longer. Ordinary switching on and off is allowed. Hard flashing is held to one change every 2 seconds.
+
+Two limits of the guard are known and open: one contrived set of commands on the simulator near 3% on which it and its independent checker disagree (S9-P1), and a long sequence in a suspended tab (S9-T1). `docs/SECURITY_FINDINGS.md` has both.
 
 The guard judges what the light is predicted to do, whatever kind of command causes it. It watches each colour channel and an estimate of luminance, so a swap between colours at a constant level counts. A move to or from saturated red counts as a leg.
 
@@ -70,7 +72,7 @@ A driver is verified only when every read-back matches. The top bar counts verif
 An unverified driver accepts DAPC, OFF, queries and DTR writes only. `profile` shows the state, `profile apply` or Re-apply profile in the inspector writes it again.
 
 > [!WARNING] Untried on hardware (HW-02)
-> Two lines of the profile rest on behaviour the DA5-L has not been seen to have: that POWER ON LEVEL 0 keeps the tape off, and that a warm colour stored with it is the colour it starts with. The inspector marks both "not yet confirmed on hardware".
+> Two lines of the profile rest on behaviour the DA5-L has not been seen to have: that POWER ON LEVEL 0 keeps the tape off, and that a warm colour stored with it is the colour it starts with. The inspector marks the power-on line "not yet confirmed on hardware", and `profile` lists both.
 
 ## Brightness ceiling
 
@@ -86,7 +88,7 @@ An unverified driver accepts DAPC, OFF, queries and DTR writes only. `profile` s
 
 Open it from the Ceiling button in the top bar, or use `cap` in the console: `cap` shows it, `cap 30%` or `cap 200` sets it.
 
-The ceiling is a comfort feature, not the safety control. It holds on the ordinary paths. RESET is the known way round it: RESET sends a driver to full output and puts MAX LEVEL back to 254, so it is blocked by default.
+The ceiling is a comfort feature, not the safety control. It holds on the ordinary paths, for drivers that are verified. RESET is the known way round it: RESET sends a driver to full output and puts MAX LEVEL back to 254, so it is blocked by default.
 
 ## Unlocks
 
@@ -114,6 +116,7 @@ Until real gear has been tried, the Hardware and Both targets hold to stricter r
 | Colour before level on colour gear                                          | A level alone is refused while the app does not know which colour the driver holds. `tc` and `rgb` send them in that order |
 | No fades on colour, or on a level to colour gear                            | Fade time and extended fade time must read back as 0                                                                       |
 | No UP, DOWN, CONTINUOUS UP, CONTINUOUS DOWN or DAPC sequence to colour gear |                                                                                                                            |
+| The ceiling counts colour gear as every channel full                        | A level on a driver with five channels is held to about a fifth of the ceiling                                             |
 | A fade setting counts only as read back                                     |                                                                                                                            |
 
 > [!WARNING] Untried on hardware (HW-03)

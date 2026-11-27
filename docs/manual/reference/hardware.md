@@ -48,15 +48,15 @@ In Both, each difference between what the simulator predicted and what the drive
 
 ## What keeps the lights safe if something stops
 
-| If                                              | Then                                                                                                            |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| The page is closed or reloaded                  | The server sends TERMINATE and OFF                                                                              |
-| The page falls silent for 3 seconds             | The same, and the connection closes                                                                             |
-| The server is stopped, with Ctrl-C              | The same                                                                                                        |
-| The connection drops                            | The app shows "Hardware: disconnected", stops running work, and sends nothing to the simulator in its place     |
-| The bus loses power, or the hasseb is unplugged | Nothing can be sent. Each driver goes to its stored SYSTEM FAILURE LEVEL, which the profile sets to "no change" |
+| If                                              | Then                                                                                                                                                                                      |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The page is closed or reloaded                  | The server sends TERMINATE and OFF                                                                                                                                                        |
+| The connection falls silent for 3 seconds       | The same, and the connection closes. A page that is stuck but still connected is not silent: close its tab                                                                                |
+| The server is stopped, with Ctrl-C              | The same                                                                                                                                                                                  |
+| The connection drops                            | The app shows "Hardware: disconnected", stops running work, and sends nothing to the simulator in its place                                                                               |
+| The bus loses power, or the hasseb is unplugged | Nothing can be sent. Each driver goes to its stored SYSTEM FAILURE LEVEL, which the profile sets to "no change", so a lit tape stays lit. The drivers' mains supply is then the only stop |
 
-Keep a way to stop the server within reach of the bench. Ctrl-C turns the lights off.
+Keep two things within reach of the bench: the server's terminal, where Ctrl-C turns the lights off, and the drivers' mains supply, which needs no software.
 
 > [!WARNING] Untried on hardware (HW-06)
 > The server's OFF on silence and on exit has been tested against the fake hasseb. What the DA5-L does when the bus loses power, and when it returns, is not known.
@@ -65,20 +65,16 @@ Keep a way to stop the server within reach of the bench. Ctrl-C turns the lights
 
 Until real gear has been tried, Hardware and Both hold to stricter rules than the simulator. [Safety](safety.md#on-hardware) lists them, and `help hardware` prints them.
 
-In practice, on the first day:
+Two things follow that the rules do not say outright.
 
-| You want                         | Do                                                                                 |
-| -------------------------------- | ---------------------------------------------------------------------------------- |
-| A level on the white tape        | `tc 0 2700K 20%`. The colour goes first, then the level                            |
-| A level change after that        | `level 0 30%`, with the fade at "No fade"                                          |
-| The next change to the same tape | About 2 seconds later. The console waits and says so                               |
-| Both tapes                       | One, then the other. A change of light to a group or to all is refused, except OFF |
-| Everything off                   | `off all`, or panic                                                                |
-| To see why a line was refused    | The refusal names the rule. `explain <line>` shows what it would send              |
+|                            |                                                                                                                                                                                                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The ceiling on colour gear | On Hardware and Both the app does not know which colour a driver holds, so the ceiling counts every channel as full. Tape B has five, so its level is held to about a fifth of the ceiling: arc 161, about 8%, at the default. The reply says "Level lowered so the colour mix stays under the ceiling" |
+| `first-light`              | Does not run on hardware yet. Its level to both tapes at once, and its levels before a colour, are refused. [The guide](../guide/14-hardware.md#a-first-few-lines) has the same checks by hand                                                                                                          |
 
 ## The hardware check
 
-The Devices page gains a "Hardware check" section on Hardware and Both: the steps of the first day, each run and recorded, with the results as a file to save. `docs/TEST_PLAN.md` section 10 is the whole plan.
+The Devices page has a "Hardware check" section: parts 2 to 4 of the first day's plan (read both drivers, the transport, the safety profile), each step run or recorded, with "Show results" and "Save as a file". Parts 1 and 5 to 8 are worked from `docs/TEST_PLAN.md` section 10, which is the whole plan. On the simulator the steps run against the simulated bench.
 
 ## Remote use
 

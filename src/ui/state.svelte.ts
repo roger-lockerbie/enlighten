@@ -59,6 +59,8 @@ export class AppState {
     name: undefined,
     n: 0,
   });
+  /** The number of the last ask the manual answered, so reopening it does not answer one twice. */
+  manualServed = 0;
   /** The manual page last shown, kept for the session so coming back returns to it. */
   manualPath = $state('');
   /** Stored scripts, by name. The built-in ones are in `src/script/builtin.ts`. */

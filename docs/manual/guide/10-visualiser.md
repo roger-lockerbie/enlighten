@@ -57,7 +57,7 @@ A mount is a tape in a place. Select one in the list and its settings open in th
 | ----------------- | --------------------------------------------------------------------------- |
 | Kind              | A slot at the skirting, a reveal near the ceiling, or a channel in the wall |
 | Cover             | How much an opal cover costs in light, and what it does to the dots         |
-| Tape density      | 60 or 120 LEDs a metre, or COB                                              |
+| Tape              | Tunable white at 120 LEDs a metre, RGB + CCT at 60, or COB tunable white    |
 | Height, direction | Where the light lands                                                       |
 | DALI address      | Which driver the mount follows                                              |
 
@@ -67,7 +67,7 @@ There can be up to six mounts. With [a simulated driver](03-simulated-drivers.md
 
 ## Compare two set-ups
 
-"A/B view" puts two set-ups side by side, lit by the same drivers at the same exposure. Opal against frosted. A channel at 600 mm against one at 900. The comparison is where an estimate is most useful: the two share every assumption, so the difference between them means more than either picture alone.
+"A/B view" puts two set-ups side by side, lit by the same drivers at the same exposure. "Copy A to B" starts the second from the first, and "Editing" chooses which one the controls change. Opal against frosted. A channel at 600 mm against one at 900. The comparison is where an estimate is most useful: the two share every assumption, so the difference between them means more than either picture alone.
 
 ## Change the room
 

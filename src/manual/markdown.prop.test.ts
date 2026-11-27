@@ -1,7 +1,7 @@
 /** P-manual: the parser takes any text without throwing, and never loses plain words. */
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { docText, parseMarkdown } from './markdown.ts';
+import { docText, MAX_PAGE, parseMarkdown } from './markdown.ts';
 
 const runs = Number(process.env['PROP_RUNS'] ?? 200) * 5;
 
@@ -76,12 +76,37 @@ describe('P-manual', () => {
     );
   });
 
-  it('answers in good time for a page of nothing but marks', () => {
-    for (const mark of ['*', '_', '`', '[', '](', '> ', '- ', '|', '#']) {
-      const src = mark.repeat(20_000);
+  it('answers in good time for the worst pages it can be given (SH2-1)', () => {
+    const N = MAX_PAGE;
+    const blanks = ' '.repeat(40_000);
+    const hostile: Record<string, string> = {
+      'a heading with a long run of blanks': `# x${blanks}y`,
+      'a fence with a long run of blanks': `\`\`\`${blanks}!`,
+      'a table rule of blanks': `a|b\n${blanks}x`,
+      'a bullet across a line separator': `- ${blanks}a\u2028b`,
+      'a number across a line separator': `1. ${blanks}a\u2029b`,
+      'a callout of blanks': `> [!NOTE]${blanks}\u2028x`,
+      'frontmatter of blanks': `---\ntitle:${blanks}\u2028x\n---\n`,
+      'links that never close': `${'[a]'.repeat(N / 3 - 2)}](x)`,
+      'brackets alone': '['.repeat(N),
+      'emphasis that never closes': '*a '.repeat(N / 3),
+      underscores: '_'.repeat(N),
+      'backticks, odd': `${'`a'.repeat(N / 2 - 1)}`,
+      'quotes nested deep': '> '.repeat(N / 2),
+      'bullets nested deep': Array.from(
+        { length: 2000 },
+        (_, i) => `${' '.repeat(i % 60)}- x`,
+      ).join('\n'),
+      'table bars': `${'|'.repeat(1000)}\n${'|---'.repeat(250)}\n${`${'|'.repeat(1000)}\n`.repeat(300)}`,
+      'one long line': 'x'.repeat(N),
+      'mixed marks': '*_`[](!|#>- \\'.repeat(N / 14),
+    };
+    for (const mark of ['*', '_', '`', '[', '](', '> ', '- ', '|', '#', ' ', '\u2028'])
+      hostile[`only ${JSON.stringify(mark)}`] = mark.repeat(Math.floor(N / mark.length));
+    for (const [name, src] of Object.entries(hostile)) {
       const t = performance.now();
       parseMarkdown(src);
-      expect(performance.now() - t, mark).toBeLessThan(2000);
+      expect(performance.now() - t, name).toBeLessThan(1500);
     }
-  });
+  }, 60_000);
 });

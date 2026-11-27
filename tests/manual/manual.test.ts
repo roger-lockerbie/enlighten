@@ -10,7 +10,7 @@ import { parseLine, type ParseContext } from '../../src/console/parse.ts';
 import { parseScript } from '../../src/script/parse.ts';
 import { buildBook, resolveLink, resolvePath } from '../../src/manual/book.ts';
 import { generatedPages } from '../../src/manual/generate.ts';
-import type { Block, Inline } from '../../src/manual/markdown.ts';
+import { cells, type Block, type Inline } from '../../src/manual/markdown.ts';
 
 const ROOT = resolve(import.meta.dirname, '..', '..', 'docs', 'manual');
 
@@ -133,6 +133,49 @@ describe('every page', () => {
     for (const p of book.pages)
       for (const b of blocksOf(p.doc.blocks))
         if (b.t === 'code') expect(['console', 'text', 'script', 'bash'], p.path).toContain(b.lang);
+  });
+});
+
+describe('every file', () => {
+  it('gives every table row as many cells as its head', () => {
+    // The parser pads a short row, which would hide a cell that swallowed its neighbours (SH2-3).
+    for (const [path, text] of Object.entries(files)) {
+      const lines = text.split('\n');
+      for (let i = 0; i + 1 < lines.length; i++) {
+        const head = lines[i] ?? '';
+        const rule = cells(lines[i + 1] ?? '');
+        if (!head.includes('|') || rule.length === 0 || !rule.every((c) => /^:?-{3,}:?$/.test(c)))
+          continue;
+        const n = cells(head).length;
+        expect(rule.length, `${path}:${String(i + 2)}`).toBe(n);
+        for (let j = i + 2; j < lines.length && (lines[j] ?? '').includes('|'); j++)
+          // An empty last cell is written `| |`, which `cells` leaves out.
+          expect(cells(lines[j] ?? '').length, `${path}:${String(j + 1)}`).toBeGreaterThanOrEqual(
+            n - 1,
+          );
+        for (let j = i + 2; j < lines.length && (lines[j] ?? '').includes('|'); j++)
+          expect(cells(lines[j] ?? '').length, `${path}:${String(j + 1)}`).toBeLessThanOrEqual(n);
+      }
+    }
+  });
+
+  it('has no raw HTML outside code, the generated pages included (SH2-6)', () => {
+    for (const [path, text] of Object.entries(files)) {
+      const prose = text
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`[^`\n]*`/g, '')
+        .replace(/\\</g, '');
+      const m = /<\/?[a-z][^>\n]*>/i.exec(prose);
+      expect(m === null ? '' : m[0], path).toBe('');
+    }
+  });
+
+  it('has no control characters and no characters that reorder text', () => {
+    for (const [path, text] of Object.entries(files))
+      expect(
+        /[\u0000-\u0008\u000b-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(text),
+        path,
+      ).toBe(false);
   });
 });
 
