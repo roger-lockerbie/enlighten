@@ -182,7 +182,7 @@ describe('every file', () => {
       (c >= 0x2066 && c <= 0x2069);
     for (const [path, text] of Object.entries(files))
       expect(
-        [...text].some((ch) => bad(ch.codePointAt(0) ?? 0)),
+        Array.from({ length: text.length }, (_, i) => text.charCodeAt(i)).some(bad),
         path,
       ).toBe(false);
   });
