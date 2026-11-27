@@ -19,7 +19,7 @@
     "@types/node": "26.6.6",
     "@types/three": "0.187.0",
     "@vitest/coverage-v8": "5.1.0",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "eslint-plugin-svelte": "3.24.1",
     "fast-check": "4.10.3",
     "globals": "17.14.0",
