@@ -9,8 +9,14 @@ import { describe, expect, it } from 'vitest';
 import { parseLine, type ParseContext } from '../../src/console/parse.ts';
 import { parseScript } from '../../src/script/parse.ts';
 import { buildBook, resolveLink, resolvePath } from '../../src/manual/book.ts';
-import { generatedPages } from '../../src/manual/generate.ts';
-import { cells, type Block, type Inline } from '../../src/manual/markdown.ts';
+import { escapeForTest, generatedPages } from '../../src/manual/generate.ts';
+import {
+  cells,
+  inlineText,
+  parseMarkdown,
+  type Block,
+  type Inline,
+} from '../../src/manual/markdown.ts';
 
 const ROOT = resolve(import.meta.dirname, '..', '..', 'docs', 'manual');
 
@@ -61,6 +67,34 @@ describe('the generated pages', () => {
         .filter((p) => p.startsWith('generated/'))
         .sort(),
     ).toEqual(Object.keys(generatedPages()).sort());
+  });
+});
+
+describe('the generator', () => {
+  const { prose, cell } = escapeForTest;
+  const text = (md: string): string =>
+    parseMarkdown(md)
+      .blocks.map((b) => (b.t === 'para' ? inlineText(b.c) : ''))
+      .join('');
+
+  it('escapes a backslash first, so nothing in the text can undo an escape', () => {
+    expect(prose('a \\ b')).toBe('a \\\\ b');
+    expect(prose('off <addr>')).toBe('off \\<addr>');
+    expect(prose('a \\<b>')).toBe('a \\\\\\<b>');
+    expect(cell('x \\| y')).toBe('x \\\\\\| y');
+    expect(cell('`a | b` | c')).toBe('`a \\| b` \\| c');
+    expect(prose('Ctrl `')).toBe('Ctrl \\`');
+    expect(() => cell('`a \\| b`')).toThrow(/backslash before a bar/);
+    expect(prose('`a \\ b`')).toBe('`a \\ b`');
+  });
+
+  it('comes back as the same text when the page is read', () => {
+    for (const s of ['off <addr>', 'a \\ b', 'a \\<b> c', 'x < y > z', 'Ctrl `', '2 * 3 \\* 4'])
+      expect(text(prose(s)).replace(/\\\*/g, '*'), s).toBe(s.replace(/\\\*/g, '*'));
+    const row = parseMarkdown(`| a | b |\n| --- | --- |\n| ${cell('x \\| y')} | ${cell('p | q')} |`)
+      .blocks[0];
+    if (row?.t !== 'table') throw new Error('not a table');
+    expect(row.rows[0]?.map(inlineText)).toEqual(['x \\| y', 'p | q']);
   });
 });
 
