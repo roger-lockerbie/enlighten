@@ -386,7 +386,7 @@ JSON, at most 2 MB, with these top-level keys and no others:
 | `mounts`      | Up to 6: side, kind, height, direction, tape type, density, diffuser, depth, length, address                                                     |
 | `links`       | Up to 6: mounts kept alike, as a mirrored pair or as the two halves of a reveal lit both ways                                                    |
 | `compare`     | Set-up B of the A/B view, as `hallway`, `mounts` and `links`. Written only when it differs from set-up A                                         |
-| `plates`      | Up to 16: provider preset, buttons, mapping, timers                                                                                              |
+| `plates`      | Up to 8: provider preset, buttons, mapping, timers                                                                                               |
 
 Names are at most 60 characters. Numbers have ranges. Enumerations are closed. Validation follows ADR 0009. An import replaces the library and set-up after a confirmation that lists what will change. It sends nothing of its own. A lower ceiling in the file is applied as the ceiling control applies it (R6.2), which writes MAX LEVEL through the governor. Imported preferences cannot turn off verify mode or override reduced motion: those two apply only when they make the app more careful. Simulator profile settings in `devices` apply to the simulated bench only (R1.6).
 
