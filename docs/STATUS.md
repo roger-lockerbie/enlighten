@@ -421,7 +421,7 @@ Branch `stage-11b-manual`, on Fable, added at the owner's request on 2026-11-27 
 What is in it:
 
 - **The manual**, in `docs/manual/`: a guide of 14 chapters, a reference of 11 pages, and three pages generated from the app's own tables (keys, console commands, all 137 DALI commands). About 19,000 words by hand. Plain Markdown in a fixed subset that reads as it is on GitHub and in Obsidian.
-- **The viewer.** A Manual page, opened with F1, from the foot of the rail or with `manual [<page>]`: contents, search, previous and next, and "Put in console" on each console line. Our own parser makes a tree, never HTML. The text is a chunk of its own (229 kB), and the entry chunk is 237 kB of its 250 kB.
+- **The viewer.** A Manual page, opened with F1, from the foot of the rail or with `manual [<page>]`: contents, search, previous and next, and "Put in console" on each console line. Our own parser makes a tree, never HTML. The text is a chunk of its own (242 kB), and the entry chunk is 237 kB of its 250 kB.
 - **Pictures.** 26, taken by `pnpm manual:shots`, which follows each guide chapter's steps in the simulator and adds numbered callouts.
 - **Tests that hold it to the app.** Generated pages fresh; links and pictures resolve; every console line and script parses; the subset and the writing rules; table rows whole; hardware marks match the ledger.
 - **The hardware ledger.** Eight statements that rest on untried hardware, each with its pages, the part of the test plan that settles it, and what to change. Stage 12 has a step to walk it.
@@ -429,7 +429,12 @@ What is in it:
 
 Close:
 
-VERIFY_11B
+- `pnpm verify` passes: 3,298 unit and property tests with 1 expected failure (the saved S9-P1 case), 98.17% lines and 91.88% branches on the pure core, 67 preview e2e tests and 18 server e2e tests.
+- `pnpm manual:shots` passes: nine chapters' steps in the simulator, 26 pictures. It was last run before the review fixes, which changed no pictured page.
+- `security-reviewer` on the diff: **pass with follow-ups**. SH2-1 to SH2-7 are fixed or accepted, in `docs/SECURITY_FINDINGS.md`.
+- A second agent checked every hand-written page against the code. Its corrections are in the pages (SH2-8 to SH2-10 and about thirty smaller ones).
+- The fixes for both reviews were made after them and have not been reviewed again.
+- `src/safety`, `src/dali`, `src/sim` and `src/bus` were not changed, so `dali-reviewer` and `pnpm mutate` were not run.
 
 Found while writing it, and not fixed:
 
