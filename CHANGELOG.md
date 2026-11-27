@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## Unreleased
 
+## 0.3.0
+
+A user manual, and a viewer for it in the app. Nothing in the governor, the DALI core, the simulator or the bus changed.
+
 ### Added
 
 - A user manual in `docs/manual/`: a guide of 14 chapters, a reference of 11 pages, and tables of keys, console commands and all 137 DALI commands generated from the app's own data. It is plain Markdown that reads as it is on GitHub and opens as an Obsidian vault (ADR 0024).

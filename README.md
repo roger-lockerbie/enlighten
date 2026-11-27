@@ -6,7 +6,7 @@ Every command to a simulated or real driver goes through one safety governor. It
 
 ## What works and what has not been tried
 
-This is version 0.2.0. The simulator, the playground, the console and scripts, looks, sequences, effects, switch plates and the visualiser all run with no hardware.
+This is version 0.3.0. The simulator, the playground, the console and scripts, looks, sequences, effects, switch plates and the visualiser all run with no hardware.
 
 **The hardware path has never driven a real driver.** It is built and tested against a fake hasseb, and no hasseb has been on the bench yet. Until it has, the governor trusts nothing about real gear: on the Hardware and Both targets it refuses colour fades, level fades on colour gear, and any change to a group or to all but OFF, and it allows about one change every 2 seconds to an address (ADR 0019 and ADR 0022 in `docs/adr/`). `docs/TEST_PLAN.md` section 10 is the plan for the first day with hardware.
 
@@ -77,7 +77,7 @@ shasum -a 256 -c SHA256SUMS
 Check that the archive was built by this repository's release workflow, with the GitHub CLI:
 
 ```bash
-gh attestation verify enlighten-v0.2.0.tar.gz -R roger-lockerbie/enlighten --signer-workflow roger-lockerbie/enlighten/.github/workflows/release.yml --source-ref refs/tags/v0.2.0
+gh attestation verify enlighten-v0.3.0.tar.gz -R roger-lockerbie/enlighten --signer-workflow roger-lockerbie/enlighten/.github/workflows/release.yml --source-ref refs/tags/v0.3.0
 ```
 
 The sums alone show the files match each other. The attestation is what ties them to this repository and to a commit, which is in the archive as `COMMIT`.

@@ -7,7 +7,7 @@ order: 0
 
 Enlighten designs and tests DALI lighting on a two-tape bench. It drives a simulator of the bench's driver (a Skydance DA5-L), the real tapes through a hasseb USB DALI Master, or both at once. Every command to either goes through one safety governor.
 
-This manual is for version 0.2.0 and later. It has a guide and a reference, written from the same facts, and tables built from the app's own data.
+This manual is for version 0.3.0. It has a guide and a reference, written from the same facts, and tables built from the app's own data.
 
 | Half      | What it is                                                                   | Read it when                               |
 | --------- | ---------------------------------------------------------------------------- | ------------------------------------------ |

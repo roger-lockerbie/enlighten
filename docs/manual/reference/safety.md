@@ -103,7 +103,7 @@ An unlock lasts until the page reloads or you lock it. You type its name to conf
 `unlock <name>` and `lock [<name>]` in the console, or the Devices page. "Lock all" in the top bar drops every unlock.
 
 > [!NOTE] Not yet in the app
-> The `rate` unlock is accepted, but version 0.2.0 has no control that then sets the swing limit to 2 or 3.
+> The `rate` unlock is accepted, but version 0.3.0 has no control that then sets the swing limit to 2 or 3.
 
 ## On hardware
 

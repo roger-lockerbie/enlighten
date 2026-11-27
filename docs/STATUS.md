@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next. After it, between stages, the console gained help for every DALI command and `explain` (ADR 0023), merged as PR 25 on 2026-11-26. Version 0.2.0 carries it, tagged at the owner's request. Stage 11b (user documentation, ADR 0024) is in review on `stage-11b-manual`.
+Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next. After it, between stages, the console gained help for every DALI command and `explain` (ADR 0023), merged as PR 25 on 2026-11-26. Version 0.2.0 carries it, tagged at the owner's request. Stage 11b (user documentation, ADR 0024) is PR 27, and version 0.3.0 carries it, tagged at the owner's request on 2026-11-27.
 
 ## Done in Stage 0
 
@@ -414,7 +414,7 @@ Not done, and why:
 - **`explain` does not cover `scan`, `profile apply`, `cap`, `panic` or `target`**, whose frames the engine builds as it goes.
 - **Not tried on hardware.** The test plan's section 10 has an item for it.
 
-## Stage 11b (user documentation), in review
+## Stage 11b (user documentation), done
 
 Branch `stage-11b-manual`, on Fable, added at the owner's request on 2026-11-27 after v0.2.0 and before hardware day. The owner chose our own Markdown renderer with no dependency, scripted screenshots with callouts, hardware chapters written now and marked, and a generated reference for every DALI command. The owner read a sample (the viewer, the safety reference and the first guide chapter) before the rest was written.
 
@@ -448,11 +448,9 @@ Not done, and why:
 - **The manual has not been read in Obsidian or on GitHub as drawn.** The files are in the subset both draw, and the tests hold them to it.
 - **The pictures can be re-taken only on the reference laptop,** since fonts differ on Linux.
 - **Prose can go out of date without a test failing.** The tests catch a console line, a link, a picture or a generated table that no longer matches, not a sentence.
-- **No version or tag.** A 0.3.0 is the owner's call.
 
 ## Next
 
-- The owner's review of the manual, and whether to tag a 0.3.0.
 - The owner's calls on the `rate` unlock's missing control, the bus figure, and 16 or 8 plates.
 
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
