@@ -438,20 +438,20 @@ Close:
 
 Found while writing it, and not fixed:
 
-- **The `rate` unlock has nothing to unlock.** It is accepted, but no control then sets the swing limit to 2 or 3. The manual says so.
-- **The top bar's bus figure does not fall when the bus goes idle.** It shows the value from the last change.
+- **The `rate` unlock has nothing to unlock.** It is accepted, but no control then sets the swing limit to 2 or 3, so the limit stays at 1: the governor uses the limit that was set, and nothing sets it. The manual says so. The owner left this for hardware day (2026-11-27).
+- **The top bar's bus figure does not fall when the bus goes idle.** It shows the value from the last change. The owner accepted this as it is (2026-11-27).
 - **`first-light` does not run on hardware** (S8b-R5-10, open before this stage). The manual gives the checks by hand.
-- **The spec says 16 switch plates and the code allows 8** (SH2-11). The manual follows the code.
+- **Switch plates:** the spec said 16 and the code allows 8 (SH2-11). The owner chose 8 (2026-11-27), and the spec now says 8.
 
 Not done, and why:
 
-- **The manual has not been read in Obsidian or on GitHub as drawn.** The files are in the subset both draw, and the tests hold them to it.
+- **The manual has not been read in Obsidian as drawn.** The owner checked `docs/manual/README.md` on GitHub on 2026-11-27 and it draws correctly. The files are in the subset both draw, and the tests hold them to it.
 - **The pictures can be re-taken only on the reference laptop,** since fonts differ on Linux.
 - **Prose can go out of date without a test failing.** The tests catch a console line, a link, a picture or a generated table that no longer matches, not a sentence.
 
 ## Next
 
-- The owner's calls on the `rate` unlock's missing control, the bus figure, and 16 or 8 plates.
+- On hardware day: whether the `rate` unlock gets a control for the swing limit.
 
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
 - Stage 12 (hardware day) on Opus, whenever the hasseb arrives.
