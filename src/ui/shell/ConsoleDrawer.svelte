@@ -127,19 +127,23 @@
         <button
           type="button"
           onclick={() => void app.call({ op: 'scriptContinue' })}
-          data-testid="script-continue">Go on</button
+          data-testid="script-continue"
         >
+          Go on
+        </button>
       {/if}
       <button
         type="button"
         onclick={() => void app.call({ op: 'stopConsole' })}
-        data-testid="script-stop">Stop</button
+        data-testid="script-stop"
       >
+        Stop
+      </button>
     {/if}
-    <span class="muted small hint"
-      ><kbd>help</kbd> lists commands. <kbd>Escape</kbd> then <kbd>Tab</kbd> leaves. <kbd>Ctrl</kbd>
-      <kbd>`</kbd> hides.</span
-    >
+    <span class="muted small hint">
+      <kbd>help</kbd> lists commands. <kbd>Escape</kbd> then <kbd>Tab</kbd> leaves. <kbd>Ctrl</kbd>
+      <kbd>`</kbd> hides.
+    </span>
   </header>
   <div class="log" role="log" aria-label="Console output" bind:this={log} data-testid="console-log">
     {#each con.out as l (l.id)}
@@ -152,9 +156,9 @@
     </ul>
   {/if}
   <div class="entry row">
-    <label for="console-input" class="prompt"
-      >{con.prompt}<span class="sr-only"> Console</span></label
-    >
+    <label for="console-input" class="prompt">
+      {con.prompt}<span class="sr-only"> Console</span>
+    </label>
     <input
       id="console-input"
       bind:this={field}

@@ -37,15 +37,15 @@ Assets, not packages, in `src/assets/fonts/` with their licence texts and SHA-25
 | svelte                         | 5.57.3  | MIT        | UI framework. Compiles away, and runs under strict CSP and Trusted Types.             |
 | @sveltejs/vite-plugin-svelte   | 7.3.1   | MIT        | Compiles Svelte in Vite.                                                              |
 | vitest                         | 5.1.0   | MIT        | Unit and property test runner.                                                        |
-| fast-check                     | 4.10.2  | MIT        | Property tests.                                                                       |
+| fast-check                     | 4.10.3  | MIT        | Property tests.                                                                       |
 | @playwright/test               | 1.65.0  | Apache-2.0 | e2e tests in Chromium.                                                                |
 | eslint                         | 10.14.0 | MIT        | Linting, including the banned-sink rules.                                             |
 | @eslint/js                     | 10.0.1  | MIT        | ESLint's recommended rules.                                                           |
-| typescript-eslint              | 8.72.2  | MIT        | Strict, type-checked lint rules.                                                      |
+| typescript-eslint              | 8.73.0  | MIT        | Strict, type-checked lint rules.                                                      |
 | eslint-plugin-svelte           | 3.24.1  | MIT        | Svelte lint rules, including `no-at-html-tags`.                                       |
 | svelte-eslint-parser           | 1.10.1  | MIT        | Lets ESLint read Svelte files.                                                        |
 | prettier                       | 3.10.1  | MIT        | Formatting.                                                                           |
-| prettier-plugin-svelte         | 4.1.1   | MIT        | Formats Svelte files.                                                                 |
+| prettier-plugin-svelte         | 4.2.0   | MIT        | Formats Svelte files.                                                                 |
 | svelte-check                   | 4.7.8   | MIT        | Type checks Svelte files.                                                             |
 | globals                        | 17.14.0 | MIT        | Global names for ESLint.                                                              |
 | @types/node                    | 26.6.6  | MIT        | Node types for config and tests.                                                      |
@@ -109,10 +109,10 @@ Checked in Stage 11 with `pnpm licenses list`, which covers the packages install
 
 ## Advisories on transitive packages
 
-All three are in development tools. None of the affected code is in `dist/` or the hardware server. Rechecked in Stage 11 on 26 November 2026: `pnpm audit` reports minimatch only.
+All three are in development tools. None of the affected code is in `dist/` or the hardware server. Rechecked in Stage 11 on 26 November 2026: `pnpm audit` reports minimatch only. Rechecked on 27 November 2026 after three development tools were updated (fast-check 4.10.3, typescript-eslint 8.73.0, prettier-plugin-svelte 4.2.0): the same.
 
 - **qs, overridden to 6.16.2.** typed-rest-client 2.3.1, which Stryker uses for its dashboard reporter, pins qs 6.15.1 exactly. That version has four moderate advisories, all fixed by 6.16.2, a patch release in the same line. We don't use the dashboard reporter, so the risk was low, but the fix was cheap. Remove the override when typed-rest-client moves past 6.15.
-- **minimatch 10.2.6, open.** It has one moderate advisory, GHSA-g3hv-75wg-m249 (a slow glob), fixed only in 11.0.1. ESLint, typescript-eslint and Stryker all ask for 10.x, and forcing a major version under them could break linting or mutation runs. Its patterns come from our own config files, never from outside input. It will be picked up when those tools move to 11.
+- **minimatch 10.2.6, open.** It has one moderate advisory, GHSA-g3hv-75wg-m249 (a slow glob), fixed only in 11.0.1. ESLint and Stryker ask for 10.x, and forcing a major version under them could break linting or mutation runs. typescript-eslint 8.73.0 moved to minimatch 11.0.9, so since 27 November 2026 the old version is reached through ESLint and Stryker only. Its patterns come from our own config files, never from outside input. It will be gone when those two move to 11.
 - **deepmerge 4.3.1.** `pnpm audit` no longer reports it (26 November 2026), and the version is unchanged. It had one low advisory, GHSA-gcqx-w48m-w2h4 (prototype poisoning in the merged object), and no fixed release yet. vite-plugin-svelte uses it at build time to merge our own Svelte config. It will be updated when a fix is released.
 
 CI and the setup steps in the README use `pnpm install --frozen-lockfile`, which fails if `package.json` and the lockfile disagree.

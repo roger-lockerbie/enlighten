@@ -163,8 +163,10 @@
               aria-current={open === s.name ? 'true' : undefined}
               onclick={() => {
                 show(s);
-              }}>{s.name} <span class="muted small">built in</span></button
+              }}
             >
+              {s.name} <span class="muted small">built in</span>
+            </button>
           </li>
         {/each}
         {#each app.scripts as s (s.name)}
@@ -174,8 +176,10 @@
               aria-current={open?.toLowerCase() === s.name.toLowerCase() ? 'true' : undefined}
               onclick={() => {
                 show(s);
-              }}>{s.name}</button
+              }}
             >
+              {s.name}
+            </button>
           </li>
         {/each}
       </ul>
@@ -185,8 +189,10 @@
           onclick={() => {
             show(undefined);
           }}
-          data-testid="script-new">New</button
+          data-testid="script-new"
         >
+          New
+        </button>
         <label class="button">
           Import
           <input
@@ -241,21 +247,27 @@
             type="button"
             class="primary"
             onclick={() => void save()}
-            data-testid="script-save">Save</button
+            data-testid="script-save"
           >
+            Save
+          </button>
         {/if}
         <button
           type="button"
           disabled={open === undefined || dirty || !parsed.ok}
           onclick={run}
-          data-testid="script-run">Run in the console</button
+          data-testid="script-run"
         >
+          Run in the console
+        </button>
         <a
           class="button"
           href={exportHref}
           download={`${name === '' ? 'script' : name}.txt`}
-          data-testid="script-export">Export</a
+          data-testid="script-export"
         >
+          Export
+        </a>
         {#if !isBuiltin && open !== undefined}
           {#if deleting}
             <span>Delete {open}? It cannot be undone.</span>
@@ -264,16 +276,20 @@
               type="button"
               onclick={() => {
                 deleting = false;
-              }}>Keep it</button
+              }}
             >
+              Keep it
+            </button>
           {:else}
             <button
               type="button"
               onclick={() => {
                 deleting = true;
               }}
-              data-testid="script-delete">Delete</button
+              data-testid="script-delete"
             >
+              Delete
+            </button>
           {/if}
         {/if}
       </div>

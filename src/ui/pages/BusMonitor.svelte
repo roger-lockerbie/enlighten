@@ -85,11 +85,13 @@
         type="button"
         onclick={() => {
           app.clearMonitor();
-        }}>Clear</button
+        }}
       >
-      <span class="muted small"
-        >{lines.length} frames kept, the newest {Math.min(SHOWN, filtered.length)} shown first.</span
-      >
+        Clear
+      </button>
+      <span class="muted small">
+        {lines.length} frames kept, the newest {Math.min(SHOWN, filtered.length)} shown first.
+      </span>
     </div>
     {#if filtered.length === 0}
       <p class="muted" data-testid="monitor-empty">No frames yet.</p>

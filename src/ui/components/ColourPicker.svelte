@@ -182,8 +182,10 @@
         />
         <span
           class="value"
-          data-testid={testid === undefined ? undefined : `${testid}-ch${String(i)}`}>{ch(i)}</span
+          data-testid={testid === undefined ? undefined : `${testid}-ch${String(i)}`}
         >
+          {ch(i)}
+        </span>
       </label>
     {/each}
   </div>

@@ -237,8 +237,9 @@
       {:else}
         <table data-testid="looks">
           <thead>
-            <tr><th scope="col">Name</th><th scope="col">Values</th><th scope="col">Actions</th></tr
-            >
+            <tr>
+              <th scope="col">Name</th><th scope="col">Values</th><th scope="col">Actions</th>
+            </tr>
           </thead>
           <tbody>
             {#each lib.looks as l (l.name)}
@@ -251,15 +252,19 @@
                     aria-label={`Edit ${l.name}`}
                     onclick={() => {
                       edit(l);
-                    }}>Edit</button
+                    }}
                   >
+                    Edit
+                  </button>
                   <button
                     type="button"
                     aria-label={`Remove ${l.name}`}
                     onclick={() => {
                       remove(l);
-                    }}>Remove</button
+                    }}
                   >
+                    Remove
+                  </button>
                 </td>
               </tr>
             {/each}
@@ -272,22 +277,24 @@
           data-testid="look-new"
           onclick={() => {
             edit(undefined);
-          }}>New look</button
+          }}
         >
+          New look
+        </button>
       </div>
 
       {#if open}
         <div class="card stack" data-testid="look-editor">
           <h3>{editing === undefined ? 'New look' : `Edit "${editing}"`}</h3>
-          <label class="row"
-            >Name <input
+          <label class="row">
+            Name <input
               type="text"
               maxlength={MAX_NAME}
               bind:value={name}
               autocomplete="off"
               data-testid="look-name"
-            /></label
-          >
+            />
+          </label>
           <LookFields
             {arc}
             {colour}
@@ -324,21 +331,25 @@
                   type="button"
                   onclick={() => {
                     capture(d.address);
-                  }}>{app.name(d.address)}</button
+                  }}
                 >
+                  {app.name(d.address)}
+                </button>
               {/each}
             </div>
           {/if}
           <div class="row">
-            <button type="button" class="primary" data-testid="look-save" onclick={save}
-              >Save</button
-            >
+            <button type="button" class="primary" data-testid="look-save" onclick={save}>
+              Save
+            </button>
             <button
               type="button"
               onclick={() => {
                 open = false;
-              }}>Cancel</button
+              }}
             >
+              Cancel
+            </button>
           </div>
         </div>
       {/if}
@@ -358,8 +369,8 @@
         <p class="muted">No driver answered the scan. See Devices.</p>
       {:else}
         <div class="row">
-          <label class="row"
-            >Driver
+          <label class="row">
+            Driver
             <select
               value={String(address)}
               data-testid="slots-driver"
@@ -381,8 +392,10 @@
                   app.call({ op: 'sceneRead', address }),
                   `Read the slots of A${String(address)}.`,
                 );
-            }}>Read the slots again</button
+            }}
           >
+            Read the slots again
+          </button>
         </div>
         <div class="scroll">
           <table data-testid="slots">
@@ -426,16 +439,19 @@
                           <option
                             value={l.name}
                             disabled={drive !== undefined && lookFits(l, drive) !== undefined}
-                            >{l.name}</option
                           >
+                            {l.name}
+                          </option>
                         {/each}
                       </select>
                       <button
                         type="button"
                         aria-label={`Write to slot ${String(slot)}`}
                         data-testid={`slot-${String(slot)}-write`}
-                        onclick={() => void write(slot)}>Write</button
+                        onclick={() => void write(slot)}
                       >
+                        Write
+                      </button>
                     </span>
                   </td>
                   <td>
@@ -447,15 +463,19 @@
                         disabled={r.read === undefined || r.read === 255}
                         onclick={() => {
                           recallOne(slot);
-                        }}>Recall</button
+                        }}
                       >
+                        Recall
+                      </button>
                       <button
                         type="button"
                         aria-label={`Empty slot ${String(slot)}`}
                         data-testid={`slot-${String(slot)}-remove`}
                         disabled={r.read === 255 && r.entry === undefined}
-                        onclick={() => void removeSlot(slot)}>Empty</button
+                        onclick={() => void removeSlot(slot)}
                       >
+                        Empty
+                      </button>
                     </span>
                   </td>
                 </tr>
@@ -473,16 +493,16 @@
         slot holds. A driver whose slot is empty does not change.
       </p>
       <div class="row">
-        <label class="row"
-          >Slot
+        <label class="row">
+          Slot
           <select bind:value={manySlot} data-testid="many-slot">
             {#each Array.from({ length: SLOTS }, (_, i) => i) as slot (slot)}
               <option value={slot}>{slot}</option>
             {/each}
           </select>
         </label>
-        <label class="row"
-          >On
+        <label class="row">
+          On
           <select bind:value={manyTarget} data-testid="many-target">
             <option value="all">every driver</option>
             {#each Array.from({ length: 16 }, (_, i) => i) as g (g)}

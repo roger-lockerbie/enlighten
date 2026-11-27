@@ -170,8 +170,10 @@
           type="button"
           onclick={() => {
             address = defaultAddress;
-          }}>Use the first driver</button
+          }}
         >
+          Use the first driver
+        </button>
       </div>
       <p class="muted small">
         {FAMILY_LABEL[family]}, {layout}
@@ -186,8 +188,8 @@
     {#each plates as p (p.id)}
       <section class="stack" aria-label={p.name} data-testid={`plate-section-${p.id}`}>
         <div class="row wrap">
-          <label class="row"
-            >Name
+          <label class="row">
+            Name
             <input
               type="text"
               value={p.name}
@@ -199,8 +201,8 @@
                 if (n === '') e.currentTarget.value = p.name;
                 else replace(rename(p, n));
               }}
-            /></label
-          >
+            />
+          </label>
           <span class="muted">{FAMILY_LABEL[p.family]}</span>
           <button
             type="button"
@@ -208,21 +210,27 @@
             data-testid={`plate-edit-${p.id}`}
             onclick={() => {
               openId = openId === p.id ? undefined : p.id;
-            }}>Edit mapping</button
+            }}
           >
+            Edit mapping
+          </button>
           <button
             type="button"
             onclick={() => {
               reset(p);
-            }}>Back to preset</button
+            }}
           >
+            Back to preset
+          </button>
           <button
             type="button"
             data-testid={`plate-remove-${p.id}`}
             onclick={() => {
               remove(p);
-            }}>Remove</button
+            }}
           >
+            Remove
+          </button>
         </div>
         <PlateView
           {app}

@@ -170,8 +170,10 @@
               data-testid={`preset-${p.id}`}
               onclick={() => {
                 load(p.build(drivers), undefined);
-              }}>{p.name}</button
+              }}
             >
+              {p.name}
+            </button>
             <span>{p.about}</span>
           </li>
         {/each}
@@ -185,11 +187,13 @@
       {:else}
         <table data-testid="sequences">
           <thead>
-            <tr
-              ><th scope="col">Name</th><th scope="col">Steps</th><th scope="col">Length</th><th
-                scope="col">Actions</th
-              ></tr
-            >
+            <tr>
+              <th scope="col">Name</th><th scope="col">Steps</th><th scope="col">Length</th><th
+                scope="col"
+              >
+                Actions
+              </th>
+            </tr>
           </thead>
           <tbody>
             {#each saved as q (q.name)}
@@ -203,15 +207,19 @@
                     aria-label={`Open ${q.name}`}
                     onclick={() => {
                       load(q, q.name);
-                    }}>Open</button
+                    }}
                   >
+                    Open
+                  </button>
                   <button
                     type="button"
                     aria-label={`Remove ${q.name}`}
                     onclick={() => {
                       remove(q);
-                    }}>Remove</button
+                    }}
                   >
+                    Remove
+                  </button>
                 </td>
               </tr>
             {/each}
@@ -224,23 +232,25 @@
           data-testid="sequence-new"
           onclick={() => {
             load({ name: '', steps: [] }, undefined);
-          }}>New sequence</button
+          }}
         >
+          New sequence
+        </button>
       </div>
     </section>
 
     {#if open}
       <section class="card stack" aria-labelledby="editor-h" data-testid="sequence-editor">
         <h2 id="editor-h">{editing === undefined ? 'Sequence' : `"${editing}"`}</h2>
-        <label class="row"
-          >Name <input
+        <label class="row">
+          Name <input
             type="text"
             maxlength={MAX_NAME}
             bind:value={name}
             autocomplete="off"
             data-testid="sequence-name"
-          /></label
-        >
+          />
+        </label>
         {#if steps.length === 0}
           <p class="muted">No steps yet.</p>
         {/if}
@@ -248,8 +258,8 @@
           {#each steps as s, i (i)}
             <li class="stack step" data-testid={`step-${String(i)}`}>
               <div class="row">
-                <label class="row"
-                  >Target
+                <label class="row">
+                  Target
                   <select
                     value={targetValue(s.target)}
                     data-testid={`step-${String(i)}-target`}
@@ -269,17 +279,19 @@
                     {/each}
                   </select>
                 </label>
-                <span data-testid={`step-${String(i)}-text`}
-                  >to {levelText(s.arc)}, {colourText(s.colour)}</span
-                >
+                <span data-testid={`step-${String(i)}-text`}>
+                  to {levelText(s.arc)}, {colourText(s.colour)}
+                </span>
                 <button
                   type="button"
                   aria-expanded={expanded === i}
                   data-testid={`step-${String(i)}-edit`}
                   onclick={() => {
                     expanded = expanded === i ? undefined : i;
-                  }}>Level and colour</button
+                  }}
                 >
+                  Level and colour
+                </button>
               </div>
               <div class="row">
                 <NumberField
@@ -326,8 +338,10 @@
                   aria-label={`Remove step ${String(i + 1)}`}
                   onclick={() => {
                     removeStep(i);
-                  }}>Remove</button
+                  }}
                 >
+                  Remove
+                </button>
               </div>
               {#if expanded === i}
                 <LookFields
@@ -348,15 +362,19 @@
             type="button"
             data-testid="step-add"
             disabled={steps.length >= MAX_STEPS}
-            onclick={add}>Add a step</button
+            onclick={add}
           >
+            Add a step
+          </button>
           <button type="button" data-testid="sequence-save" onclick={save}>Save</button>
           <button
             type="button"
             onclick={() => {
               open = false;
-            }}>Close</button
+            }}
           >
+            Close
+          </button>
         </div>
 
         <h3>Preview</h3>

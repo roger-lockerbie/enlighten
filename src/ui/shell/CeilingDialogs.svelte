@@ -83,18 +83,22 @@
         type="button"
         onclick={() => {
           app.ceilingOpen = false;
-        }}>Close</button
+        }}
       >
-      <button type="button" class="primary" disabled={arc >= current} onclick={() => void lower()}
-        >Lower now</button
-      >
+        Close
+      </button>
+      <button type="button" class="primary" disabled={arc >= current} onclick={() => void lower()}>
+        Lower now
+      </button>
       <button
         type="button"
         disabled={arc <= current}
         onclick={() => {
           app.raiseTo = arc;
-        }}>Raise</button
+        }}
       >
+        Raise
+      </button>
     </div>
   </div>
 </Dialog>

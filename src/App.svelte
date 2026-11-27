@@ -220,8 +220,10 @@
           class="show-inspector"
           onclick={() => {
             app?.update({ inspectorOpen: true });
-          }}>Show inspector</button
+          }}
         >
+          Show inspector
+        </button>
       {/if}
       {#if page === 'playground'}
         <Playground {app} />

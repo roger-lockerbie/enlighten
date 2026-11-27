@@ -201,8 +201,10 @@
       aria-pressed={app.selected === n}
       onclick={() => {
         app.selected = n;
-      }}>Inspect</button
+      }}
     >
+      Inspect
+    </button>
   </header>
   <p class="muted small">{presents}</p>
 
@@ -241,12 +243,16 @@
       onchange={(on) => void command(on ? 'GO_TO_LAST_ACTIVE_LEVEL' : 'OFF')}
       testid={`power-${String(n)}`}
     />
-    <button type="button" aria-label="Step down one level" onclick={() => void command('STEP_DOWN')}
-      >−1</button
+    <button
+      type="button"
+      aria-label="Step down one level"
+      onclick={() => void command('STEP_DOWN')}
     >
-    <button type="button" aria-label="Step up one level" onclick={() => void command('STEP_UP')}
-      >+1</button
-    >
+      −1
+    </button>
+    <button type="button" aria-label="Step up one level" onclick={() => void command('STEP_UP')}>
+      +1
+    </button>
     <button
       type="button"
       onpointerdown={() => {
@@ -256,8 +262,10 @@
       onpointerleave={stopDim}
       onpointercancel={stopDim}
       onblur={stopDim}
-      {...holdKeys('DOWN')}>Dim down</button
+      {...holdKeys('DOWN')}
     >
+      Dim down
+    </button>
     <button
       type="button"
       onpointerdown={() => {
@@ -267,8 +275,10 @@
       onpointerleave={stopDim}
       onpointercancel={stopDim}
       onblur={stopDim}
-      {...holdKeys('UP')}>Dim up</button
+      {...holdKeys('UP')}
     >
+      Dim up
+    </button>
   </div>
 
   {#if drive === 'tc'}

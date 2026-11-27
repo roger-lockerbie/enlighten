@@ -164,9 +164,9 @@
       data-testid="mount-diffuser"
     >
       {#each diffusers as d (d)}
-        <option value={d}
-          >{DIFFUSERS[d].name}, {Math.round(DIFFUSERS[d].transmission * 100)}% through</option
-        >
+        <option value={d}>
+          {DIFFUSERS[d].name}, {Math.round(DIFFUSERS[d].transmission * 100)}% through
+        </option>
       {/each}
     </select>
     <span class="muted small">{DIFFUSERS[mount.diffuser].transmissionBasis}.</span>
@@ -265,8 +265,10 @@
     onclick={() => {
       edit((s) => removeMount(s, mount.id));
     }}
-    data-testid="mount-remove">Remove this mount</button
+    data-testid="mount-remove"
   >
+    Remove this mount
+  </button>
 </section>
 
 <style>

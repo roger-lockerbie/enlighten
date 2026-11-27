@@ -95,8 +95,10 @@
       type="button"
       onclick={() => void apply(DEFAULT_SETUP[unit])}
       disabled={Object.keys(setup.settings).length === 0 &&
-        setup.presentation === DEFAULT_SETUP[unit].presentation}>Back to the defaults</button
+        setup.presentation === DEFAULT_SETUP[unit].presentation}
     >
+      Back to the defaults
+    </button>
   </div>
   {#if message !== ''}<p role="status" data-testid="sim-message">{message}</p>{/if}
   <div class="scroll">

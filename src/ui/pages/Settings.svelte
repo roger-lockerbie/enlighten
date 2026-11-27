@@ -403,9 +403,9 @@
       leaves out is switched off and removed. Nothing else in the file reaches the lights.
     </p>
     <div class="row">
-      <a class="button" href={exportHref} download="enlighten-workspace.json" data-testid="export"
-        >Export the workspace</a
-      >
+      <a class="button" href={exportHref} download="enlighten-workspace.json" data-testid="export">
+        Export the workspace
+      </a>
       <label class="button">
         Import a workspace
         <input
@@ -438,8 +438,10 @@
         onclick={() =>
           void app.store.discardSetAside().then(() => {
             setAside = [];
-          })}>Discard them</button
+          })}
       >
+        Discard them
+      </button>
     {/if}
   </section>
 
@@ -465,12 +467,13 @@
       <tbody>
         {#each consoleKeys as row (row.does)}
           <tr>
-            <td
-              >{#each row.keys as k, i (k)}{i > 0 ? ', ' : ''}<kbd>{k}</kbd
-                >{/each}{#if row.elsewhere.length > 0}<span class="muted small">
-                  (also {row.elsewhere.join(', ')} on a Mac or in an app window)</span
-                >{/if}</td
-            >
+            <td>
+              {#each row.keys as k, i (k)}{i > 0 ? ', ' : ''}<kbd>
+                  {k}
+                </kbd>{/each}{#if row.elsewhere.length > 0}<span class="muted small">
+                  (also {row.elsewhere.join(', ')} on a Mac or in an app window)
+                </span>{/if}
+            </td>
             <td>{row.does}</td>
           </tr>
         {/each}
@@ -503,15 +506,19 @@
         type="button"
         onclick={() => {
           plan = undefined;
-        }}>Cancel</button
+        }}
       >
+        Cancel
+      </button>
       <button
         type="button"
         class="primary"
         onclick={() => {
           if (plan !== undefined) void apply(plan);
-        }}>Import</button
+        }}
       >
+        Import
+      </button>
     </div>
   </div>
 </Dialog>
