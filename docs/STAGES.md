@@ -33,6 +33,7 @@ Fable goes where depth of reasoning pays most: the research, the light and colou
 | 9     | Scenes, sequences and effects                           | Fable (owner's choice)         | yes       |
 | 10    | Switchgear                                              | Sonnet                         | yes       |
 | 11    | Hardening, independent review, going public             | Fable (owner's choice)         | yes       |
+| 11b   | User documentation                                      | Fable (owner's choice)         | yes       |
 | 12    | Hardware day, whenever the hasseb arrives after Stage 4 | Opus                           | yes       |
 
 The repo goes to GitHub as a private repo in Stage 0, so CI and backups run from the first day. It goes public in Stage 11, after the independent review and only with my yes.
@@ -248,6 +249,18 @@ Done when: there are no open high or critical findings, the release is published
 
 Done on 2026-11-26, after Stage 11 and v0.1.0, at the owner's request and outside the numbered stages: help for every DALI command, `help -k`, and `explain` (ADR 0023). It was closed as a stage is: `pnpm verify`, the `security-reviewer` on the diff, the docs, a PR. `src/safety`, `src/dali`, `src/sim` and `src/bus` were not changed, so the `dali-reviewer` was not run. Stage 12 is unchanged, and its checklist gains one item for `explain`.
 
+## Stage 11b: User documentation
+
+Added on 2026-11-27 at the owner's request, after v0.2.0 and before hardware day. ADR 0024.
+
+1. A manual as Markdown in `docs/manual/`, in a fixed subset that reads as it is on GitHub and in Obsidian: a guide in reading order, and a concise, table-first reference.
+2. A viewer in the app, with our own parser and no new dependency, reached from the rail, F1 and `manual`.
+3. Pages generated from the app's own tables: keys, console commands and every DALI command.
+4. Pictures taken by a script that follows each guide chapter in the simulator, with numbered callouts.
+5. Tests that hold the manual to the app, and a ledger of every statement that rests on untried hardware.
+
+Done when: every page of the app and every console command is covered, the stage-close checklist passes, and the owner has read the sample.
+
 ## Stage 12: Hardware day
 
 Run whenever the hasseb arrives, once Stage 4 is merged.
@@ -259,5 +272,7 @@ Run whenever the hasseb arrives, once Stage 4 is merged.
 5. Write the gear safety profile to both drivers and verify it.
 6. Decide with the owner whether to build the WebHID transport, from what part 1 found.
 7. Work through part 8 of the checklist: what the rate guard rests on. Stage 8b left the Hardware and Both targets trusting nothing about the drivers (ADR 0019 amendments 1 and 2), as a holding position until the real DA5-L could be read. Bring the simulator's profile into line with what the driver does, then relax each hardware rule that a read-back supports, each by its own ADR with property tests.
+
+8. Walk the manual's hardware ledger (`docs/manual/hardware-ledger.md`): correct each page it names from what the bench showed, regenerate the tables and re-take the pictures (ADR 0024).
 
 Done when: the divergence log is clear or explained, and the stage-close checklist passes.

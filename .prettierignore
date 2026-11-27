@@ -17,3 +17,6 @@ server/requirements-dev.txt
 # Written by tools/reference/trace.ts.
 tests/golden/light/
 test-results-perf
+# Written by `pnpm manual:gen`, and compared byte for byte by a test.
+docs/manual/generated/
+test-results-manual

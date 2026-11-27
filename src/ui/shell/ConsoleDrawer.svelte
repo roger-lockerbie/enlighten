@@ -44,6 +44,12 @@
   function onKey(e: KeyboardEvent & { currentTarget: HTMLInputElement }): void {
     // An input method is composing: its keys are its own.
     if (e.isComposing) return;
+    // A held Enter never runs a line. Without this, Enter held on a button that fills the input and
+    // moves focus here (the manual's "Put in console") would repeat into the input and send it (SH2-2).
+    if (e.repeat && e.key === 'Enter') {
+      e.preventDefault();
+      return;
+    }
     const el = e.currentTarget;
     syncCaret(el);
     const r = con.key(keyPress(e), el.selectionStart !== el.selectionEnd);

@@ -44,6 +44,7 @@ export const PAGES = [
   'sequences',
   'effects',
   'switches',
+  'manual',
 ] as const;
 export type Page = (typeof PAGES)[number];
 

@@ -412,6 +412,7 @@ export class ConsoleExec {
       case 'use':
       case 'run':
       case 'scripts':
+      case 'manual':
         this.out('error', `${c.cmd} is a console command and cannot run here.`);
         return false;
     }

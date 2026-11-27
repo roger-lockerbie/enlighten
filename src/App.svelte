@@ -86,6 +86,7 @@
     'sequences',
     'effects',
     'switches',
+    'manual',
   ];
   type LaterPage = Extract<keyof Later, Page>;
   const isLater = (p: Page): p is LaterPage => LATER.includes(p);
@@ -168,6 +169,11 @@
         return;
       }
     }
+    if (e.key === 'F1') {
+      e.preventDefault();
+      setPage('manual');
+      return;
+    }
     if (e.key === 'F6') {
       e.preventDefault();
       cycleRegion(e.shiftKey);
@@ -185,6 +191,7 @@
     sequences: 'Sequences',
     effects: 'Effects',
     switches: 'Switches',
+    manual: 'Manual',
   };
 </script>
 
@@ -200,14 +207,14 @@
 {:else}
   <div
     class="shell"
-    class:no-inspector={!app.prefs.inspectorOpen}
+    class:no-inspector={!app.prefs.inspectorOpen || page === 'manual'}
     class:with-console={app.prefs.drawerOpen}
   >
     <TopBar {app} onPanic={panic} />
     <Banner {app} {tokenProblem} />
     <Rail {page} onpage={setPage} />
     <main data-region="main" tabindex="-1">
-      {#if !app.prefs.inspectorOpen}
+      {#if !app.prefs.inspectorOpen && page !== 'manual'}
         <button
           type="button"
           class="show-inspector"
@@ -235,7 +242,8 @@
         <Settings {app} />
       {/if}
     </main>
-    {#if app.prefs.inspectorOpen}<Inspector {app} {page} />{/if}
+    <!-- The manual has nothing to inspect, and reads better with the width. -->
+    {#if app.prefs.inspectorOpen && page !== 'manual'}<Inspector {app} {page} />{/if}
     {#if app.prefs.drawerOpen}<ConsoleDrawer {app} />{/if}
   </div>
   <CeilingDialogs {app} />

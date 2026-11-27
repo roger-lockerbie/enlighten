@@ -49,6 +49,7 @@ Read before working:
 - Tests come with the code: unit, property (fast-check) and e2e (Playwright, Chromium). At least 90% line coverage on the pure core.
 - Small commits with conventional messages, one branch per stage, merged by PR once CI is green.
 - Record each significant decision as an ADR in `docs/adr/`.
+- A change to the UI, the console or the governor's rules updates the user manual in `docs/manual/` in the same PR (ADR 0024). Run `pnpm manual:gen`, and `pnpm manual:shots` if a pictured page changed. A statement about untried hardware gets an "Untried on hardware (HW-nn)" callout and a row in `docs/manual/hardware-ledger.md`.
 - If a requirement can't be met, or research contradicts the brief, stop and tell me, with the evidence. Don't work around it without saying so.
 
 ## Stage close
@@ -75,26 +76,28 @@ Applies to docs, UI text, commit messages, PRs and comments.
 
 Use Node 26.13.1 (`.nvmrc`) and pnpm 12.18.0 through corepack. The dev server runs on 127.0.0.1:47820 and the preview on 127.0.0.1:47821, both with a strict port.
 
-| Command           | What it does                                                     |
-| ----------------- | ---------------------------------------------------------------- |
-| `pnpm dev`        | Dev server with hot reload and a relaxed CSP for that only.      |
-| `pnpm build`      | Production build into `dist/`, with the meta-tag CSP fallback.   |
-| `pnpm preview`    | Serves `dist/` with the full security headers.                   |
-| `pnpm start`      | Build, then preview.                                             |
-| `pnpm test`       | Unit tests (Vitest).                                             |
-| `pnpm test:prop`  | Property tests (fast-check, in `*.prop.test.ts` files).          |
-| `pnpm e2e`        | Playwright in Chromium. Builds and starts the preview itself.    |
-| `pnpm e2e:hidden` | The 30-minute hidden-page test. By hand, not in CI.              |
-| `pnpm coverage`   | Unit and property tests with the coverage targets, fixed seed.   |
-| `pnpm mutate`     | Stryker on `src/safety` and the codec. On demand, not in CI.     |
-| `pnpm golden`     | Regenerate the python-dali golden fixtures in `tests/golden/`.   |
-| `pnpm reference`  | Regenerate the light core's reference fixtures. About 6 minutes. |
-| `pnpm perf:solve` | Time the radiosity solve in Node. By hand, not in CI.            |
-| `pnpm perf:frame` | Time the visualiser's frame in a headed browser. By hand.        |
-| `pnpm lint`       | ESLint (banned sinks, pure-core boundary) and Prettier check.    |
-| `pnpm format`     | Prettier write.                                                  |
-| `pnpm typecheck`  | svelte-check over TypeScript and Svelte.                         |
-| `pnpm sbom:all`   | CycloneDX SBOMs for the app and the server, into `sbom/`.        |
-| `pnpm verify`     | lint, typecheck, coverage, build and e2e.                        |
+| Command             | What it does                                                     |
+| ------------------- | ---------------------------------------------------------------- |
+| `pnpm dev`          | Dev server with hot reload and a relaxed CSP for that only.      |
+| `pnpm build`        | Production build into `dist/`, with the meta-tag CSP fallback.   |
+| `pnpm preview`      | Serves `dist/` with the full security headers.                   |
+| `pnpm start`        | Build, then preview.                                             |
+| `pnpm test`         | Unit tests (Vitest).                                             |
+| `pnpm test:prop`    | Property tests (fast-check, in `*.prop.test.ts` files).          |
+| `pnpm e2e`          | Playwright in Chromium. Builds and starts the preview itself.    |
+| `pnpm e2e:hidden`   | The 30-minute hidden-page test. By hand, not in CI.              |
+| `pnpm coverage`     | Unit and property tests with the coverage targets, fixed seed.   |
+| `pnpm mutate`       | Stryker on `src/safety` and the codec. On demand, not in CI.     |
+| `pnpm golden`       | Regenerate the python-dali golden fixtures in `tests/golden/`.   |
+| `pnpm reference`    | Regenerate the light core's reference fixtures. About 6 minutes. |
+| `pnpm perf:solve`   | Time the radiosity solve in Node. By hand, not in CI.            |
+| `pnpm perf:frame`   | Time the visualiser's frame in a headed browser. By hand.        |
+| `pnpm lint`         | ESLint (banned sinks, pure-core boundary) and Prettier check.    |
+| `pnpm format`       | Prettier write.                                                  |
+| `pnpm typecheck`    | svelte-check over TypeScript and Svelte.                         |
+| `pnpm sbom:all`     | CycloneDX SBOMs for the app and the server, into `sbom/`.        |
+| `pnpm manual:gen`   | Rewrite the manual's generated pages in `docs/manual/generated`. |
+| `pnpm manual:shots` | Re-take the manual's pictures in the simulator. By hand.         |
+| `pnpm verify`       | lint, typecheck, coverage, build and e2e.                        |
 
 First time on a machine: `pnpm install --frozen-lockfile`, then `pnpm exec playwright install chromium`. Node 26 has no bundled corepack, so run `npm install --global corepack` and `corepack enable` first.

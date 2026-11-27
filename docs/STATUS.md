@@ -2,7 +2,7 @@
 
 ## Where the build is up to
 
-Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next. After it, between stages, the console gained help for every DALI command and `explain` (ADR 0023), merged as PR 25 on 2026-11-26. Version 0.2.0 carries it, tagged at the owner's request.
+Stages 0 to 11 are merged. The repo is public under Apache-2.0, and v0.1.0 was released on 2026-11-26 from `8d66815`, with the owner's yes to the licence, the public switch and the tag. Stage 12 (hardware day) is next. After it, between stages, the console gained help for every DALI command and `explain` (ADR 0023), merged as PR 25 on 2026-11-26. Version 0.2.0 carries it, tagged at the owner's request. Stage 11b (user documentation, ADR 0024) is PR 27, and version 0.3.0 carries it, tagged at the owner's request on 2026-11-27.
 
 ## Done in Stage 0
 
@@ -414,7 +414,44 @@ Not done, and why:
 - **`explain` does not cover `scan`, `profile apply`, `cap`, `panic` or `target`**, whose frames the engine builds as it goes.
 - **Not tried on hardware.** The test plan's section 10 has an item for it.
 
+## Stage 11b (user documentation), done
+
+Branch `stage-11b-manual`, on Fable, added at the owner's request on 2026-11-27 after v0.2.0 and before hardware day. The owner chose our own Markdown renderer with no dependency, scripted screenshots with callouts, hardware chapters written now and marked, and a generated reference for every DALI command. The owner read a sample (the viewer, the safety reference and the first guide chapter) before the rest was written.
+
+What is in it:
+
+- **The manual**, in `docs/manual/`: a guide of 14 chapters, a reference of 11 pages, and three pages generated from the app's own tables (keys, console commands, all 137 DALI commands). About 19,000 words by hand. Plain Markdown in a fixed subset that reads as it is on GitHub and in Obsidian.
+- **The viewer.** A Manual page, opened with F1, from the foot of the rail or with `manual [<page>]`: contents, search, previous and next, and "Put in console" on each console line. Our own parser makes a tree, never HTML. The text is a chunk of its own (242 kB), and the entry chunk is 237 kB of its 250 kB.
+- **Pictures.** 26, taken by `pnpm manual:shots`, which follows each guide chapter's steps in the simulator and adds numbered callouts.
+- **Tests that hold it to the app.** Generated pages fresh; links and pictures resolve; every console line and script parses; the subset and the writing rules; table rows whole; hardware marks match the ledger.
+- **The hardware ledger.** Eight statements that rest on untried hardware, each with its pages, the part of the test plan that settles it, and what to change. Stage 12 has a step to walk it.
+- **Fixes to the app found on the way:** Settings showed a stale list of keys, and now shows the list the manual is built from. `help scripts` left `manual` out of the commands a script may not use. A held Enter no longer runs a console line.
+
+Close:
+
+- `pnpm verify` passes: 3,298 unit and property tests with 1 expected failure (the saved S9-P1 case), 98.17% lines and 91.88% branches on the pure core, 67 preview e2e tests and 18 server e2e tests.
+- `pnpm manual:shots` passes: nine chapters' steps in the simulator, 26 pictures. It was last run before the review fixes, which changed no pictured page.
+- `security-reviewer` on the diff: **pass with follow-ups**. SH2-1 to SH2-7 are fixed or accepted, in `docs/SECURITY_FINDINGS.md`.
+- A second agent checked every hand-written page against the code. Its corrections are in the pages (SH2-8 to SH2-10 and about thirty smaller ones).
+- The fixes for both reviews were made after them and have not been reviewed again.
+- `src/safety`, `src/dali`, `src/sim` and `src/bus` were not changed, so `dali-reviewer` and `pnpm mutate` were not run.
+
+Found while writing it, and not fixed:
+
+- **The `rate` unlock has nothing to unlock.** It is accepted, but no control then sets the swing limit to 2 or 3. The manual says so.
+- **The top bar's bus figure does not fall when the bus goes idle.** It shows the value from the last change.
+- **`first-light` does not run on hardware** (S8b-R5-10, open before this stage). The manual gives the checks by hand.
+- **The spec says 16 switch plates and the code allows 8** (SH2-11). The manual follows the code.
+
+Not done, and why:
+
+- **The manual has not been read in Obsidian or on GitHub as drawn.** The files are in the subset both draw, and the tests hold them to it.
+- **The pictures can be re-taken only on the reference laptop,** since fonts differ on Linux.
+- **Prose can go out of date without a test failing.** The tests catch a console line, a link, a picture or a generated table that no longer matches, not a sentence.
+
 ## Next
+
+- The owner's calls on the `rate` unlock's missing control, the bus figure, and 16 or 8 plates.
 
 - The owner's decisions on S9-P1 and S9-T1, and the hidden-tab check by hand.
 - Stage 12 (hardware day) on Opus, whenever the hasseb arrives.

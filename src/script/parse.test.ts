@@ -97,6 +97,7 @@ describe('parseScript', () => {
       resume: 'resume',
       scripts: 'scripts',
       explain: 'explain off 0',
+      manual: 'manual',
     };
     for (const c of NOT_IN_SCRIPTS) {
       const line = lines[c] ?? c;

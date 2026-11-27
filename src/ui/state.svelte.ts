@@ -51,6 +51,18 @@ export class AppState {
    * the editor's code stays in the Visualiser's chunk, not the first page's (ADR 0018).
    */
   inspector = $state<Snippet | undefined>(undefined);
+  /**
+   * What the manual was last asked to show, by `manual <page>` or a link to it. The number makes
+   * each ask a new one, so asking for the same page twice goes there twice.
+   */
+  manualAsk = $state<{ readonly name: string | undefined; readonly n: number }>({
+    name: undefined,
+    n: 0,
+  });
+  /** The number of the last ask the manual answered, so reopening it does not answer one twice. */
+  manualServed = 0;
+  /** The manual page last shown, kept for the session so coming back returns to it. */
+  manualPath = $state('');
   /** Stored scripts, by name. The built-in ones are in `src/script/builtin.ts`. */
   scripts = $state<StoredScript[]>([]);
   readonly console: ConsoleState;
@@ -58,6 +70,12 @@ export class AppState {
   private readonly startCeiling: number;
   private lastSeq = 0;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Go to the manual, at a page if one is named. */
+  openManual(name?: string): void {
+    this.manualAsk = { name, n: this.manualAsk.n + 1 };
+    this.update({ page: 'manual' });
+  }
 
   constructor(client: BusClient, store: Store, stored: Stored, startCeiling: number) {
     const prefs = stored.prefs;
